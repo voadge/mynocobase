@@ -1,0 +1,24 @@
+# 敏感信息
+.env
+.env.local
+.env.production
+
+# 证书文件
+ssl/
+acme-challenge/
+
+# 数据目录
+storage/
+
+# 备份文件
+backups/
+*.sql
+*.sql.gz
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
