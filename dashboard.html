@@ -45,13 +45,6 @@
             height: 70px;
             border-radius: 50%;
             object-fit: cover;
-            filter: drop-shadow(0 0 15px rgba(255, 50, 50, 0.5)) brightness(1.1) contrast(1.1);
-            transition: all 0.3s ease;
-        }
-
-        .logo:hover {
-            filter: drop-shadow(0 0 25px rgba(255, 50, 50, 0.8)) brightness(1.2) contrast(1.2);
-            transform: scale(1.05);
         }
 
         /* 标题区域 */
@@ -86,32 +79,34 @@
         /* 时间区域 */
         .time-container {
             text-align: right;
-            min-width: 120px;
-            max-width: 120px;
+            min-width: 140px;
+            max-width: 140px;
             align-self: center;
             margin-top: 15px;
         }
 
-        .time-container .lunar {
-            font-size: 0.6em;
-            color: #7b2cbf;
-            margin-bottom: 2px;
-            letter-spacing: 0.5px;
-            white-space: nowrap;
+        .time-container .date {
+            font-size: 0.7em;
+            color: #e0e6ed;
+            margin-bottom: 3px;
         }
 
-        .time-container .datetime {
-            font-size: 0.6em;
+        .time-container .lunar {
+            font-size: 0.65em;
+            color: #7b2cbf;
+            margin-bottom: 3px;
+        }
+
+        .time-container .time {
+            font-size: 0.7em;
             color: #00d4ff;
             font-family: 'Consolas', monospace;
-            letter-spacing: 0.3px;
-            line-height: 1.1;
+            margin-bottom: 3px;
         }
 
         .time-container .weekday {
-            font-size: 0.55em;
+            font-size: 0.65em;
             color: #5a6a7a;
-            margin-top: 1px;
         }
 
         /* 统计卡片网格 */
@@ -388,8 +383,9 @@
 
             <!-- 时间 -->
             <div class="time-container">
+                <div class="date" id="dateDisplay"></div>
                 <div class="lunar" id="lunarDate"></div>
-                <div class="datetime" id="currentTime"></div>
+                <div class="time" id="timeDisplay"></div>
                 <div class="weekday" id="weekday"></div>
             </div>
         </div>
@@ -582,17 +578,22 @@
             const minutes = String(now.getMinutes()).padStart(2, '0');
             const seconds = String(now.getSeconds()).padStart(2, '0');
             
-            document.getElementById('currentTime').textContent = 
-                `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+            // 日期格式：2026年05月30日
+            document.getElementById('dateDisplay').textContent = `${year}年${month}月${day}日`;
             
+            // 时间格式：22:18:44
+            document.getElementById('timeDisplay').textContent = `${hours}:${minutes}:${seconds}`;
+            
+            // 星期
             document.getElementById('weekday').textContent = weekdays[now.getDay()];
             
+            // 农历和节气
             const lunar = getLunarDate(now);
             const solarTerm = getSolarTerm(now.getMonth() + 1, now.getDate());
             
             let lunarText = `农历${lunar.month}月${lunar.day}`;
             if (solarTerm) {
-                lunarText += ` | ${solarTerm}`;
+                lunarText += ` (${solarTerm})`;
             }
             document.getElementById('lunarDate').textContent = lunarText;
         }
