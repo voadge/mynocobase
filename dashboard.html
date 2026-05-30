@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NocoBase 系统监控大屏</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            background: linear-gradient(135deg, #0c1426 0%, #1a2332 50%, #0d1926 100%);
+            color: #e0e6ed;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        .dashboard {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        /* 头部标题 */
+        .header {
+            text-align: center;
+            padding: 30px 0;
+            position: relative;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            font-weight: 300;
+            letter-spacing: 8px;
+            background: linear-gradient(90deg, #00d4ff, #7b2cbf, #00d4ff);
+            background-size: 200% auto;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            animation: shimmer 3s linear infinite;
+        }
+
+        @keyframes shimmer {
+            0% { background-position: -200% center; }
+            100% { background-position: 200% center; }
+        }
+
+        .header .subtitle {
+            color: #5a6a7a;
+            font-size: 0.9em;
+            margin-top: 10px;
+            letter-spacing: 4px;
+        }
+
+        .header .time {
+            position: absolute;
+            right: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 1.2em;
+            color: #00d4ff;
+            font-family: 'Consolas', monospace;
+        }
+
+        /* 统计卡片网格 */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 20px;
+            margin: 30px 0;
+        }
+
+        .stat-card {
+            background: linear-gradient(145deg, rgba(0, 212, 255, 0.1), rgba(123, 44, 191, 0.05));
+            border: 1px solid rgba(0, 212, 255, 0.2);
+            border-radius: 12px;
+            padding: 25px;
+            position: relative;
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-5px);
+            border-color: rgba(0, 212, 255, 0.5);
+            box-shadow: 0 10px 40px rgba(0, 212, 255, 0.2);
+        }
+
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(0, 212, 255, 0.1), transparent);
+            transition: left 0.5s ease;
+        }
+
+        .stat-card:hover::before {
+            left: 100%;
+        }
+
+        .stat-card .icon {
+            font-size: 2em;
+            margin-bottom: 15px;
+        }
+
+        .stat-card .value {
+            font-size: 2.5em;
+            font-weight: 700;
+            color: #00d4ff;
+            text-shadow: 0 0 20px rgba(0, 212, 255, 0.5);
+        }
+
+        .stat-card .label {
+            color: #5a6a7a;
+            font-size: 0.9em;
+            margin-top: 5px;
+        }
+
+        /* 主内容区域 */
+        .main-content {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        /* 工作流分类 */
+        .workflow-categories {
+            background: linear-gradient(145deg, rgba(0, 212, 255, 0.05), rgba(123, 44, 191, 0.02));
+            border: 1px solid rgba(0, 212, 255, 0.15);
+            border-radius: 12px;
+            padding: 25px;
+        }
+
+        .section-title {
+            font-size: 1.2em;
+            color: #00d4ff;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid rgba(0, 212, 255, 0.2);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .section-title::before {
+            content: '';
+            width: 4px;
+            height: 20px;
+            background: linear-gradient(180deg, #00d4ff, #7b2cbf);
+            border-radius: 2px;
+        }
+
+        .category-list {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+        }
+
+        .category-item {
+            display: flex;
+            align-items: center;
+            padding: 15px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+            border-left: 3px solid;
+            transition: all 0.3s ease;
+        }
+
+        .category-item:hover {
+            background: rgba(0, 212, 255, 0.1);
+            transform: translateX(5px);
+        }
+
+        .category-item.serial { border-color: #00d4ff; }
+        .category-item.timer { border-color: #7b2cbf; }
+        .category-item.project { border-color: #00ff88; }
+        .category-item.material { border-color: #ff6b6b; }
+        .category-item.approval { border-color: #ffd93d; }
+
+        .category-item .count {
+            font-size: 1.8em;
+            font-weight: 700;
+            margin-right: 15px;
+            min-width: 50px;
+        }
+
+        .category-item.serial .count { color: #00d4ff; }
+        .category-item.timer .count { color: #7b2cbf; }
+        .category-item.project .count { color: #00ff88; }
+        .category-item.material .count { color: #ff6b6b; }
+        .category-item.approval .count { color: #ffd93d; }
+
+        .category-item .info h4 {
+            font-size: 1em;
+            margin-bottom: 3px;
+        }
+
+        .category-item .info p {
+            font-size: 0.8em;
+            color: #5a6a7a;
+        }
+
+        /* 系统状态 */
+        .system-status {
+            background: linear-gradient(145deg, rgba(0, 212, 255, 0.05), rgba(123, 44, 191, 0.02));
+            border: 1px solid rgba(0, 212, 255, 0.15);
+            border-radius: 12px;
+            padding: 25px;
+        }
+
+        .status-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .status-item:last-child {
+            border-bottom: none;
+        }
+
+        .status-item .name {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .status-item .indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        .status-item .indicator.online {
+            background: #00ff88;
+            box-shadow: 0 0 10px #00ff88;
+        }
+
+        .status-item .indicator.warning {
+            background: #ffd93d;
+            box-shadow: 0 0 10px #ffd93d;
+        }
+
+        .status-item .indicator.offline {
+            background: #ff6b6b;
+            box-shadow: 0 0 10px #ff6b6b;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .status-item .value {
+            font-family: 'Consolas', monospace;
+            color: #00d4ff;
+        }
+
+        /* 底部信息 */
+        .footer {
+            margin-top: 30px;
+            padding: 20px;
+            text-align: center;
+            color: #5a6a7a;
+            font-size: 0.85em;
+            border-top: 1px solid rgba(0, 212, 255, 0.1);
+        }
+
+        .footer a {
+            color: #00d4ff;
+            text-decoration: none;
+        }
+
+        /* 动画效果 */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .stat-card, .category-item, .status-item {
+            animation: fadeIn 0.5s ease forwards;
+        }
+
+        .stat-card:nth-child(1) { animation-delay: 0.1s; }
+        .stat-card:nth-child(2) { animation-delay: 0.2s; }
+        .stat-card:nth-child(3) { animation-delay: 0.3s; }
+        .stat-card:nth-child(4) { animation-delay: 0.4s; }
+
+        /* 响应式 */
+        @media (max-width: 1200px) {
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+            .category-list {
+                grid-template-columns: 1fr;
+            }
+            .header .time {
+                position: static;
+                margin-top: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard">
+        <!-- 头部 -->
+        <div class="header">
+            <h1>NOCOBASE 智能管理平台</h1>
+            <div class="subtitle">WORKFLOW AUTOMATION SYSTEM</div>
+            <div class="time" id="currentTime"></div>
+        </div>
+
+        <!-- 统计卡片 -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="icon">⚡</div>
+                <div class="value">84</div>
+                <div class="label">活跃工作流</div>
+            </div>
+            <div class="stat-card">
+                <div class="icon">🔄</div>
+                <div class="value">22</div>
+                <div class="label">序列号生成器</div>
+            </div>
+            <div class="stat-card">
+                <div class="icon">✅</div>
+                <div class="value">59</div>
+                <div class="label">自动审批节点</div>
+            </div>
+            <div class="stat-card">
+                <div class="icon">⏰</div>
+                <div class="value">3</div>
+                <div class="label">定时任务</div>
+            </div>
+        </div>
+
+        <!-- 主内容 -->
+        <div class="main-content">
+            <!-- 工作流分类 -->
+            <div class="workflow-categories">
+                <div class="section-title">工作流分类概览</div>
+                <div class="category-list">
+                    <div class="category-item serial">
+                        <div class="count">22</div>
+                        <div class="info">
+                            <h4>序列号生成</h4>
+                            <p>SERIAL / RD-SERIAL 系列</p>
+                        </div>
+                    </div>
+                    <div class="category-item approval">
+                        <div class="count">30</div>
+                        <div class="info">
+                            <h4>审批流程</h4>
+                            <p>项目 / 合同 / 财务审批</p>
+                        </div>
+                    </div>
+                    <div class="category-item project">
+                        <div class="count">5</div>
+                        <div class="info">
+                            <h4>项目生命周期</h4>
+                            <p>立项 → 规划 → 跟踪 → 验收 → 归档</p>
+                        </div>
+                    </div>
+                    <div class="category-item material">
+                        <div class="count">8</div>
+                        <div class="info">
+                            <h4>物资管理</h4>
+                            <p>计划 → 采购 → 入库 → 出库</p>
+                        </div>
+                    </div>
+                    <div class="category-item timer">
+                        <div class="count">3</div>
+                        <div class="info">
+                            <h4>定时任务</h4>
+                            <p>到期预警 / 安全汇总 / 健康检查</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 系统状态 -->
+            <div class="system-status">
+                <div class="section-title">系统运行状态</div>
+                <div class="status-item">
+                    <div class="name">
+                        <div class="indicator online"></div>
+                        <span>NocoBase 应用</span>
+                    </div>
+                    <div class="value">RUNNING</div>
+                </div>
+                <div class="status-item">
+                    <div class="name">
+                        <div class="indicator online"></div>
+                        <span>PostgreSQL</span>
+                    </div>
+                    <div class="value">CONNECTED</div>
+                </div>
+                <div class="status-item">
+                    <div class="name">
+                        <div class="indicator online"></div>
+                        <span>Redis 缓存</span>
+                    </div>
+                    <div class="value">ACTIVE</div>
+                </div>
+                <div class="status-item">
+                    <div class="name">
+                        <div class="indicator online"></div>
+                        <span>Nginx 代理</span>
+                    </div>
+                    <div class="value">HTTPS:443</div>
+                </div>
+                <div class="status-item">
+                    <div class="name">
+                        <div class="indicator online"></div>
+                        <span>SSL 证书</span>
+                    </div>
+                    <div class="value">VALID</div>
+                </div>
+                <div class="status-item">
+                    <div class="name">
+                        <div class="indicator online"></div>
+                        <span>数据库备份</span>
+                    </div>
+                    <div class="value">DAILY</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 底部 -->
+        <div class="footer">
+            <p>NocoBase 智能管理平台 v2.0.57 | 
+               <a href="https://voadge.top:668" target="_blank">访问系统</a> | 
+               服务器: 110.42.236.231 | 
+               运行时间: <span id="uptime"></span>
+            </p>
+        </div>
+    </div>
+
+    <script>
+        // 更新时间
+        function updateTime() {
+            const now = new Date();
+            const timeStr = now.toLocaleString('zh-CN', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: false
+            });
+            document.getElementById('currentTime').textContent = timeStr;
+        }
+
+        // 计算运行时间
+        function updateUptime() {
+            const startDate = new Date('2026-05-22T00:00:00');
+            const now = new Date();
+            const diff = now - startDate;
+            const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+            const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+            document.getElementById('uptime').textContent = `${days}天 ${hours}小时`;
+        }
+
+        // 初始化
+        updateTime();
+        updateUptime();
+        setInterval(updateTime, 1000);
+        setInterval(updateUptime, 60000);
+    </script>
+</body>
+</html>
