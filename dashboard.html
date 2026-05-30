@@ -43,12 +43,14 @@
         .logo {
             width: 70px;
             height: 70px;
-            filter: drop-shadow(0 0 20px rgba(255, 0, 0, 0.6)) brightness(1.1);
+            border-radius: 50%;
+            object-fit: cover;
+            filter: drop-shadow(0 0 15px rgba(255, 50, 50, 0.5)) brightness(1.1) contrast(1.1);
             transition: all 0.3s ease;
         }
 
         .logo:hover {
-            filter: drop-shadow(0 0 30px rgba(255, 0, 0, 0.9)) brightness(1.2);
+            filter: drop-shadow(0 0 25px rgba(255, 50, 50, 0.8)) brightness(1.2) contrast(1.2);
             transform: scale(1.05);
         }
 
@@ -375,29 +377,7 @@
         <div class="header">
             <!-- Logo -->
             <div class="logo-container">
-                <svg class="logo" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-                    <!-- 背景圆 -->
-                    <defs>
-                        <radialGradient id="bgGradient" cx="40%" cy="40%" r="60%">
-                            <stop offset="0%" style="stop-color:#ff3333"/>
-                            <stop offset="100%" style="stop-color:#cc0000"/>
-                        </radialGradient>
-                        <linearGradient id="roadGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                            <stop offset="0%" style="stop-color:#ff6666"/>
-                            <stop offset="50%" style="stop-color:#ffffff"/>
-                            <stop offset="100%" style="stop-color:#ff6666"/>
-                        </linearGradient>
-                    </defs>
-                    <circle cx="50" cy="50" r="48" fill="url(#bgGradient)"/>
-                    
-                    <!-- ZD 字母 -->
-                    <text x="50" y="42" text-anchor="middle" font-size="30" font-weight="bold" fill="#ffffff" font-family="Arial" style="text-shadow: 2px 2px 4px rgba(0,0,0,0.3);">ZD</text>
-                    
-                    <!-- 道路图案 -->
-                    <path d="M18 68 Q50 48 82 68" stroke="url(#roadGrad)" stroke-width="5" fill="none" stroke-linecap="round"/>
-                    <path d="M22 74 Q50 54 78 74" stroke="url(#roadGrad)" stroke-width="4" fill="none" stroke-linecap="round"/>
-                    <path d="M28 80 Q50 60 72 80" stroke="url(#roadGrad)" stroke-width="3" fill="none" stroke-linecap="round"/>
-                </svg>
+                <img src="assets/logo.svg" alt="遵大Logo" class="logo">
             </div>
 
             <!-- 标题 -->
