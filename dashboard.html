@@ -143,6 +143,98 @@
         .todo-inner .todo-count.notify-count  { color: #ff6b6b; text-shadow: 0 0 10px rgba(255, 107, 107, 0.3); }
         .todo-inner .todo-label { font-size: 0.7em; color: #5a6a7a; margin-top: 1px; }
 
+        /* 公司公告 */
+        .announce-card { padding: 12px 14px 10px !important; align-items: stretch !important; }
+
+        .announce-title {
+            font-size: 0.78em; color: #ffd93d; margin-bottom: 6px; font-weight: 600;
+            letter-spacing: 1px;
+        }
+
+        .announce-container {
+            height: 188px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .announce-track {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .announce-track.scrolling {
+            animation: scrollUp 40s linear infinite;
+        }
+
+        .announce-track.paused {
+            animation-play-state: paused;
+        }
+
+        @keyframes scrollUp {
+            0% { transform: translateY(0); }
+            100% { transform: translateY(-50%); }
+        }
+
+        .announce-item {
+            font-size: 0.7em;
+            color: #c8d0d8;
+            padding: 5px 8px;
+            border-radius: 4px;
+            background: rgba(255,255,255,0.03);
+            border-left: 2px solid rgba(255, 217, 61, 0.4);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            line-height: 1.4;
+        }
+
+        .announce-item .a-time {
+            color: #5a6a7a;
+            font-size: 0.85em;
+            margin-right: 8px;
+        }
+
+        /* 考勤打卡 */
+        .attend-card {
+            align-items: center !important;
+            padding: 14px 16px 16px !important;
+            gap: 6px;
+        }
+
+        .attend-header {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .attend-label { font-size: 0.78em; color: #ffd93d; font-weight: 600; letter-spacing: 1px; }
+
+        .attend-status {
+            font-size: 0.65em; padding: 2px 8px; border-radius: 8px;
+            background: rgba(0, 255, 136, 0.12); color: #00ff88;
+        }
+        .attend-status.out { background: rgba(255, 107, 107, 0.12); color: #ff6b6b; }
+
+        .attend-time {
+            font-family: 'Consolas', monospace; font-size: 1.6em; font-weight: 700;
+            color: #00d4ff; text-shadow: 0 0 8px rgba(0, 212, 255, 0.4);
+            letter-spacing: 2px; line-height: 1.2;
+        }
+
+        .attend-date { font-size: 0.65em; color: #5a6a7a; }
+
+        .attend-btn {
+            margin-top: 4px; width: 100%; padding: 8px 0; border: none; border-radius: 8px;
+            font-size: 0.85em; font-weight: 600; letter-spacing: 2px; cursor: pointer;
+            background: linear-gradient(135deg, #00d4ff, #7b2cbf);
+            color: #fff; transition: all 0.3s;
+        }
+        .attend-btn:hover { filter: brightness(1.15); transform: scale(1.02); }
+        .attend-btn:active { transform: scale(0.98); }
+        .attend-btn.checked { background: linear-gradient(135deg, #ff6b6b, #b84d6b); }
+
         /* 大屏 iframe */
         .stage-frame-wrap {
             flex: 1;
@@ -270,6 +362,21 @@
                             </div>
                         </div>
                     </div>
+                </div>
+                <div class="panel-card announce-card">
+                    <div class="announce-title">📢 公司公告</div>
+                    <div class="announce-container">
+                        <div class="announce-track" id="announceTrack"></div>
+                    </div>
+                </div>
+                <div class="panel-card attend-card">
+                    <div class="attend-header">
+                        <span class="attend-label">⏰ 考勤打卡</span>
+                        <span class="attend-status" id="attendStatus">--</span>
+                    </div>
+                    <div class="attend-time" id="attendTime">--:--:--</div>
+                    <div class="attend-date" id="attendDate">----年--月--日</div>
+                    <button class="attend-btn" id="attendBtn" onclick="handleAttendance()">打卡</button>
                 </div>
             </div>
             <div class="stage-frame-wrap">
@@ -425,6 +532,94 @@
             } catch { n.textContent = '0'; }
         }
 
+        // 公司公告
+        async function fetchAnnouncements() {
+            const track = document.getElementById('announceTrack');
+            try {
+                const r = await fetch(
+                    '/api/announcements:list?filter[status]=published&filter[archived__ne]=true&sort=-publishedAt,-createdAt&pageSize=8',
+                    { credentials: 'include' }
+                );
+                if (!r.ok) throw Error();
+                const data = await r.json();
+                const items = data.data || [];
+                track.innerHTML = '';
+                if (!items.length) {
+                    track.innerHTML = '<div class="announce-item" style="text-align:center;color:#5a6a7a;border:none;background:none;">暂无公告</div>';
+                    track.classList.remove('scrolling');
+                    return;
+                }
+                const render = (list) => list.forEach(item => {
+                    const div = document.createElement('div');
+                    div.className = 'announce-item';
+                    const ts = item.publishedAt || item.createdAt || '';
+                    const date = ts ? new Date(ts).toLocaleDateString('zh-CN', { month:'2-digit', day:'2-digit' }) : '';
+                    div.innerHTML = `<span class="a-time">${date}</span>${item.title || item.name || '(无标题)'}`;
+                    track.appendChild(div);
+                });
+                render(items);
+                render(items); // 副本，实现无缝循环
+                track.classList.add('scrolling');
+            } catch {
+                track.innerHTML = '<div class="announce-item" style="text-align:center;color:#5a6a7a;border:none;background:none;">加载失败</div>';
+                track.classList.remove('scrolling');
+            }
+        }
+
+        // 考勤打卡
+        let attendState = null; // { id, date, checkIn }
+        async function fetchAttendance() {
+            try {
+                const today = new Date().toISOString().slice(0,10);
+                const r = await fetch(`/api/attendance:list?filter[date]=${today}&sort=-createdAt&pageSize=1`, { credentials:'include' });
+                if (r.ok) {
+                    const data = await r.json();
+                    const rec = (data.data || [])[0];
+                    if (rec) {
+                        attendState = rec;
+                        document.getElementById('attendStatus').textContent = rec.checkOut ? '已签退' : '已签到';
+                        if (!rec.checkOut) document.getElementById('attendStatus').className = 'attend-status';
+                        else document.getElementById('attendStatus').className = 'attend-status out';
+                        document.getElementById('attendBtn').textContent = rec.checkOut ? '已打卡' : '签退';
+                        if (rec.checkOut) document.getElementById('attendBtn').className = 'attend-btn checked';
+                    } else {
+                        document.getElementById('attendStatus').textContent = '未签到';
+                        document.getElementById('attendBtn').textContent = '签到';
+                        document.getElementById('attendBtn').className = 'attend-btn';
+                    }
+                }
+            } catch {}
+        }
+
+        async function handleAttendance() {
+            const btn = document.getElementById('attendBtn');
+            btn.disabled = true;
+            try {
+                const now = new Date();
+                const today = now.toISOString().slice(0,10);
+                const time = now.toTimeString().slice(0,8);
+                if (!attendState) {
+                    // 签到
+                    const r = await fetch('/api/attendance:create', {
+                        method:'POST', credentials:'include',
+                        headers:{ 'Content-Type':'application/json' },
+                        body: JSON.stringify({ date: today, checkIn: time })
+                    });
+                    if (r.ok) { attendState = (await r.json()).data; }
+                } else if (!attendState.checkOut) {
+                    // 签退
+                    const r = await fetch(`/api/attendance:update?filterByTk=${attendState.id}`, {
+                        method:'POST', credentials:'include',
+                        headers:{ 'Content-Type':'application/json' },
+                        body: JSON.stringify({ checkOut: time })
+                    });
+                    if (r.ok) { attendState.checkOut = time; }
+                }
+            } catch {}
+            fetchAttendance();
+            btn.disabled = false;
+        }
+
         // 农历 / 节气 / 天气
         const lunarMonths = ['正','二','三','四','五','六','七','八','九','十','冬','腊'];
         const lunarDays = ['初一','初二','初三','初四','初五','初六','初七','初八','初九','初十',
@@ -487,7 +682,7 @@
         function updateDisplay() {
             const n=new Date();
             const y=n.getFullYear(), mo=String(n.getMonth()+1).padStart(2,'0'), d=String(n.getDate()).padStart(2,'0');
-            const h=String(n.getHours()).padStart(2,'0'), mi=String(n.getMinutes()).padStart(2,'0');
+            const h=String(n.getHours()).padStart(2,'0'), mi=String(n.getMinutes()).padStart(2,'0'), sc=String(n.getSeconds()).padStart(2,'0');
             document.getElementById('clockHour').textContent=h;
             document.getElementById('clockMin').textContent=mi;
             document.querySelector('#dateDisplay .label-date').textContent=`${y}年${mo}月${d}日`;
@@ -498,6 +693,11 @@
             document.querySelector('#weekdayDisplay .label-week').textContent=weekdays[n.getDay()];
             document.querySelector('#weatherDisplay .label-weather').textContent=weatherText;
             document.querySelector('#tempDisplay .label-temp').textContent=tempText;
+            // 考勤时间
+            const at = document.getElementById('attendTime');
+            if (at) at.textContent = `${h}:${mi}:${sc}`;
+            const ad = document.getElementById('attendDate');
+            if (ad) ad.textContent = `${y}年${mo}月${d}日`;
         }
 
         function updateUptime() {
@@ -510,6 +710,8 @@
         document.getElementById('externFrame').src = EXTERN_URL;
         checkAdmin();
         fetchTodos();
+        fetchAnnouncements();
+        fetchAttendance();
         fetchWeather();
         updateDisplay();
         updateUptime();
