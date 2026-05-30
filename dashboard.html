@@ -28,7 +28,7 @@
         /* 头部布局 */
         .header {
             display: flex;
-            align-items: center;
+            align-items: flex-end;
             justify-content: space-between;
             padding: 20px 0;
             position: relative;
@@ -37,48 +37,19 @@
         /* Logo 区域 */
         .logo-container {
             display: flex;
-            align-items: center;
-            gap: 15px;
+            align-items: flex-end;
         }
 
         .logo {
-            width: 60px;
-            height: 60px;
-            border-radius: 50%;
-            background: linear-gradient(145deg, #ff4444, #cc0000);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1.8em;
-            font-weight: bold;
-            color: #fff;
-            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
-            box-shadow: 0 4px 15px rgba(255, 68, 68, 0.4);
-            position: relative;
-            overflow: hidden;
+            width: 70px;
+            height: 70px;
+            filter: drop-shadow(0 0 15px rgba(0, 212, 255, 0.5));
+            transition: all 0.3s ease;
         }
 
-        .logo::before {
-            content: '';
-            position: absolute;
-            top: -50%;
-            left: -50%;
-            width: 200%;
-            height: 200%;
-            background: linear-gradient(45deg, transparent, rgba(255, 255, 255, 0.1), transparent);
-            transform: rotate(45deg);
-            animation: logoShine 3s infinite;
-        }
-
-        @keyframes logoShine {
-            0% { transform: translateX(-100%) rotate(45deg); }
-            100% { transform: translateX(100%) rotate(45deg); }
-        }
-
-        .logo-text {
-            font-size: 0.9em;
-            color: #5a6a7a;
-            letter-spacing: 2px;
+        .logo:hover {
+            filter: drop-shadow(0 0 25px rgba(0, 212, 255, 0.8));
+            transform: scale(1.05);
         }
 
         /* 标题区域 */
@@ -113,27 +84,29 @@
         /* 时间区域 */
         .time-container {
             text-align: right;
-            min-width: 200px;
+            min-width: 180px;
+            align-self: center;
         }
 
         .time-container .lunar {
-            font-size: 0.85em;
+            font-size: 0.7em;
             color: #7b2cbf;
-            margin-bottom: 5px;
+            margin-bottom: 3px;
             letter-spacing: 1px;
         }
 
         .time-container .datetime {
-            font-size: 0.8em;
+            font-size: 0.7em;
             color: #00d4ff;
             font-family: 'Consolas', monospace;
-            letter-spacing: 1px;
+            letter-spacing: 0.5px;
+            line-height: 1.2;
         }
 
         .time-container .weekday {
-            font-size: 0.75em;
+            font-size: 0.65em;
             color: #5a6a7a;
-            margin-top: 3px;
+            margin-top: 2px;
         }
 
         /* 统计卡片网格 */
@@ -399,8 +372,36 @@
         <div class="header">
             <!-- Logo -->
             <div class="logo-container">
-                <div class="logo">ZD</div>
-                <div class="logo-text">ZUNDA</div>
+                <svg class="logo" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                    <!-- 背景圆 -->
+                    <circle cx="50" cy="50" r="48" fill="#cc0000"/>
+                    <circle cx="50" cy="50" r="45" fill="#ff0000"/>
+                    
+                    <!-- 光效 -->
+                    <defs>
+                        <radialGradient id="shine" cx="30%" cy="30%" r="70%">
+                            <stop offset="0%" style="stop-color:rgba(255,255,255,0.3)"/>
+                            <stop offset="100%" style="stop-color:rgba(255,255,255,0)"/>
+                        </radialGradient>
+                        <linearGradient id="roadGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" style="stop-color:#ff6666"/>
+                            <stop offset="50%" style="stop-color:#ffffff"/>
+                            <stop offset="100%" style="stop-color:#ff6666"/>
+                        </linearGradient>
+                    </defs>
+                    <circle cx="50" cy="50" r="45" fill="url(#shine)"/>
+                    
+                    <!-- ZD 字母 -->
+                    <text x="50" y="45" text-anchor="middle" font-size="28" font-weight="bold" fill="#ffffff" font-family="Arial">ZD</text>
+                    
+                    <!-- 道路图案 -->
+                    <path d="M20 70 Q50 50 80 70" stroke="url(#roadGradient)" stroke-width="4" fill="none"/>
+                    <path d="M25 75 Q50 55 75 75" stroke="url(#roadGradient)" stroke-width="3" fill="none"/>
+                    <path d="M30 80 Q50 60 70 80" stroke="url(#roadGradient)" stroke-width="2" fill="none"/>
+                    
+                    <!-- 装饰点 -->
+                    <circle cx="50" cy="50" r="3" fill="#ffffff" opacity="0.8"/>
+                </svg>
             </div>
 
             <!-- 标题 -->
@@ -575,13 +576,12 @@
             return '';
         }
 
-        // 简化的农历计算（基于公式）
+        // 简化的农历计算
         function getLunarDate(date) {
             const year = date.getFullYear();
             const month = date.getMonth() + 1;
             const day = date.getDate();
             
-            // 简化的农历月份和日期
             const lunarMonth = (month + 10) % 12;
             const lunarDay = (day + 10) % 30;
             
@@ -599,7 +599,6 @@
         function updateTime() {
             const now = new Date();
             
-            // 公历日期时间
             const year = now.getFullYear();
             const month = String(now.getMonth() + 1).padStart(2, '0');
             const day = String(now.getDate()).padStart(2, '0');
@@ -610,10 +609,8 @@
             document.getElementById('currentTime').textContent = 
                 `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
             
-            // 星期
             document.getElementById('weekday').textContent = weekdays[now.getDay()];
             
-            // 农历和节气
             const lunar = getLunarDate(now);
             const solarTerm = getSolarTerm(now.getMonth() + 1, now.getDate());
             
