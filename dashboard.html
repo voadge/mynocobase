@@ -53,19 +53,21 @@
 
         /* ---- 主舞台：大屏 + 左侧面板 ---- */
         .main-stage {
-            width: 80%;
-            margin: 2em auto 0;
+            width: 100%;
+            margin-top: 2em;
             display: flex;
             gap: 14px;
             align-items: stretch;
         }
 
-        /* 左侧面板：时间 + 待办 */
+        /* 左侧面板：时间 + 待办 + 公告 + 打卡 —— 占 1/5 */
         .side-panel {
-            flex: 0 0 195px;
+            flex: 0 0 20%;
+            min-width: 180px;
+            max-width: 220px;
             display: flex;
             flex-direction: column;
-            gap: 14px;
+            gap: 12px;
         }
 
         .side-panel .panel-card {
@@ -235,7 +237,7 @@
         .attend-btn:active { transform: scale(0.98); }
         .attend-btn.checked { background: linear-gradient(135deg, #ff6b6b, #b84d6b); }
 
-        /* 大屏 iframe */
+        /* 大屏 iframe 容器 —— 占 4/5 */
         .stage-frame-wrap {
             flex: 1;
             border-radius: 12px;
@@ -243,10 +245,38 @@
             border: 1px solid rgba(0, 212, 255, 0.2);
             background: #0a0e1a;
             aspect-ratio: 16 / 10;
+            position: relative;
         }
 
         .stage-frame-wrap iframe {
             width: 100%; height: 100%; border: none; display: block;
+        }
+
+        /* 全屏按钮 */
+        .fs-btn {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            z-index: 10;
+            padding: 6px 14px;
+            border: 1px solid rgba(255,255,255,0.3);
+            border-radius: 6px;
+            background: rgba(0,0,0,0.55);
+            color: #e0e6ed;
+            font-size: 0.78em;
+            cursor: pointer;
+            backdrop-filter: blur(4px);
+            transition: all 0.25s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-family: inherit;
+        }
+
+        .fs-btn:hover {
+            background: rgba(0,0,0,0.75);
+            border-color: rgba(0, 212, 255, 0.6);
+            color: #00d4ff;
         }
 
         /* ---- 工作版块 ---- */
@@ -380,6 +410,7 @@
                 </div>
             </div>
             <div class="stage-frame-wrap">
+                <button class="fs-btn" onclick="toggleFullscreen()">⛶ 全屏</button>
                 <iframe id="externFrame" src="" allowfullscreen></iframe>
             </div>
         </div>
@@ -618,6 +649,16 @@
             } catch {}
             fetchAttendance();
             btn.disabled = false;
+        }
+
+        // 全屏切换
+        function toggleFullscreen() {
+            const wrap = document.querySelector('.stage-frame-wrap');
+            if (!document.fullscreenElement) {
+                wrap.requestFullscreen?.() || wrap.webkitRequestFullscreen?.();
+            } else {
+                document.exitFullscreen?.() || document.webkitExitFullscreen?.();
+            }
         }
 
         // 农历 / 节气 / 天气
