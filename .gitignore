@@ -2,6 +2,7 @@
 .env
 .env.local
 .env.production
+*.env.server-backup
 
 # 证书文件
 ssl/
@@ -14,11 +15,16 @@ storage/
 backups/
 *.sql
 *.sql.gz
+*.sql.gz.*
+*_backup_*
+
+# Docker 备份
+docker-compose.yml.bak
+docker-compose.yml.save
 
 # 系统文件
 .DS_Store
 Thumbs.db
 
-# IDE
-.vscode/
-.idea/
+# SSH 密钥
+*.pem
