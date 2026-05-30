@@ -25,7 +25,6 @@
             padding: 20px;
         }
 
-        /* 头部布局 */
         .header {
             display: flex;
             align-items: center;
@@ -34,7 +33,6 @@
             position: relative;
         }
 
-        /* Logo */
         .logo-container {
             flex-shrink: 0;
         }
@@ -46,7 +44,6 @@
             object-fit: cover;
         }
 
-        /* 标题区域 */
         .title-container {
             text-align: center;
             flex: 1;
@@ -78,27 +75,20 @@
             letter-spacing: 4px;
         }
 
-        /* 右侧面板（数字表 + 循环信息） */
-        .right-panel {
-            flex-shrink: 0;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            min-width: 200px;
-        }
-
-        /* 数字表样式 */
+        /* 数字表面板（含循环信息） */
         .digital-clock {
             background: linear-gradient(145deg, #0a0e1a, #141c2e);
             border: 1px solid rgba(0, 212, 255, 0.25);
-            border-radius: 14px;
-            padding: 12px 24px;
+            border-radius: 12px;
+            padding: 10px 20px 8px;
             box-shadow:
                 0 0 20px rgba(0, 212, 255, 0.08),
                 inset 0 0 20px rgba(0, 212, 255, 0.03);
             position: relative;
-            width: 100%;
-            text-align: center;
+            width: 180px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
         }
 
         .digital-clock::after {
@@ -112,21 +102,20 @@
         }
 
         .clock-digits {
-            font-size: 2.5em;
+            font-size: 1.7em;
             font-family: 'Consolas', 'Courier New', monospace;
             font-weight: 700;
             color: #00d4ff;
             text-shadow:
-                0 0 10px rgba(0, 212, 255, 0.6),
-                0 0 30px rgba(0, 212, 255, 0.2);
-            letter-spacing: 6px;
+                0 0 8px rgba(0, 212, 255, 0.6),
+                0 0 24px rgba(0, 212, 255, 0.2);
+            letter-spacing: 4px;
             line-height: 1.2;
         }
 
         .clock-digits .colon {
             display: inline-block;
             animation: blink 1s step-end infinite;
-            opacity: 1;
         }
 
         @keyframes blink {
@@ -138,16 +127,16 @@
             font-size: 0.5em;
             vertical-align: super;
             opacity: 0.7;
-            margin-left: 2px;
+            margin-left: 1px;
         }
 
-        /* 循环信息 */
+        /* 循环信息（数字表内底部） */
         .info-cycle {
-            height: 1.8em;
+            height: 1.6em;
             overflow: hidden;
             position: relative;
-            margin-top: 10px;
             width: 100%;
+            margin-top: 2px;
         }
 
         .cycle-item {
@@ -157,9 +146,9 @@
             top: 0;
             text-align: center;
             opacity: 0;
-            transform: translateY(12px);
+            transform: translateY(10px);
             transition: all 0.4s ease;
-            font-size: 0.82em;
+            font-size: 0.72em;
             letter-spacing: 2px;
         }
 
@@ -232,7 +221,6 @@
             margin-top: 5px;
         }
 
-        /* 主内容区域 */
         .main-content {
             display: grid;
             grid-template-columns: 2fr 1fr;
@@ -240,7 +228,6 @@
             margin-top: 20px;
         }
 
-        /* 工作流分类 */
         .workflow-categories {
             background: linear-gradient(145deg, rgba(0, 212, 255, 0.05), rgba(123, 44, 191, 0.02));
             border: 1px solid rgba(0, 212, 255, 0.15);
@@ -317,7 +304,6 @@
             color: #5a6a7a;
         }
 
-        /* 系统状态 */
         .system-status {
             background: linear-gradient(145deg, rgba(0, 212, 255, 0.05), rgba(123, 44, 191, 0.02));
             border: 1px solid rgba(0, 212, 255, 0.15);
@@ -375,7 +361,6 @@
             color: #00d4ff;
         }
 
-        /* 底部信息 */
         .footer {
             margin-top: 30px;
             padding: 20px;
@@ -390,7 +375,6 @@
             text-decoration: none;
         }
 
-        /* 动画效果 */
         @keyframes fadeIn {
             from { opacity: 0; transform: translateY(20px); }
             to { opacity: 1; transform: translateY(0); }
@@ -405,7 +389,6 @@
         .stat-card:nth-child(3) { animation-delay: 0.3s; }
         .stat-card:nth-child(4) { animation-delay: 0.4s; }
 
-        /* 响应式 */
         @media (max-width: 1200px) {
             .stats-grid {
                 grid-template-columns: repeat(2, 1fr);
@@ -426,37 +409,25 @@
                 flex-direction: column;
                 gap: 15px;
             }
-            .right-panel {
-                min-width: unset;
-                width: 100%;
-            }
         }
     </style>
 </head>
 <body>
     <div class="dashboard">
-        <!-- 头部 -->
         <div class="header">
-            <!-- Logo -->
             <div class="logo-container">
                 <img src="assets/logo.png" alt="遵大Logo" class="logo">
             </div>
-
-            <!-- 标题 -->
             <div class="title-container">
                 <h1>贵州遵大数智化平台</h1>
                 <div class="subtitle">以道树业 致诚德信</div>
             </div>
-
-            <!-- 右侧：数字表 + 循环信息 -->
-            <div class="right-panel">
-                <div class="digital-clock">
-                    <div class="clock-digits" id="clockDisplay">
-                        <span id="clockHour">00</span>
-                        <span class="colon">:</span>
-                        <span id="clockMin">00</span>
-                        <span class="clock-seconds" id="clockSec">00</span>
-                    </div>
+            <div class="digital-clock">
+                <div class="clock-digits">
+                    <span id="clockHour">00</span>
+                    <span class="colon">:</span>
+                    <span id="clockMin">00</span>
+                    <span class="clock-seconds" id="clockSec">00</span>
                 </div>
                 <div class="info-cycle">
                     <span class="cycle-item active" id="dateDisplay"><span class="label-date"></span></span>
@@ -469,7 +440,6 @@
             </div>
         </div>
 
-        <!-- 统计卡片 -->
         <div class="stats-grid">
             <div class="stat-card">
                 <div class="icon">⚡</div>
@@ -493,9 +463,7 @@
             </div>
         </div>
 
-        <!-- 主内容 -->
         <div class="main-content">
-            <!-- 工作流分类 -->
             <div class="workflow-categories">
                 <div class="section-title">工作流分类概览</div>
                 <div class="category-list">
@@ -536,8 +504,6 @@
                     </div>
                 </div>
             </div>
-
-            <!-- 系统状态 -->
             <div class="system-status">
                 <div class="section-title">系统运行状态</div>
                 <div class="status-item">
@@ -585,7 +551,6 @@
             </div>
         </div>
 
-        <!-- 底部 -->
         <div class="footer">
             <p>贵州遵大数智化平台 v2.0.57 | 
                <a href="https://voadge.top:668" target="_blank">访问系统</a> | 
@@ -609,7 +574,6 @@
             [9, 8], [9, 23], [10, 8], [10, 23], [11, 7], [11, 22], [12, 7], [12, 22]
         ];
 
-        // 天气码 → 中文
         const weatherCodes = {
             0: '晴', 1: '晴', 2: '多云', 3: '阴',
             45: '雾', 48: '雾',
@@ -644,15 +608,11 @@
             const day = date.getDate();
             const lunarMonth = (month + 10) % 12;
             const lunarDay = (day + 10) % 30;
-            return {
-                month: lunarMonths[lunarMonth],
-                day: lunarDays[lunarDay]
-            };
+            return { month: lunarMonths[lunarMonth], day: lunarDays[lunarDay] };
         }
 
         const weekdays = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
 
-        // 6个循环项
         let cycleIndex = 0;
         const cycleIds = ['dateDisplay', 'lunarDisplay', 'termDisplay', 'weekdayDisplay', 'weatherDisplay', 'tempDisplay'];
         const CYCLE_INTERVAL = 3000;
@@ -663,22 +623,25 @@
             cycleIndex = (cycleIndex + 1) % cycleIds.length;
         }
 
-        // 获取天气
         let weatherText = '获取中…';
         let tempText = '--℃';
 
         function fetchWeather() {
-            // 遵义坐标
-            const lat = 27.7;
-            const lon = 106.9;
-            const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&timezone=Asia/Shanghai`;
-
-            fetch(url)
+            // 先通过IP获取位置，再查天气
+            fetch('https://ip-api.com/json/')
+                .then(r => r.json())
+                .then(loc => {
+                    if (loc.status === 'success') {
+                        return fetch(
+                            `https://api.open-meteo.com/v1/forecast?latitude=${loc.lat}&longitude=${loc.lon}&current_weather=true&timezone=Asia/Shanghai`
+                        );
+                    }
+                    throw new Error('IP location failed');
+                })
                 .then(r => r.json())
                 .then(data => {
                     if (data.current_weather) {
-                        const code = data.current_weather.weathercode;
-                        weatherText = weatherCodes[code] || '未知';
+                        weatherText = weatherCodes[data.current_weather.weathercode] || '未知';
                         tempText = data.current_weather.temperature + '℃';
                     }
                 })
@@ -697,12 +660,10 @@
             const minutes = String(now.getMinutes()).padStart(2, '0');
             const seconds = String(now.getSeconds()).padStart(2, '0');
 
-            // 数字表
             document.getElementById('clockHour').textContent = hours;
             document.getElementById('clockMin').textContent = minutes;
             document.getElementById('clockSec').textContent = seconds;
 
-            // 循环项
             document.querySelector('#dateDisplay .label-date').textContent = `${year}年${month}月${day}日`;
             const lunar = getLunarDate(now);
             document.querySelector('#lunarDisplay .label-lunar').textContent = `农历${lunar.month}月${lunar.day}`;
@@ -729,7 +690,6 @@
         setInterval(updateDisplay, 1000);
         setInterval(updateUptime, 60000);
         setInterval(rotateCycle, CYCLE_INTERVAL);
-        // 每10分钟刷新天气
         setInterval(fetchWeather, 600000);
     </script>
 </body>
