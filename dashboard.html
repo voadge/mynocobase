@@ -35,7 +35,7 @@
         .title-container { text-align: center; flex: 1; display: flex; flex-direction: column; align-items: center; }
 
         .header h1 {
-            font-size: 1.9em; font-weight: 300; letter-spacing: 6px;
+            font-size: 2.1em; font-weight: 700; letter-spacing: 6px;
             background: linear-gradient(90deg, #00d4ff, #7b2cbf, #00d4ff);
             background-size: 200% auto;
             -webkit-background-clip: text; -webkit-text-fill-color: transparent;
@@ -89,6 +89,7 @@
             text-shadow: 0 0 8px rgba(0, 212, 255, 0.6), 0 0 24px rgba(0, 212, 255, 0.2);
             letter-spacing: 3px;
             line-height: 1.3;
+            margin-bottom: 0.9em;
         }
 
         .clock-digits .colon { display: inline-block; animation: blink 1s step-end infinite; }
@@ -219,14 +220,6 @@
         }
         .attend-status.out { background: rgba(255, 107, 107, 0.12); color: #ff6b6b; }
 
-        .attend-time {
-            font-family: 'Consolas', monospace; font-size: 1.6em; font-weight: 700;
-            color: #00d4ff; text-shadow: 0 0 8px rgba(0, 212, 255, 0.4);
-            letter-spacing: 2px; line-height: 1.2;
-        }
-
-        .attend-date { font-size: 0.65em; color: #5a6a7a; }
-
         .attend-btn {
             margin-top: 4px; width: 100%; padding: 8px 0; border: none; border-radius: 8px;
             font-size: 0.85em; font-weight: 600; letter-spacing: 2px; cursor: pointer;
@@ -236,6 +229,30 @@
         .attend-btn:hover { filter: brightness(1.15); transform: scale(1.02); }
         .attend-btn:active { transform: scale(0.98); }
         .attend-btn.checked { background: linear-gradient(135deg, #ff6b6b, #b84d6b); }
+
+        /* 百宝箱入口 */
+        .toolbox-card {
+            align-items: center !important;
+            padding: 12px 16px !important;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .toolbox-card:hover {
+            border-color: rgba(0, 212, 255, 0.5);
+            background: linear-gradient(145deg, rgba(0, 212, 255, 0.15), rgba(123, 44, 191, 0.08));
+        }
+        .toolbox-link {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            width: 100%;
+            text-decoration: none;
+            color: inherit;
+        }
+        .toolbox-icon { font-size: 1.2em; }
+        .toolbox-label { font-size: 0.85em; color: #00d4ff; font-weight: 600; letter-spacing: 1px; }
+        .toolbox-arrow { font-size: 0.9em; color: #5a6a7a; transition: transform 0.2s; }
+        .toolbox-card:hover .toolbox-arrow { transform: translateX(3px); }
 
         /* 大屏 iframe 容器 —— 占 4/5 */
         .stage-frame-wrap {
@@ -439,9 +456,14 @@
                         <span class="attend-label">⏰ 考勤打卡</span>
                         <span class="attend-status" id="attendStatus">--</span>
                     </div>
-                    <div class="attend-time" id="attendTime">--:--:--</div>
-                    <div class="attend-date" id="attendDate">----年--月--日</div>
                     <button class="attend-btn" id="attendBtn" onclick="handleAttendance()">打卡</button>
+                </div>
+                <div class="panel-card toolbox-card">
+                    <a href="/admin/alruvklcz9v" target="_blank" class="toolbox-link">
+                        <span class="toolbox-icon">🧰</span>
+                        <span class="toolbox-label">百宝箱</span>
+                        <span class="toolbox-arrow">→</span>
+                    </a>
                 </div>
             </div>
             <div class="stage-frame-wrap">
@@ -465,7 +487,7 @@
 
         <div class="footer">
             <p>贵州遵大数智化平台 v2.0.57 | 
-               <a href="https://voadge.top:668" target="_blank">访问系统</a> | 
+               <a href="/admin/alruvklcz9v" target="_blank">管理后台</a> | <a href="/admin/alruvklcz9v" target="_blank">访问系统</a> | 
                服务器: 110.42.236.231 | 
                运行时间: <span id="uptime"></span>
             </p>
@@ -499,11 +521,11 @@
                 bg: '#2a0f1c', border: '#993556', color: '#e890b0',
                 btnBg: '#3d1828', btnBorder: '#993556', btnColor: '#f4c0d1',
                 items: [
-                    { label: '研发项目', url: '#' }, { label: '研发记录', url: '#' },
-                    { label: '研发归档', url: '#' }, { label: '研发验收', url: '#' },
-                    { label: '物料领用', url: '#' }, { label: '研发人员', url: '#' },
-                    { label: '研发会议', url: '#' }, { label: '研发费用', url: '#' },
-                    { label: '设备使用', url: '#' }, { label: '研发工时', url: '#' }
+                    { label: '研发项目', url: '/admin/gmhyblvl16o' }, { label: '研发记录', url: '/admin/s6j338yz3i2' },
+                    { label: '研发归档', url: '/admin/5ty5vupwq62' }, { label: '研发验收', url: '/admin/quezp14dok9' },
+                    { label: '物料领用', url: '/admin/ola7umdnmyz' }, { label: '研发人员', url: '/admin/n3nft95ki1w' },
+                    { label: '研发会议', url: '/admin/x23rf37jxb1' }, { label: '研发费用', url: '/admin/ogybv5ukbwg' },
+                    { label: '设备使用', url: '/admin/4uwkfqpz781' }, { label: '研发工时', url: '/admin/8wtfmqucj1p' }
                 ]
             },
             {
@@ -511,11 +533,11 @@
                 bg: '#0f1f3d', border: '#185FA5', color: '#8cc4ff',
                 btnBg: '#1a3055', btnBorder: '#185FA5', btnColor: '#b5d4f4',
                 items: [
-                    { label: '项目清单', url: '#' }, { label: '项目文档', url: '#' },
-                    { label: '成本库', url: '#' }, { label: '日志填报', url: '#' },
-                    { label: '施工日志', url: '#' }, { label: '安全会', url: '#' },
-                    { label: '日常报备', url: '#' }, { label: '对甲计量', url: '#' },
-                    { label: '分包计价', url: '#' }
+                    { label: '项目清单', url: '/admin/nzqtepnaklg' }, { label: '项目文档', url: '/admin/pamw08zpag6' },
+                    { label: '成本库', url: '/admin/visdef7mujx' }, { label: '日志填报', url: '/admin/95q6zzzqj9' },
+                    { label: '施工日志', url: '/admin/68nvr7tszqj' }, { label: '安全会', url: '/admin/y25rk07pr6z' },
+                    { label: '日常报备', url: '/admin/oa082ymyhpc' }, { label: '对甲计量', url: '/admin/hkcwvuo9l4d' },
+                    { label: '分包计价', url: '/admin/pbb3clqs91a' }
                 ]
             },
             {
@@ -523,11 +545,11 @@
                 bg: '#0f2a20', border: '#0f6e56', color: '#5cccb0',
                 btnBg: '#1a3d30', btnBorder: '#0f6e56', btnColor: '#9fe1cb',
                 items: [
-                    { label: '物资库', url: '#' }, { label: '供应商', url: '#' },
-                    { label: '需求计划', url: '#' }, { label: '采购计划', url: '#' },
-                    { label: '采购订单', url: '#' }, { label: '入库', url: '#' },
-                    { label: '出库', url: '#' }, { label: '实时库存', url: '#' },
-                    { label: '库存盘点', url: '#' }, { label: '供应商结算', url: '#' }
+                    { label: '物资库', url: '/admin/ui1d106a3c' }, { label: '供应商', url: '/admin/uibab268d5' },
+                    { label: '需求计划', url: '/admin/uia3ab7463' }, { label: '采购计划', url: '/admin/uid1b5e817' },
+                    { label: '采购订单', url: '/admin/ui5d66371c' }, { label: '入库', url: '/admin/uiaeaa7f29' },
+                    { label: '出库', url: '/admin/ui6dd4eb4d' }, { label: '实时库存', url: '/admin/uic0c97799' },
+                    { label: '库存盘点', url: '/admin/uica2dba0b' }, { label: '供应商结算', url: '/admin/960ews9jibd' }
                 ]
             },
             {
@@ -535,8 +557,8 @@
                 bg: '#2a1f0b', border: '#854F0B', color: '#f0b84d',
                 btnBg: '#3d2e14', btnBorder: '#854F0B', btnColor: '#fac775',
                 items: [
-                    { label: '合同库', url: '#' }, { label: '供应商信息', url: '#' },
-                    { label: '合作准入', url: '#' }, { label: '付款台账', url: '#' }
+                    { label: '合同库', url: '/admin/01zkrtol7d6' }, { label: '供应商信息', url: '/admin/gqak47qsuaw' },
+                    { label: '合作准入', url: '/admin/kyg3ldnu62j' }, { label: '付款台账', url: '/admin/7v5y1hyfm7m' }
                 ]
             },
             {
@@ -544,9 +566,9 @@
                 bg: '#2a180b', border: '#b86e20', color: '#f5c87a',
                 btnBg: '#3d2614', btnBorder: '#b86e20', btnColor: '#fadb9a',
                 items: [
-                    { label: '简报', url: '#' }, { label: '财务收支', url: '#' },
-                    { label: '公告通知', url: '#' }, { label: '考勤打卡', url: '#' },
-                    { label: '考勤归档', url: '#' }, { label: '印章使用', url: '#' }
+                    { label: '简报', url: '/admin/fq6eb3defao' }, { label: '财务收支', url: '/admin/lmrskqik2tm' },
+                    { label: '公告通知', url: '/admin/1leztg7ou2e' }, { label: '考勤归档', url: '/admin/5qtc3r5n88q' },
+                    { label: '印章使用', url: '/admin/6lr55tm1glf' }
                 ]
             },
             {
@@ -554,10 +576,10 @@
                 bg: '#1a1a2e', border: '#4a4e69', color: '#b0b5d4',
                 btnBg: '#282840', btnBorder: '#4a4e69', btnColor: '#ced2e8',
                 items: [
-                    { label: '资质库', url: '#' }, { label: '资质敏感信息', url: '#' },
-                    { label: '制度文件', url: '#' }, { label: '法规政策', url: '#' },
-                    { label: '标准规范', url: '#' }, { label: '模板库', url: '#' },
-                    { label: '案例库', url: '#' }, { label: '库存编辑', url: '#' }
+                    { label: '资质库', url: '/admin/o4kg2kwmgur' }, { label: '资质敏感信息', url: '/admin/hn8ke2a9zcu' },
+                    { label: '制度文件', url: '/admin/sbitmdfbp8d' }, { label: '法规政策', url: '/admin/fizelzr1x6d' },
+                    { label: '标准规范', url: '/admin/ol23gcsrb0x' }, { label: '模板库', url: '/admin/plo1hmfn8pq' },
+                    { label: '案例库', url: '/admin/ey91jn5cxvm' }, { label: '库存编辑', url: '/admin/o4xcn0t982s' }
                 ]
             },
             {
@@ -565,8 +587,8 @@
                 bg: '#1a1a1a', border: '#5a5a5a', color: '#a0a0a0',
                 btnBg: '#2a2a2a', btnBorder: '#5a5a5a', btnColor: '#c0c0c0',
                 items: [
-                    { label: '流程日志', url: '#' }, { label: '审批记录', url: '#' },
-                    { label: '自动计数器', url: '#' }
+                    { label: '流程日志', url: '/admin/w1l9qyr5ro4' }, { label: '审批记录', url: '/admin/spmliaim71h' },
+                    { label: '自动计数器', url: '/admin/n9ofrd7cctn' }
                 ]
             }
         ];
@@ -793,11 +815,6 @@
             document.querySelector('#weekdayDisplay .label-week').textContent=weekdays[n.getDay()];
             document.querySelector('#weatherDisplay .label-weather').textContent=weatherText;
             document.querySelector('#tempDisplay .label-temp').textContent=tempText;
-            // 考勤时间
-            const at = document.getElementById('attendTime');
-            if (at) at.textContent = `${h}:${mi}:${sc}`;
-            const ad = document.getElementById('attendDate');
-            if (ad) ad.textContent = `${y}年${mo}月${d}日`;
         }
 
         function updateUptime() {
