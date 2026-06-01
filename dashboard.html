@@ -475,7 +475,7 @@
                     </div>
                     <button class="fs-btn" onclick="toggleFullscreen()">⛶ 全屏</button>
                 </div>
-                <iframe id="externFrame" src="" allowfullscreen></iframe>
+                <iframe id="externFrame" src="" allowfullscreen sandbox="allow-scripts allow-forms allow-same-origin allow-popups"></iframe>
             </div>
         </div>
 
@@ -499,15 +499,55 @@
         //  数据大屏接入源 — 增删改直接编辑此数组即可
         // ============================================================
         const EXTERN_URLS = [
-            { label: '数据大屏 1', url: 'https://example.com' },
-            { label: '数据大屏 2', url: 'https://example.com' },
-            { label: '数据大屏 3', url: 'https://example.com' }
+            { label: '智慧云屏', url: 'https://road.xiangsu.work/bvr/zydlxc/#/homePage' },
+            { label: '巡查管理', url: 'https://road.xiangsu.work/bvr/zydlxc/#/' },
+            { label: '数据大屏 2', url: 'https://example.com' }
         ];
         let sourceIndex = 0;
 
+        const RP = { base: 'https://road.xiangsu.work/bvr/zydlxc', user: 'zydlxc', pass: '123456' };
+        let rpCancel = false, rpTimer = null;
+
+        function doRoadPatrol(frame) {
+            rpCancel = false;
+            const hf = document.createElement('iframe');
+            hf.name = 'rpLogin'; hf.style.display = 'none';
+            document.body.appendChild(hf);
+            const eps = [
+                { url: RP.base + '/api/user/login', fields: { username: RP.user, password: RP.pass } },
+                { url: RP.base + '/api/login',      fields: { username: RP.user, password: RP.pass } },
+                { url: RP.base + '/user/login',     fields: { username: RP.user, password: RP.pass } },
+            ];
+            eps.forEach(ep => {
+                const form = document.createElement('form');
+                form.method = 'POST'; form.action = ep.url; form.target = 'rpLogin';
+                form.style.display = 'none';
+                Object.entries(ep.fields).forEach(([k, v]) => {
+                    const inp = document.createElement('input');
+                    inp.name = k; inp.value = v; form.appendChild(inp);
+                });
+                document.body.appendChild(form); form.submit(); form.remove();
+            });
+            fetch(RP.base + '/api/getToken', {
+                method: 'POST', credentials: 'include',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ clientId: RP.user, clientSecret: RP.pass })
+            }).catch(() => {});
+            rpTimer = setTimeout(() => {
+                if (rpCancel) return;
+                hf.remove(); frame.src = EXTERN_URLS[sourceIndex].url;
+            }, 500);
+        }
+
         function loadSource(idx) {
             sourceIndex = ((idx % EXTERN_URLS.length) + EXTERN_URLS.length) % EXTERN_URLS.length;
-            document.getElementById('externFrame').src = EXTERN_URLS[sourceIndex].url;
+            rpCancel = true; clearTimeout(rpTimer);
+            const frame = document.getElementById('externFrame');
+            frame.setAttribute('sandbox', sourceIndex === 1
+                ? 'allow-scripts allow-forms allow-same-origin allow-popups'
+                : 'allow-scripts allow-forms allow-same-origin');
+            if (sourceIndex === 0 || sourceIndex === 1) { doRoadPatrol(frame); }
+            else { frame.src = EXTERN_URLS[sourceIndex].url; }
             document.getElementById('sourceLabel').textContent = `${EXTERN_URLS[sourceIndex].label} ${sourceIndex+1}/${EXTERN_URLS.length}`;
         }
 
