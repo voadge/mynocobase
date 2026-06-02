@@ -69,6 +69,8 @@ services:
     env_file: ./env/app.env
     volumes:
       - ./storage:/app/nocobase/storage
+      - ./dashboard:/app/nocobase/storage/dashboard:ro
+      - ./plugin-dashboard-home:/app/nocobase/node_modules/@nocobase/plugin-dashboard-home:ro
     networks:
       - nocobase
     depends_on:
@@ -97,6 +99,7 @@ services:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
       - ./ssl:/etc/nginx/ssl:ro
       - ./acme-challenge:/var/www/acme:ro
+      - ./dashboard:/usr/share/nginx/html/dashboard:ro
     ports:
       - "80:80"
       - "668:443"

@@ -1,0 +1,995 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>贵州遵大数智化平台</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --primary: #00d4ff;
+            --accent: #7b2cbf;
+            --gold: #ffd93d;
+            --danger: #ff6b6b;
+            --success: #00ff88;
+            --text: #e0e6ed;
+            --text-muted: #5a6a7a;
+            --text-dim: rgba(255,255,255,0.8);
+            --body-bg: linear-gradient(135deg, #0c1426 0%, #1a2332 50%, #0d1926 100%);
+            --card-bg: linear-gradient(145deg, rgba(0,212,255,0.08), rgba(123,44,191,0.03));
+            --card-border: rgba(0,212,255,0.18);
+            --iframe-bg: #0a0e1a;
+            --radius: 12px;
+            --radius-sm: 6px;
+            --radius-lg: 12px;
+        }
+
+
+        body {
+            font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            background: var(--body-bg);
+            color: var(--text);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        .dashboard {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 0 12px;
+        }
+
+        .logo-container { flex-shrink: 0; }
+
+        .logo { width: 60px; height: 60px; border-radius: 50%; object-fit: cover; }
+
+        .title-container { text-align: center; flex: 1; display: flex; flex-direction: column; align-items: center; }
+
+        .header h1 {
+            font-size: 2.1em; font-weight: 700; letter-spacing: 6px;
+            background: linear-gradient(90deg, var(--primary), var(--accent), var(--primary));
+            background-size: 200% auto;
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            animation: shimmer 3s linear infinite;
+        }
+
+        @keyframes shimmer {
+            0% { background-position: -200% center; }
+            100% { background-position: 200% center; }
+        }
+
+        .header .subtitle {
+            color: var(--text-muted); font-size: 0.85em; margin-top: 6px; letter-spacing: 4px;
+        }
+
+        /* ---- 主舞台：大屏 + 左侧面板 ---- */
+        .main-stage {
+            width: 100%;
+            margin-top: 2em;
+            display: flex;
+            gap: 14px;
+            align-items: stretch;
+        }
+
+        /* 左侧面板：时间 + 待办 + 公告 + 打卡 —— 占 1/5 */
+        .side-panel {
+            flex: 0 0 20%;
+            min-width: 180px;
+            max-width: 220px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .side-panel .panel-card {
+            background: linear-gradient(145deg, rgba(0, 212, 255, 0.08), rgba(123, 44, 191, 0.03));
+            border: 1px solid var(--card-border);
+            border-radius: 12px;
+            padding: 18px 16px 14px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        /* 时间模块 */
+        .side-panel .clock-digits {
+            font-size: 1.8em;
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-weight: 700;
+            color: var(--primary);
+            text-shadow: 0 0 8px rgba(0, 212, 255, 0.6), 0 0 24px rgba(0, 212, 255, 0.2);
+            letter-spacing: 3px;
+            line-height: 1.3;
+            margin-bottom: 0.9em;
+        }
+
+        .clock-digits .colon { display: inline-block; animation: blink 1s step-end infinite; }
+
+        @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0.15; } }
+
+        .side-panel .info-cycle {
+            height: 1.5em; overflow: hidden; position: relative; width: 100%; margin-top: auto;
+        }
+
+        .side-panel .cycle-item {
+            position: absolute; width: 100%; left: 0; top: 0; text-align: center;
+            opacity: 0; transform: translateY(10px); transition: all 0.4s ease;
+            font-size: 0.9em; letter-spacing: 2px;
+        }
+
+        .side-panel .cycle-item.active { opacity: 1; transform: translateY(0); }
+
+        .cycle-item .label-date { color: var(--text); }
+        .cycle-item .label-lunar { color: var(--accent); }
+        .cycle-item .label-term  { color: var(--gold); }
+        .cycle-item .label-week  { color: var(--text-muted); }
+        .cycle-item .label-weather { color: var(--success); }
+        .cycle-item .label-temp   { color: var(--danger); }
+
+        /* 待办模块 */
+        .todo-inner {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .todo-inner .todo-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .todo-inner .todo-icon {
+            width: 36px; height: 36px; border-radius: 8px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.1em; flex-shrink: 0;
+        }
+
+        .todo-inner .todo-icon.pending { background: rgba(0, 212, 255, 0.15); color: var(--primary); }
+        .todo-inner .todo-icon.notify  { background: rgba(255, 107, 107, 0.15); color: var(--danger); }
+
+        .todo-inner .todo-info { flex: 1; }
+        .todo-inner .todo-count {
+            font-size: 1.6em; font-weight: 700; line-height: 1;
+        }
+        .todo-inner .todo-count.pending-count { color: var(--primary); text-shadow: 0 0 10px rgba(0, 212, 255, 0.3); }
+        .todo-inner .todo-count.notify-count  { color: var(--danger); text-shadow: 0 0 10px rgba(255, 107, 107, 0.3); }
+        .todo-inner .todo-label { font-size: 0.7em; color: var(--text-muted); margin-top: 1px; }
+
+        /* 公司公告 */
+        .announce-card { padding: 12px 14px 10px !important; align-items: stretch !important; }
+
+        .announce-title {
+            font-size: 0.78em; color: var(--gold); margin-bottom: 6px; font-weight: 600;
+            letter-spacing: 1px;
+        }
+
+        .announce-container {
+            height: 188px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .announce-track {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .announce-track.scrolling {
+            animation: scrollUp 40s linear infinite;
+        }
+
+        .announce-track.paused {
+            animation-play-state: paused;
+        }
+
+        @keyframes scrollUp {
+            0% { transform: translateY(0); }
+            100% { transform: translateY(-50%); }
+        }
+
+        .announce-item {
+            font-size: 0.7em;
+            color: #c8d0d8;
+            padding: 5px 8px;
+            border-radius: 4px;
+            background: rgba(255,255,255,0.03);
+            border-left: 2px solid rgba(255, 217, 61, 0.4);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            line-height: 1.4;
+        }
+
+        .announce-item .a-time {
+            color: var(--text-muted);
+            font-size: 0.85em;
+            margin-right: 8px;
+        }
+
+        /* 考勤打卡（精简版：不显示时间，避免与时间模块重复） */
+        .attend-card {
+            align-items: center !important;
+            padding: 14px 16px 16px !important;
+            gap: 6px;
+        }
+
+        .attend-header {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .attend-label { font-size: 0.78em; color: var(--gold); font-weight: 600; letter-spacing: 1px; }
+
+        .attend-status {
+            font-size: 0.65em; padding: 2px 8px; border-radius: 8px;
+            background: rgba(0, 255, 136, 0.12); color: var(--success);
+        }
+        .attend-status.out { background: rgba(255, 107, 107, 0.12); color: var(--danger); }
+
+        .attend-btn {
+            margin-top: 4px; width: 100%; padding: 8px 0; border: none; border-radius: 8px;
+            font-size: 0.85em; font-weight: 600; letter-spacing: 2px; cursor: pointer;
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            color: #fff; transition: all 0.3s;
+        }
+        .attend-btn:hover { filter: brightness(1.15); transform: scale(1.02); }
+        .attend-btn:active { transform: scale(0.98); }
+        .attend-btn.checked { background: linear-gradient(135deg, var(--danger), #b84d6b); }
+
+        /* 百宝箱入口 */
+        .toolbox-card {
+            align-items: center !important;
+            padding: 12px 16px !important;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .toolbox-card:hover {
+            border-color: rgba(0, 212, 255, 0.5);
+            background: linear-gradient(145deg, rgba(0, 212, 255, 0.15), rgba(123, 44, 191, 0.08));
+        }
+        .toolbox-link {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            width: 100%;
+            text-decoration: none;
+            color: inherit;
+        }
+        .toolbox-icon { font-size: 1.2em; }
+        .toolbox-label { font-size: 0.85em; color: var(--primary); font-weight: 600; letter-spacing: 1px; }
+        .toolbox-arrow { font-size: 0.9em; color: var(--text-muted); transition: transform 0.2s; }
+        .toolbox-card:hover .toolbox-arrow { transform: translateX(3px); }
+
+        /* 大屏 iframe 容器 —— 占 4/5 */
+        .stage-frame-wrap {
+            flex: 1;
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+            border: 1px solid rgba(0, 212, 255, 0.2);
+            background: var(--iframe-bg);
+            aspect-ratio: 16 / 10;
+            position: relative;
+        }
+
+        .stage-frame-wrap iframe {
+            width: 100%; height: 100%; border: none; display: block;
+        }
+
+        /* 全屏按钮 */
+        .fs-btn {
+            padding: 6px 14px;
+            border: 1px solid rgba(255,255,255,0.3);
+            border-radius: var(--radius-sm);
+            background: rgba(0,0,0,0.55);
+            color: var(--text);
+            font-size: 0.78em;
+            cursor: pointer;
+            backdrop-filter: blur(4px);
+            transition: all 0.25s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-family: inherit;
+        }
+
+        .fs-btn:hover {
+            background: rgba(0,0,0,0.75);
+            border-color: rgba(0, 212, 255, 0.6);
+            color: var(--primary);
+        }
+
+        /* 底部工具栏 */
+        .stage-toolbar {
+            position: absolute;
+            bottom: 0; left: 0; right: 0;
+            z-index: 10;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 14px;
+            background: linear-gradient(0deg, rgba(0,0,0,0.6) 0%, transparent 100%);
+            pointer-events: none;
+        }
+
+        .stage-toolbar > * { pointer-events: auto; }
+
+        .st-left { display: flex; align-items: center; gap: 8px; }
+
+        .st-btn {
+            padding: 4px 10px;
+            border: 1px solid rgba(255,255,255,0.25);
+            border-radius: 5px;
+            background: rgba(0,0,0,0.5);
+            color: var(--text);
+            font-size: 0.85em;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: inherit;
+            line-height: 1;
+        }
+
+        .st-btn:hover { background: rgba(0,0,0,0.75); border-color: rgba(0, 212, 255, 0.5); color: var(--primary); }
+
+        .st-label {
+            font-size: 0.78em;
+            color: var(--text-dim);
+            min-width: 80px;
+            text-align: center;
+        }
+
+        /* ---- 工作版块 ---- */
+        .work-section { margin-top: 28px; }
+
+        .section-header {
+            font-size: 1.1em; color: var(--primary); margin-bottom: 16px;
+            padding-bottom: 8px; border-bottom: 1px solid rgba(0, 212, 255, 0.2);
+            display: flex; align-items: center; gap: 10px;
+        }
+
+        .section-header::before {
+            content: ''; width: 4px; height: 18px;
+            background: linear-gradient(180deg, var(--primary), var(--accent)); border-radius: 2px;
+        }
+
+        .works-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
+            gap: 12px;
+        }
+
+        .work-group {
+            border-radius: 10px; padding: 12px 10px 10px; border: 1px solid;
+        }
+
+        .work-group .group-title {
+            font-size: 0.82em; font-weight: 600; margin-bottom: 8px;
+            padding-bottom: 5px; border-bottom: 1px solid rgba(255,255,255,0.08);
+        }
+
+        .work-group .btn-list { display: flex; flex-direction: column; gap: 4px; }
+
+        .work-group .btn-item {
+            display: inline-block; padding: 4px 8px; border-radius: 4px;
+            font-size: 0.72em; text-decoration: none; border: 1px solid;
+            cursor: pointer; transition: all 0.2s;
+        }
+
+        .work-group .btn-item:hover { filter: brightness(1.2); transform: translateX(3px); }
+
+        /* ---- 底部 ---- */
+        .footer {
+            margin-top: 30px; padding: 18px; text-align: center;
+            color: var(--text-muted); font-size: 0.82em;
+            border-top: 1px solid rgba(0, 212, 255, 0.1);
+        }
+        .footer a { color: var(--primary); text-decoration: none; }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .side-panel .panel-card, .work-group {
+            animation: fadeIn 0.5s ease forwards;
+        }
+
+        @media (max-width: 900px) {
+            .main-stage { flex-direction: column; width: 100%; }
+            .side-panel { flex: unset; flex-direction: row; width: 100%; }
+            .side-panel .panel-card { flex: 1; }
+            .works-grid { grid-template-columns: repeat(2, 1fr); }
+            .header { flex-direction: column; gap: 10px; }
+            .header h1 { font-size: 1.5em; }
+        }
+    
+        /* ═══════════════════════════════════════════════
+           手机端适配 — 屏幕宽度 ≤ 768px
+           ═══════════════════════════════════════════════ */
+        @media (max-width: 768px) {
+            .dashboard { padding: 10px; }
+
+            .header h1 {
+                font-size: 1.2em;
+                letter-spacing: 2px;
+            }
+            .header .subtitle {
+                font-size: 0.7em;
+                letter-spacing: 1px;
+            }
+            .logo { width: 40px; height: 40px; }
+            .header { padding: 10px 0 8px; }
+
+            .main-stage {
+                flex-direction: column;
+                gap: 10px;
+                margin-top: 1em;
+            }
+
+            .side-panel {
+                flex: none;
+                width: 100%;
+                max-width: 100%;
+                min-width: 0;
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 8px;
+            }
+
+            .side-panel .panel-card:first-child {
+                grid-column: 1 / -1;
+                flex-direction: row;
+                justify-content: space-between;
+                align-items: center;
+                padding: 10px 14px;
+                gap: 12px;
+            }
+            .side-panel .clock-digits {
+                font-size: 1.4em;
+                margin-bottom: 0;
+                white-space: nowrap;
+            }
+            .side-panel .info-cycle {
+                height: auto;
+                width: auto;
+                margin-top: 0;
+                flex: 1;
+                min-width: 0;
+            }
+            .side-panel .cycle-item {
+                position: static;
+                opacity: 0;
+                transform: none;
+                transition: opacity 0.3s ease;
+                text-align: right;
+                font-size: 0.78em;
+                letter-spacing: 1px;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+            .side-panel .cycle-item.active {
+                opacity: 1;
+            }
+
+            .side-panel .panel-card:nth-child(2),
+            .side-panel .panel-card:nth-child(4) {
+                padding: 12px;
+            }
+            .todo-inner { gap: 6px; }
+            .todo-inner .todo-count { font-size: 1.3em; }
+            .todo-inner .todo-icon { width: 30px; height: 30px; font-size: 0.95em; }
+            .todo-inner .todo-label { font-size: 0.6em; }
+
+            .attend-card { padding: 12px !important; }
+            .attend-label { font-size: 0.7em; }
+            .attend-status { font-size: 0.6em; padding: 2px 6px; }
+            .attend-btn { font-size: 0.78em; padding: 6px 0; }
+
+            .side-panel .panel-card:nth-child(5) {
+                grid-column: 1 / -1;
+                padding: 10px 14px !important;
+            }
+
+            .announce-card {
+                grid-column: 1 / -1;
+                padding: 10px 12px !important;
+            }
+            .announce-container { height: 100px; }
+            .announce-title { font-size: 0.7em; margin-bottom: 4px; }
+            .announce-item { font-size: 0.65em; padding: 4px 6px; }
+
+            .stage-frame-wrap {
+                aspect-ratio: auto;
+                min-height: 280px;
+            }
+            .stage-toolbar { padding: 6px 10px; }
+            .st-btn { font-size: 0.7em; padding: 3px 8px; }
+            .st-label { font-size: 0.7em; min-width: 50px; }
+            .fs-btn { font-size: 0.7em; padding: 4px 10px; }
+
+            .works-grid {
+                grid-template-columns: 1fr;
+                gap: 8px;
+            }
+            .work-group { padding: 10px; }
+            .work-group .group-title { font-size: 0.78em; }
+            .work-group .btn-item {
+                display: block;
+                text-align: center;
+                padding: 10px 12px;
+                font-size: 0.72em;
+            }
+
+            .section-header { font-size: 0.95em; margin-bottom: 10px; }
+
+            .footer {
+                font-size: 0.65em;
+                padding: 10px;
+                margin-top: 20px;
+            }
+        }
+
+    </style>
+</head>
+<body>
+    <div class="dashboard">
+        <div class="header">
+            <div class="logo-container">
+                <img src="/dashboard/assets/logo.png" alt="遵大Logo" class="logo">
+            </div>
+            <div class="title-container">
+                <h1>贵州遵大数智化平台</h1>
+                <div class="subtitle">以道树业 致诚德信</div>
+            </div>
+        </div>
+
+        <!-- 主舞台：大屏 + 左侧面板 -->
+        <div class="main-stage">
+            <div class="side-panel">
+                <div class="panel-card">
+                    <div class="clock-digits">
+                        <span id="clockHour">00</span>
+                        <span class="colon">:</span>
+                        <span id="clockMin">00</span>
+                    </div>
+                    <div class="info-cycle">
+                        <span class="cycle-item active" id="dateDisplay"><span class="label-date"></span></span>
+                        <span class="cycle-item" id="lunarDisplay"><span class="label-lunar"></span></span>
+                        <span class="cycle-item" id="termDisplay"><span class="label-term"></span></span>
+                        <span class="cycle-item" id="weekdayDisplay"><span class="label-week"></span></span>
+                        <span class="cycle-item" id="weatherDisplay"><span class="label-weather"></span></span>
+                        <span class="cycle-item" id="tempDisplay"><span class="label-temp"></span></span>
+                    </div>
+                </div>
+                <div class="panel-card">
+                    <div class="todo-inner">
+                        <div class="todo-row">
+                            <div class="todo-icon pending">📋</div>
+                            <div class="todo-info">
+                                <div class="todo-count pending-count" id="pendingCount">--</div>
+                                <div class="todo-label">待办流程</div>
+                            </div>
+                        </div>
+                        <div class="todo-row">
+                            <div class="todo-icon notify">🔔</div>
+                            <div class="todo-info">
+                                <div class="todo-count notify-count" id="notifyCount">--</div>
+                                <div class="todo-label">未读消息</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="panel-card announce-card">
+                    <div class="announce-title">📢 公司公告</div>
+                    <div class="announce-container">
+                        <div class="announce-track" id="announceTrack"></div>
+                    </div>
+                </div>
+                <div class="panel-card attend-card">
+                    <div class="attend-header">
+                        <span class="attend-label">⏰ 考勤打卡</span>
+                        <span class="attend-status" id="attendStatus">--</span>
+                    </div>
+                    <button class="attend-btn" id="attendBtn" onclick="handleAttendance()">签到</button>
+                </div>
+                <div class="panel-card toolbox-card">
+                    <a href="/admin/alruvklcz9v" target="_blank" class="toolbox-link">
+                        <span class="toolbox-icon">🧰</span>
+                        <span class="toolbox-label">百宝箱</span>
+                        <span class="toolbox-arrow">→</span>
+                    </a>
+                </div>
+
+            </div>
+            <div class="stage-frame-wrap">
+                <div class="stage-toolbar">
+                    <div class="st-left">
+                        <button class="st-btn" onclick="prevSource()" title="上一个">◀</button>
+                        <span class="st-label" id="sourceLabel">数据源 1/3</span>
+                        <button class="st-btn" onclick="nextSource()" title="下一个">▶</button>
+                    </div>
+                    <button class="fs-btn" onclick="toggleFullscreen()">⛶ 全屏</button>
+                </div>
+                <iframe id="externFrame" src="" allowfullscreen></iframe>
+            </div>
+        </div>
+
+        <!-- 工作版块 -->
+        <div class="work-section">
+            <div class="section-header">工作版块</div>
+            <div class="works-grid" id="worksGrid"></div>
+        </div>
+
+        <div class="footer">
+            <p>贵州遵大数智化平台 v2.0.57 | 
+               <a href="/admin/alruvklcz9v" target="_blank">管理后台</a> | <a href="/admin/alruvklcz9v" target="_blank">访问系统</a> | 
+               服务器: 110.42.236.231 | 
+               运行时间: <span id="uptime"></span>
+            </p>
+        </div>
+    </div>
+
+    <script>
+        // Auth check — set cookie for nginx auth_request, then verify
+        (async function() {
+            var prefixes = ['NOCOBASE_', 'nocobase_'];
+            var token = null;
+            for (var i = 0; i < prefixes.length; i++) {
+                token = localStorage.getItem(prefixes[i] + 'token') || localStorage.getItem(prefixes[i]);
+                if (token) break;
+            }
+            if (!token) {
+                window.location.replace('/signin');
+                return;
+            }
+            // Set cookie for nginx auth_request on subsequent requests
+            document.cookie = 'nb_token=' + token + '; path=/; max-age=3600';
+            try {
+                var r = await fetch('/api/auth:check', { headers: { 'Authorization': 'Bearer ' + token }, credentials: 'omit' });
+                if (!r.ok) { window.location.replace('/signin'); return; }
+            } catch(e) { window.location.replace('/signin'); return; }
+        })();
+
+        // ============================================================
+        //  数据大屏接入源 — 增删改直接编辑此数组即可
+        // ============================================================
+        const EXTERN_URLS = [
+    { url: "", label: "待配置" },
+];
+
+        function loadSource(idx) {
+            sourceIndex = ((idx % EXTERN_URLS.length) + EXTERN_URLS.length) % EXTERN_URLS.length;
+            document.getElementById('externFrame').src = EXTERN_URLS[sourceIndex].url;
+            document.getElementById('sourceLabel').textContent = `${EXTERN_URLS[sourceIndex].label} ${sourceIndex+1}/${EXTERN_URLS.length}`;
+        }
+
+        function prevSource() { loadSource(sourceIndex - 1); }
+        function nextSource() { loadSource(sourceIndex + 1); }
+
+        // 工作版块配置
+        const workSections = [
+            {
+                title: 'A 研发管理', adminOnly: false,
+                bg: '#2a0f1c', border: '#993556', color: '#e890b0',
+                btnBg: '#3d1828', btnBorder: '#993556', btnColor: '#f4c0d1',
+                items: [
+                    { label: '研发项目', url: '/admin/gmhyblvl16o' }, { label: '研发记录', url: '/admin/s6j338yz3i2' },
+                    { label: '研发归档', url: '/admin/5ty5vupwq62' }, { label: '研发验收', url: '/admin/quezp14dok9' },
+                    { label: '物料领用', url: '/admin/ola7umdnmyz' }, { label: '研发人员', url: '/admin/n3nft95ki1w' },
+                    { label: '研发会议', url: '/admin/x23rf37jxb1' }, { label: '研发费用', url: '/admin/ogybv5ukbwg' },
+                    { label: '设备使用', url: '/admin/4uwkfqpz781' }, { label: '研发工时', url: '/admin/8wtfmqucj1p' }
+                ]
+            },
+            {
+                title: 'B 项目中心', adminOnly: false,
+                bg: '#0f1f3d', border: '#185FA5', color: '#8cc4ff',
+                btnBg: '#1a3055', btnBorder: '#185FA5', btnColor: '#b5d4f4',
+                items: [
+                    { label: '项目清单', url: '/admin/nzqtepnaklg' }, { label: '项目文档', url: '/admin/pamw08zpag6' },
+                    { label: '成本库', url: '/admin/visdef7mujx' }, { label: '日志填报', url: '/admin/95q6zzzqj9' },
+                    { label: '施工日志', url: '/admin/68nvr7tszqj' }, { label: '安全会', url: '/admin/y25rk07pr6z' },
+                    { label: '日常报备', url: '/admin/oa082ymyhpc' }, { label: '对甲计量', url: '/admin/hkcwvuo9l4d' },
+                    { label: '分包计价', url: '/admin/pbb3clqs91a' }
+                ]
+            },
+            {
+                title: 'C 物资采购', adminOnly: false,
+                bg: '#0f2a20', border: '#0f6e56', color: '#5cccb0',
+                btnBg: '#1a3d30', btnBorder: '#0f6e56', btnColor: '#9fe1cb',
+                items: [
+                    { label: '物资库', url: '/admin/ui1d106a3c' }, { label: '供应商', url: '/admin/uibab268d5' },
+                    { label: '需求计划', url: '/admin/uia3ab7463' }, { label: '采购计划', url: '/admin/uid1b5e817' },
+                    { label: '采购订单', url: '/admin/ui5d66371c' }, { label: '入库', url: '/admin/uiaeaa7f29' },
+                    { label: '出库', url: '/admin/ui6dd4eb4d' }, { label: '实时库存', url: '/admin/uic0c97799' },
+                    { label: '库存盘点', url: '/admin/uica2dba0b' }, { label: '供应商结算', url: '/admin/960ews9jibd' }
+                ]
+            },
+            {
+                title: 'D 合同管理', adminOnly: false,
+                bg: '#2a1f0b', border: '#854F0B', color: '#f0b84d',
+                btnBg: '#3d2e14', btnBorder: '#854F0B', btnColor: '#fac775',
+                items: [
+                    { label: '合同库', url: '/admin/01zkrtol7d6' }, { label: '供应商信息', url: '/admin/gqak47qsuaw' },
+                    { label: '合作准入', url: '/admin/kyg3ldnu62j' }, { label: '付款台账', url: '/admin/7v5y1hyfm7m' }
+                ]
+            },
+            {
+                title: 'E 财务行政', adminOnly: false,
+                bg: '#2a180b', border: '#b86e20', color: '#f5c87a',
+                btnBg: '#3d2614', btnBorder: '#b86e20', btnColor: '#fadb9a',
+                items: [
+                    { label: '简报', url: '/admin/fq6eb3defao' }, { label: '财务收支', url: '/admin/lmrskqik2tm' },
+                    { label: '公告通知', url: '/admin/1leztg7ou2e' }, { label: '考勤归档', url: '/admin/5qtc3r5n88q' },
+                    { label: '印章使用', url: '/admin/6lr55tm1glf' }
+                ]
+            },
+            {
+                title: 'F 基础数据', adminOnly: false,
+                bg: '#1a1a2e', border: '#4a4e69', color: '#b0b5d4',
+                btnBg: '#282840', btnBorder: '#4a4e69', btnColor: '#ced2e8',
+                items: [
+                    { label: '资质库', url: '/admin/o4kg2kwmgur' }, { label: '资质敏感信息', url: '/admin/hn8ke2a9zcu' },
+                    { label: '制度文件', url: '/admin/sbitmdfbp8d' }, { label: '法规政策', url: '/admin/fizelzr1x6d' },
+                    { label: '标准规范', url: '/admin/ol23gcsrb0x' }, { label: '模板库', url: '/admin/plo1hmfn8pq' },
+                    { label: '案例库', url: '/admin/ey91jn5cxvm' }, { label: '库存编辑', url: '/admin/o4xcn0t982s' }
+                ]
+            },
+            {
+                title: 'G 系统管理', adminOnly: true,
+                bg: '#1a1a1a', border: '#5a5a5a', color: '#a0a0a0',
+                btnBg: '#2a2a2a', btnBorder: '#5a5a5a', btnColor: '#c0c0c0',
+                items: [
+                    { label: '流程日志', url: '/admin/w1l9qyr5ro4' }, { label: '审批记录', url: '/admin/spmliaim71h' },
+                    { label: '自动计数器', url: '/admin/n9ofrd7cctn' }
+                ]
+            }
+        ];
+
+        let isAdmin = false;
+        async function checkAdmin() {
+            try {
+                const resp = await fetch('/api/users:check', { credentials: 'include' });
+                if (resp.ok) {
+                    const data = await resp.json();
+                    const roles = data.data?.roles || [];
+                    isAdmin = roles.some(r => ['admin','superadmin','root'].includes(r.name));
+                }
+            } catch {}
+            renderWorks();
+        }
+
+        function renderWorks() {
+            const grid = document.getElementById('worksGrid');
+            grid.innerHTML = '';
+            workSections.forEach(s => {
+                if (s.adminOnly && !isAdmin) return;
+                const g = document.createElement('div');
+                g.className = 'work-group';
+                g.style.cssText = `background:${s.bg};border-color:${s.border}`;
+                const t = document.createElement('div');
+                t.className = 'group-title'; t.style.color = s.color; t.textContent = s.title;
+                g.appendChild(t);
+                const l = document.createElement('div'); l.className = 'btn-list';
+                s.items.forEach(item => {
+                    const a = document.createElement('a');
+                    a.className = 'btn-item'; a.href = item.url;
+                    a.style.cssText = `background:${s.btnBg};border-color:${s.btnBorder};color:${s.btnColor}`;
+                    a.textContent = item.label;
+                    l.appendChild(a);
+                });
+                g.appendChild(l);
+                grid.appendChild(g);
+            });
+        }
+
+        // 待办
+        async function fetchTodos() {
+            const p = document.getElementById('pendingCount');
+            const n = document.getElementById('notifyCount');
+            try {
+                const r = await fetch('/api/flow_nodes:list?filter[status]=pending&pageSize=1', { credentials:'include' });
+                p.textContent = r.ok ? ((await r.json()).meta?.total ?? '0') : '0';
+            } catch { p.textContent = '0'; }
+            try {
+                const r = await fetch('/api/notifications:list?filter[read]=false&pageSize=1', { credentials:'include' });
+                n.textContent = r.ok ? ((await r.json()).meta?.total ?? '0') : '0';
+            } catch { n.textContent = '0'; }
+        }
+
+        // 公司公告
+        async function fetchAnnouncements() {
+            const track = document.getElementById('announceTrack');
+            try {
+                const r = await fetch(
+                    '/api/announcements:list?filter[status]=published&filter[archived__ne]=true&sort=-publishedAt,-createdAt&pageSize=8',
+                    { credentials: 'include' }
+                );
+                if (!r.ok) throw Error();
+                const data = await r.json();
+                const items = data.data || [];
+                track.innerHTML = '';
+                if (!items.length) {
+                    track.innerHTML = '<div class="announce-item" style="text-align:center;color:var(--text-muted);border:none;background:none;">暂无公告</div>';
+                    track.classList.remove('scrolling');
+                    return;
+                }
+                const render = (list) => list.forEach(item => {
+                    const div = document.createElement('div');
+                    div.className = 'announce-item';
+                    const ts = item.publishedAt || item.createdAt || '';
+                    const date = ts ? new Date(ts).toLocaleDateString('zh-CN', { month:'2-digit', day:'2-digit' }) : '';
+                    div.innerHTML = `<span class="a-time">${date}</span>${item.title || item.name || '(无标题)'}`;
+                    track.appendChild(div);
+                });
+                render(items);
+                render(items); // 副本，实现无缝循环
+                track.classList.add('scrolling');
+            } catch {
+                track.innerHTML = '<div class="announce-item" style="text-align:center;color:var(--text-muted);border:none;background:none;">加载失败</div>';
+                track.classList.remove('scrolling');
+            }
+        }
+
+        // 考勤打卡（精简：不更新时间显示）
+        let attendState = null;
+        async function fetchAttendance() {
+            try {
+                const today = new Date().toISOString().slice(0,10);
+                const r = await fetch(`/api/attendance:list?filter[date]=${today}&sort=-createdAt&pageSize=1`, { credentials:'include' });
+                if (r.ok) {
+                    const data = await r.json();
+                    const rec = (data.data || [])[0];
+                    if (rec) {
+                        attendState = rec;
+                        document.getElementById('attendStatus').textContent = rec.checkOut ? '已签退' : '已签到';
+                        if (!rec.checkOut) document.getElementById('attendStatus').className = 'attend-status';
+                        else document.getElementById('attendStatus').className = 'attend-status out';
+                        document.getElementById('attendBtn').textContent = rec.checkOut ? '已打卡' : '签退';
+                        if (rec.checkOut) document.getElementById('attendBtn').className = 'attend-btn checked';
+                    } else {
+                        document.getElementById('attendStatus').textContent = '未签到';
+                        document.getElementById('attendBtn').textContent = '签到';
+                        document.getElementById('attendBtn').className = 'attend-btn';
+                    }
+                }
+            } catch {}
+        }
+
+        async function handleAttendance() {
+            const btn = document.getElementById('attendBtn');
+            btn.disabled = true;
+            try {
+                const now = new Date();
+                const today = now.toISOString().slice(0,10);
+                const time = now.toTimeString().slice(0,8);
+                if (!attendState) {
+                    const r = await fetch('/api/attendance:create', {
+                        method:'POST', credentials:'include',
+                        headers:{ 'Content-Type':'application/json' },
+                        body: JSON.stringify({ date: today, checkIn: time })
+                    });
+                    if (r.ok) { attendState = (await r.json()).data; }
+                } else if (!attendState.checkOut) {
+                    const r = await fetch(`/api/attendance:update?filterByTk=${attendState.id}`, {
+                        method:'POST', credentials:'include',
+                        headers:{ 'Content-Type':'application/json' },
+                        body: JSON.stringify({ checkOut: time })
+                    });
+                    if (r.ok) { attendState.checkOut = time; }
+                }
+            } catch {}
+            fetchAttendance();
+            btn.disabled = false;
+        }
+
+        // 全屏切换
+        function toggleFullscreen() {
+            const wrap = document.querySelector('.stage-frame-wrap');
+            if (!document.fullscreenElement) {
+                wrap.requestFullscreen?.() || wrap.webkitRequestFullscreen?.();
+            } else {
+                document.exitFullscreen?.() || document.webkitExitFullscreen?.();
+            }
+        }
+
+        // 农历 / 节气 / 天气
+        const lunarMonths = ['正','二','三','四','五','六','七','八','九','十','冬','腊'];
+        const lunarDays = ['初一','初二','初三','初四','初五','初六','初七','初八','初九','初十',
+                          '十一','十二','十三','十四','十五','十六','十七','十八','十九','二十',
+                          '廿一','廿二','廿三','廿四','廿五','廿六','廿七','廿八','廿九','三十'];
+        const solarTerms = ['小寒','大寒','立春','雨水','惊蛰','春分','清明','谷雨',
+                           '立夏','小满','芒种','夏至','小暑','大暑','立秋','处暑',
+                           '白露','秋分','寒露','霜降','立冬','小雪','大雪','冬至'];
+        const solarTermsDate = [
+            [1,6],[1,20],[2,4],[2,19],[3,6],[3,21],[4,5],[4,20],
+            [5,6],[5,21],[6,6],[6,21],[7,7],[7,23],[8,7],[8,23],
+            [9,8],[9,23],[10,8],[10,23],[11,7],[11,22],[12,7],[12,22]
+        ];
+
+        const weekdays = ['星期日','星期一','星期二','星期三','星期四','星期五','星期六'];
+
+        function getSolarTerm(m,d) {
+            for (let i=0;i<solarTermsDate.length;i++)
+                if (solarTermsDate[i][0]===m && solarTermsDate[i][1]===d) return solarTerms[i];
+            for (let i=0;i<solarTermsDate.length;i++) {
+                const df=Math.abs(solarTermsDate[i][1]-d);
+                if (solarTermsDate[i][0]===m && df<=1) return solarTerms[i]+'前后';
+            }
+            return '';
+        }
+        function getLunarDate(date) {
+            const m=date.getMonth()+1, d=date.getDate();
+            return { month: lunarMonths[(m+10)%12], day: lunarDays[(d+10)%30] };
+        }
+
+        let cycleIndex=0;
+        const cycleIds=['dateDisplay','lunarDisplay','termDisplay','weekdayDisplay','weatherDisplay','tempDisplay'];
+        function rotateCycle() {
+            document.querySelectorAll('.cycle-item').forEach(e=>e.classList.remove('active'));
+            document.getElementById(cycleIds[cycleIndex]).classList.add('active');
+            cycleIndex=(cycleIndex+1)%cycleIds.length;
+        }
+
+        let weatherText='获取中…', tempText='--℃';
+        function fetchWeather() {
+            fetch('https://wttr.in/?format=j1&lang=zh')
+                .then(r=>r.json())
+                .then(d=>{
+                    const c=d.current_condition[0];
+                    weatherText=c.weatherDesc[0].value;
+                    tempText=c.temp_C+'℃';
+                })
+                .catch(()=>{ weatherText='--'; tempText='--℃'; });
+        }
+
+        function updateDisplay() {
+            const n=new Date();
+            const y=n.getFullYear(), mo=String(n.getMonth()+1).padStart(2,'0'), d=String(n.getDate()).padStart(2,'0');
+            const h=String(n.getHours()).padStart(2,'0'), mi=String(n.getMinutes()).padStart(2,'0'), sc=String(n.getSeconds()).padStart(2,'0');
+            document.getElementById('clockHour').textContent=h;
+            document.getElementById('clockMin').textContent=mi;
+            document.querySelector('#dateDisplay .label-date').textContent=`${y}年${mo}月${d}日`;
+            const lu=getLunarDate(n);
+            document.querySelector('#lunarDisplay .label-lunar').textContent=`农历${lu.month}月${lu.day}`;
+            const t=getSolarTerm(n.getMonth()+1,n.getDate());
+            document.querySelector('#termDisplay .label-term').textContent=t||'无节气';
+            document.querySelector('#weekdayDisplay .label-week').textContent=weekdays[n.getDay()];
+            document.querySelector('#weatherDisplay .label-weather').textContent=weatherText;
+            document.querySelector('#tempDisplay .label-temp').textContent=tempText;
+        }
+
+        function updateUptime() {
+            const s=new Date('2026-05-22T00:00:00');
+            const n=new Date();
+            const df=n-s;
+            document.getElementById('uptime').textContent=`${Math.floor(df/86400000)}天 ${Math.floor((df%86400000)/3600000)}小时`;
+        }
+
+        loadSource(0);
+        checkAdmin();
+        fetchTodos();
+        fetchAnnouncements();
+        fetchAttendance();
+        fetchWeather();
+        updateDisplay();
+        updateUptime();
+        rotateCycle();
+        setInterval(updateDisplay,1000);
+        setInterval(updateUptime,60000);
+        setInterval(rotateCycle,3000);
+        setInterval(fetchWeather,600000);
+    </script>
+</body>
+</html>

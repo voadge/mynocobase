@@ -1,0 +1,1613 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>贵州遵大数智化平台</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            background: linear-gradient(135deg, #0c1426 0%, #1a2332 50%, #0d1926 100%);
+            color: #e0e6ed;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        .dashboard {
+            max-width: 100%;
+            margin: 0;
+            padding: 10px 14px;
+        }
+
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 0 12px;
+        }
+
+        .logo-container { width: 20%; min-width: 180px; max-width: 220px; display: flex; justify-content: center; flex-shrink: 0; }
+
+        .logo { width: 60px; height: 60px; border-radius: 50%; object-fit: cover; }
+
+        .title-container { text-align: center; flex: 1; display: flex; flex-direction: column; align-items: center; }
+
+        .header h1 {
+            font-size: 2.1em; font-weight: 700; letter-spacing: 6px;
+            background: linear-gradient(90deg, #00d4ff, #7b2cbf, #00d4ff);
+            background-size: 200% auto;
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            animation: shimmer 3s linear infinite;
+        }
+
+        @keyframes shimmer {
+            0% { background-position: -200% center; }
+            100% { background-position: 200% center; }
+        }
+
+        .header .subtitle {
+            color: #5a6a7a; font-size: 0.85em; margin-top: 6px; letter-spacing: 4px;
+        }
+
+        /* ---- 主舞台：大屏 + 左侧面板 ---- */
+        .main-stage {
+            width: 100%;
+            margin-top: 2em;
+            display: flex;
+            gap: 14px;
+            align-items: stretch;
+        }
+
+        /* 左侧面板：时间 + 待办 + 公告 + 打卡 —— 占 1/5 */
+        .side-panel {
+            flex: 0 0 20%;
+            min-width: 180px;
+            max-width: 220px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .side-panel .panel-card {
+            flex: 1;
+            background: linear-gradient(145deg, rgba(0, 212, 255, 0.08), rgba(123, 44, 191, 0.03));
+            border: 1px solid rgba(0, 212, 255, 0.18);
+            border-radius: 12px;
+            padding: 18px 16px 14px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        /* 时间模块 */
+        .side-panel .clock-digits {
+            font-size: 1.8em;
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-weight: 700;
+            color: #00d4ff;
+            text-shadow: 0 0 8px rgba(0, 212, 255, 0.6), 0 0 24px rgba(0, 212, 255, 0.2);
+            letter-spacing: 1px;
+            line-height: 1.2;
+            margin-bottom: 0.5em;
+        }
+
+        .clock-digits .colon { display: inline-block; animation: blink 1s step-end infinite; }
+
+        @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0.15; } }
+
+        .side-panel .info-cycle {
+            height: 1.8em; overflow: hidden; position: relative; width: 100%; margin-top: auto;
+        }
+
+        .side-panel .cycle-item {
+            position: absolute; width: 100%; left: 0; top: 0; text-align: center;
+            opacity: 0; transform: translateY(10px); transition: all 0.4s ease;
+            font-size: 0.9em; letter-spacing: 2px;
+        }
+
+        .side-panel .cycle-item.active { opacity: 1; transform: translateY(0); }
+
+        .cycle-item .label-date { color: #e0e6ed; }
+        .cycle-item .label-lunar { color: #7b2cbf; }
+        .cycle-item .label-term  { color: #ffd93d; }
+        .cycle-item .label-week  { color: #5a6a7a; }
+        .cycle-item .label-weather { color: #00ff88; }
+        .cycle-item .label-temp   { color: #ff6b6b; }
+
+        /* 待办模块 */
+        .todo-inner {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .todo-inner .todo-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .todo-inner .todo-icon {
+            width: 36px; height: 36px; border-radius: 8px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.1em; flex-shrink: 0;
+        }
+
+        .todo-inner .todo-icon.pending { background: rgba(0, 212, 255, 0.15); color: #00d4ff; }
+        .todo-inner .todo-icon.notify  { background: rgba(255, 107, 107, 0.15); color: #ff6b6b; }
+
+        .todo-inner .todo-info { flex: 1; }
+        .todo-inner .todo-count {
+            font-size: 1.6em; font-weight: 700; line-height: 1;
+        }
+        .todo-inner .todo-count.pending-count { color: #00d4ff; text-shadow: 0 0 10px rgba(0, 212, 255, 0.3); }
+        .todo-inner .todo-count.notify-count  { color: #ff6b6b; text-shadow: 0 0 10px rgba(255, 107, 107, 0.3); }
+        .todo-inner .todo-label { font-size: 0.7em; color: #5a6a7a; margin-top: 1px; }
+
+        /* 公司公告 */
+        .announce-card { padding: 12px 14px 10px !important; align-items: stretch !important; }
+
+        .announce-title {
+            font-size: 0.78em; color: #ffd93d; margin-bottom: 6px; font-weight: 600;
+            letter-spacing: 1px;
+        }
+
+        .announce-container {
+            height: 188px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .announce-track {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .announce-track.scrolling {
+            animation: scrollUp 40s linear infinite;
+        }
+
+        .announce-track.paused {
+            animation-play-state: paused;
+        }
+
+        @keyframes scrollUp {
+            0% { transform: translateY(0); }
+            100% { transform: translateY(-50%); }
+        }
+
+        .announce-item {
+            font-size: 0.7em;
+            color: #c8d0d8;
+            padding: 5px 8px;
+            border-radius: 4px;
+            background: rgba(255,255,255,0.03);
+            border-left: 2px solid rgba(255, 217, 61, 0.4);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            line-height: 1.4;
+        }
+
+        .announce-item .a-time {
+            color: #5a6a7a;
+            font-size: 0.85em;
+            margin-right: 8px;
+        }
+
+        /* 考勤打卡 */
+        .attend-card {
+            align-items: center !important;
+            padding: 14px 16px 16px !important;
+            gap: 6px;
+        }
+
+        .attend-header {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .attend-label { font-size: 0.78em; color: #ffd93d; font-weight: 600; letter-spacing: 1px; }
+
+        .attend-status {
+            font-size: 0.65em; padding: 2px 8px; border-radius: 8px;
+            background: rgba(0, 255, 136, 0.12); color: #00ff88;
+        }
+        .attend-status.out { background: rgba(255, 107, 107, 0.12); color: #ff6b6b; }
+
+        .attend-btn {
+            margin-top: 4px; width: 100%; padding: 8px 0; border: none; border-radius: 8px;
+            font-size: 0.85em; font-weight: 600; letter-spacing: 2px; cursor: pointer;
+            background: linear-gradient(135deg, #00d4ff, #7b2cbf);
+            color: #fff; transition: all 0.3s;
+        }
+        .attend-btn:hover { filter: brightness(1.15); transform: scale(1.02); }
+        .attend-btn:active { transform: scale(0.98); }
+        .attend-btn.checked { background: linear-gradient(135deg, #ff6b6b, #b84d6b); }
+
+        /* 百宝箱入口 */
+        .toolbox-card {
+            align-items: center !important;
+            padding: 12px 16px !important;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .toolbox-card:hover {
+            border-color: rgba(0, 212, 255, 0.5);
+            background: linear-gradient(145deg, rgba(0, 212, 255, 0.15), rgba(123, 44, 191, 0.08));
+        }
+        .toolbox-link {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            width: 100%;
+            text-decoration: none;
+            color: inherit;
+        }
+        .toolbox-icon { font-size: 1.2em; }
+        .toolbox-label { font-size: 0.85em; color: #00d4ff; font-weight: 600; letter-spacing: 1px; }
+        .toolbox-arrow { font-size: 0.9em; color: #5a6a7a; transition: transform 0.2s; }
+        .toolbox-card:hover .toolbox-arrow { transform: translateX(3px); }
+
+        /* 大屏 iframe 容器 —— 占 4/5 */
+        .stage-frame-wrap {
+            flex: 1;
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid rgba(0, 212, 255, 0.2);
+            background: #0a0e1a;
+            aspect-ratio: 16 / 10;
+            position: relative;
+        }
+
+        .stage-frame-wrap iframe {
+            width: 100%; height: 100%; border: none; display: block;
+        }
+        /* 缩放控制条（仅全屏可见） */
+        .zoom-bar {
+            display: none; position: absolute; top: 10px; right: 60px; z-index: 20;
+            background: rgba(0,0,0,0.65); border-radius: 8px; padding: 4px 6px;
+            gap: 3px; align-items: center; backdrop-filter: blur(4px);
+            border: 1px solid rgba(255,255,255,0.15);
+        }
+        .zoom-btn {
+            width: 28px; height: 28px; border-radius: 5px; border: 1px solid rgba(255,255,255,0.2);
+            background: rgba(255,255,255,0.08); color: #e0e6ed; font-size: 0.85em;
+            cursor: pointer; display: flex; align-items: center; justify-content: center;
+            font-family: inherit; line-height: 1; transition: all 0.2s;
+        }
+        .zoom-btn:hover { background: rgba(0,212,255,0.2); border-color: rgba(0,212,255,0.5); }
+        .zoom-pct {
+            font-size: 0.7em; color: #aaa; min-width: 36px; text-align: center; display: inline-block;
+        }
+        /* 全屏下显示缩放条 + 允许缩放 */
+        .stage-frame-wrap:fullscreen .zoom-bar,
+        .stage-frame-wrap:-webkit-full-screen .zoom-bar,
+        .stage-frame-wrap:-moz-full-screen .zoom-bar { display: flex; }
+        .stage-frame-wrap:fullscreen,
+        .stage-frame-wrap:-webkit-full-screen,
+        .stage-frame-wrap:-moz-full-screen {
+            aspect-ratio: auto; width: 100vw; height: 100vh; border-radius: 0;
+        }
+        .stage-frame-wrap:fullscreen iframe,
+        .stage-frame-wrap:-webkit-full-screen iframe,
+        .stage-frame-wrap:-moz-full-screen iframe {
+            width: 100%; height: 100%; transition: none;
+        }
+        .stage-frame-wrap:fullscreen .stage-toolbar,
+        .stage-frame-wrap:-webkit-full-screen .stage-toolbar,
+        .stage-frame-wrap:-moz-full-screen .stage-toolbar {
+            bottom: 0; padding: 12px 18px;
+        }
+
+        /* 全屏按钮 */
+        .fs-btn {
+            padding: 6px 14px;
+            border: 1px solid rgba(255,255,255,0.3);
+            border-radius: 6px;
+            background: rgba(0,0,0,0.55);
+            color: #e0e6ed;
+            font-size: 0.78em;
+            cursor: pointer;
+            backdrop-filter: blur(4px);
+            transition: all 0.25s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-family: inherit;
+        }
+
+        .fs-btn:hover {
+            background: rgba(0,0,0,0.75);
+            border-color: rgba(0, 212, 255, 0.6);
+            color: #00d4ff;
+        }
+
+        /* 底部工具栏 */
+        .stage-toolbar {
+            position: absolute;
+            bottom: 0; left: 0; right: 0;
+            z-index: 10;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 14px;
+            background: linear-gradient(0deg, rgba(0,0,0,0.6) 0%, transparent 100%);
+            pointer-events: none;
+        }
+
+        .stage-toolbar > * { pointer-events: auto; }
+
+        .st-left { display: flex; align-items: center; gap: 8px; }
+
+        .st-btn {
+            padding: 4px 10px;
+            border: 1px solid rgba(255,255,255,0.25);
+            border-radius: 5px;
+            background: rgba(0,0,0,0.5);
+            color: #e0e6ed;
+            font-size: 0.85em;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: inherit;
+            line-height: 1;
+        }
+
+        .st-btn:hover { background: rgba(0,0,0,0.75); border-color: rgba(0, 212, 255, 0.5); color: #00d4ff; }
+
+        .st-label {
+            font-size: 0.78em;
+            color: rgba(255,255,255,0.8);
+            min-width: 80px;
+            text-align: center;
+        }
+
+        /* ---- 工作版块 ---- */
+        .work-section { margin-top: 28px; }
+
+        .section-header {
+            font-size: 1.1em; color: #00d4ff; margin-bottom: 16px;
+            padding-bottom: 8px; border-bottom: 1px solid rgba(0, 212, 255, 0.2);
+            display: flex; align-items: center; gap: 10px;
+        }
+
+        .section-header::before {
+            content: ''; width: 4px; height: 18px;
+            background: linear-gradient(180deg, #00d4ff, #7b2cbf); border-radius: 2px;
+        }
+
+        .works-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+            gap: 12px;
+        }
+
+        .work-group {
+            border-radius: 10px; padding: 12px 10px 10px; border: 1px solid;
+        }
+
+        .work-group .group-title {
+            font-size: 0.82em; font-weight: 600; margin-bottom: 8px;
+            padding-bottom: 5px; border-bottom: 1px solid rgba(255,255,255,0.08);
+        }
+
+        .work-group .btn-list { display: flex; flex-direction: column; gap: 4px; }
+
+        .work-group .btn-item {
+            display: inline-block; padding: 4px 8px; border-radius: 4px;
+            font-size: 0.72em; text-decoration: none; border: 1px solid;
+            cursor: pointer; transition: all 0.2s;
+        }
+
+        .work-group .btn-item:hover { filter: brightness(1.2); transform: translateX(3px); }
+
+        /* ---- 底部 ---- */
+        .footer {
+            margin-top: 30px; padding: 18px; text-align: center;
+            color: #5a6a7a; font-size: 0.82em;
+            border-top: 1px solid rgba(0, 212, 255, 0.1);
+        }
+        .footer a { color: #00d4ff; text-decoration: none; }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .side-panel .panel-card, .work-group {
+            animation: fadeIn 0.5s ease forwards;
+        }
+
+        @media (max-width: 768px) {
+            .main-stage { flex-direction: column; width: 100%; }
+            .side-panel {
+                flex: unset; width: 100%;
+                display: grid;
+                grid-template-columns: 1fr 1fr 1fr;
+                gap: 4px;
+                width: 100%; min-width: 100%;
+            }
+            .side-panel .panel-card { flex: 1; padding: 10px 8px 8px; min-width: 0; width: auto; }
+            .side-panel .panel-card:nth-child(3) { grid-column: auto; }
+            .side-panel .panel-card:nth-child(4),
+            .side-panel .panel-card:nth-child(5) { display: none; }
+            .works-grid { grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); gap: 6px; }
+            .header { flex-direction: column; gap: 6px; }
+            .header h1 { font-size: 1.3em; }
+            .logo { width: 36px; height: 36px; }
+            .side-panel .clock-digits { font-size: 1.3em; margin-bottom: 0.3em; white-space: nowrap; }
+            .info-cycle { height: 1.2em; }
+            .cycle-item { font-size: 0.6em; }
+            .todo-inner .todo-count { font-size: 1.1em; white-space: nowrap; }
+            .todo-inner .todo-icon { width: 28px; height: 28px; font-size: 0.9em; }
+            .announce-container { height: 80px; }
+            .stage-frame-wrap { aspect-ratio: auto; min-height: 180px; }
+            .footer span, .footer p br { display: none; }
+            .footer-attend, .footer-toolbox { display: inline-block !important; padding: 4px 10px; border-radius: 4px; font-size: 0.85em; cursor: pointer; }
+            .footer-attend { background: rgba(0,255,136,0.12); border: 1px solid rgba(0,255,136,0.2); color: #00ff88; }
+            .footer-toolbox { background: rgba(0,212,255,0.1); border: 1px solid rgba(0,212,255,0.2); color: #00d4ff; text-decoration: none; }
+        }
+
+        @media (max-width: 480px) {
+            .header h1 { font-size: 1.1em; }
+            .works-grid { grid-template-columns: repeat(2, 1fr); gap: 4px; }
+        }
+
+        /* === 打卡弹窗 === */
+        .attend-overlay {
+            display: none; position: fixed; inset: 0; z-index: 10000;
+            background: rgba(0,0,0,0.75); backdrop-filter: blur(4px);
+            align-items: center; justify-content: center;
+        }
+        .attend-overlay.show { display: flex; }
+        .attend-drawer {
+            background: linear-gradient(160deg, #111827 0%, #1a2332 100%);
+            border: 1px solid rgba(0,212,255,0.25);
+            border-radius: 16px; width: 92vw; max-width: 420px; max-height: 90vh;
+            overflow-y: auto; padding: 24px 20px 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+            animation: slideUp 0.3s ease;
+        }
+        @keyframes slideUp { from{transform:translateY(30px);opacity:0} to{transform:translateY(0);opacity:1} }
+        .attend-drawer h3 {
+            text-align: center; color: #00d4ff; font-size: 1.2em;
+            margin-bottom: 16px; letter-spacing: 2px;
+        }
+        .attend-close {
+            position: absolute; top: 10px; right: 14px; font-size: 1.2em;
+            color: #888; cursor: pointer; background: none; border: none;
+            width: 32px; height: 32px; border-radius: 50%; display: flex;
+            align-items: center; justify-content: center; transition: all 0.2s;
+            line-height: 1; z-index: 5;
+        }
+        .attend-close:hover { color: #ff6b6b; }
+        .attend-type-row {
+            display: flex; gap: 10px; margin-bottom: 16px;
+        }
+        .attend-type-btn {
+            flex: 1; padding: 12px; border-radius: 10px; border: 2px solid rgba(255,255,255,0.1);
+            background: rgba(255,255,255,0.03); color: #c0c8d0;
+            font-size: 1em; cursor: pointer; text-align: center; transition: all 0.2s;
+            font-family: inherit;
+        }
+        .attend-type-btn:hover { border-color: rgba(0,212,255,0.4); }
+        .attend-type-btn.selected { border-color: #00d4ff; background: rgba(0,212,255,0.12); color: #00d4ff; font-weight: 600; }
+        .attend-type-btn.selected.checkout { border-color: #ff6b6b; background: rgba(255,107,107,0.12); color: #ff6b6b; }
+        .attend-info-row {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 10px 12px; border-radius: 8px; margin-bottom: 10px;
+            background: rgba(255,255,255,0.03); font-size: 0.78em;
+        }
+        .attend-info-row .label { color: #5a6a7a; }
+        .attend-info-row .value { color: #e0e6ed; font-weight: 500; }
+        .attend-camera-wrap {
+            position: relative; border-radius: 12px; overflow: hidden;
+            background: #000; aspect-ratio: 4/3; margin-bottom: 12px;
+            border: 2px solid rgba(0,212,255,0.15);
+        }
+        .attend-camera-wrap video, .attend-camera-wrap canvas {
+            width: 100%; height: 100%; object-fit: cover;
+        }
+        .attend-camera-wrap canvas { position: absolute; top: 0; left: 0; }
+        .attend-camera-wrap .face-indicator {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+            width: 140px; height: 170px; border: 2px dashed rgba(0,255,136,0.6);
+            border-radius: 50% / 40%; pointer-events: none;
+        }
+        .attend-camera-wrap .face-indicator.verified { border-color: #00ff88; border-style: solid; }
+        .attend-camera-wrap .face-indicator.unverified { border-color: #ff6b6b; }
+        .attend-camera-wrap .face-status {
+            position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%);
+            padding: 4px 12px; border-radius: 10px; font-size: 0.7em;
+            background: rgba(0,0,0,0.6); color: #ffd93d;
+        }
+        .attend-camera-wrap .face-status.verified { color: #00ff88; }
+        .attend-camera-wrap .face-status.unverified { color: #ff6b6b; }
+        .attend-capture-btn {
+            display: block; width: 100%; padding: 10px; border-radius: 8px;
+            border: 1px solid rgba(0,212,255,0.3); background: rgba(0,212,255,0.1);
+            color: #00d4ff; font-size: 0.9em; cursor: pointer; margin-bottom: 12px;
+            transition: all 0.2s; font-family: inherit;
+        }
+        .attend-capture-btn:hover { background: rgba(0,212,255,0.2); }
+        .attend-capture-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .attend-submit {
+            display: block; width: 100%; padding: 12px; border-radius: 10px;
+            border: none; font-size: 1em; font-weight: 600; letter-spacing: 2px;
+            cursor: pointer; transition: all 0.3s; font-family: inherit;
+            background: linear-gradient(135deg, #00d4ff, #7b2cbf); color: #fff;
+        }
+        
+        .attend-finger-row {
+            display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
+            padding: 10px 12px; border-radius: 8px;
+            background: rgba(255,255,255,0.02); font-size: 0.78em;
+        }
+        .attend-finger-row .label { color: #5a6a7a; }
+        .attend-finger-btn {
+            margin-left: auto; padding: 6px 14px; border-radius: 6px;
+            border: 1px solid rgba(123,44,191,0.4); background: rgba(123,44,191,0.1);
+            color: #b06fff; font-size: 0.85em; cursor: pointer; font-family: inherit;
+            transition: all 0.2s; white-space: nowrap;
+        }
+        .attend-finger-btn:hover { background: rgba(123,44,191,0.2); }
+        .attend-finger-btn.verified { border-color: #00ff88; background: rgba(0,255,136,0.1); color: #00ff88; }
+        .attend-finger-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .attend-finger-status { font-size: 0.85em; }
+        .attend-finger-status.verified { color: #00ff88; }
+        .attend-finger-status.unavailable { color: #5a6a7a; }
+        .attend-verify-bar {
+            display: flex; gap: 6px; margin-bottom: 10px; font-size: 0.7em;
+        }
+        .attend-verify-bar .v-item {
+            flex: 1; text-align: center; padding: 4px 0; border-radius: 4px;
+            background: rgba(255,255,255,0.03); color: #5a6a7a;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+        .attend-verify-bar .v-item.ok {
+            background: rgba(0,255,136,0.08); border-color: rgba(0,255,136,0.3); color: #00ff88;
+        }
+        .attend-verify-bar .v-item.fail {
+            background: rgba(255,107,107,0.08); border-color: rgba(255,107,107,0.3); color: #ff6b6b;
+        }
+        .attend-verify-bar .v-item.need {
+            background: rgba(255,217,61,0.08); border-color: rgba(255,217,61,0.3); color: #ffd93d;
+            animation: pulse 1.5s ease infinite;
+        }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+        .camera-retry-btn {
+            display: none; margin-top: -8px; margin-bottom: 10px; width: 100%;
+            padding: 6px; border-radius: 6px; border: 1px solid rgba(255,107,107,0.3);
+            background: rgba(255,107,107,0.08); color: #ff6b6b;
+            font-size: 0.75em; cursor: pointer; text-align: center; font-family: inherit;
+        }
+        .camera-retry-btn:hover { background: rgba(255,107,107,0.15); }
+
+        .attend-submit:disabled { opacity: 0.3; cursor: not-allowed; }
+        .attend-submit:hover:not(:disabled) { filter: brightness(1.15); }
+        .attend-location-status {
+            font-size: 0.65em; text-align: center; margin-top: 4px;
+        }
+        .attend-location-status.getting { color: #ffd93d; }
+        .attend-location-status.got { color: #00ff88; }
+        .attend-location-status.error { color: #ff6b6b; }
+
+    </style>
+</head>
+<body>
+    <div class="dashboard">
+        <div class="header">
+            <div class="logo-container">
+                <img src="/dashboard/assets/logo.png" alt="遵大Logo" class="logo">
+            </div>
+            <div class="title-container">
+                <h1>贵州遵大数智化平台</h1>
+                <div class="subtitle">以道树业 致诚德信</div>
+            </div>
+        </div>
+
+        <!-- 主舞台：大屏 + 左侧面板 -->
+        <div class="main-stage">
+            <div class="side-panel">
+                <div class="panel-card">
+                    <div class="clock-digits">
+                        <span id="clockHour">00</span>
+                        <span class="colon">:</span>
+                        <span id="clockMin">00</span>
+                    </div>
+                    <div class="info-cycle">
+                        <span class="cycle-item active" id="dateDisplay"><span class="label-date"></span></span>
+                        <span class="cycle-item" id="lunarDisplay"><span class="label-lunar"></span></span>
+                        <span class="cycle-item" id="termDisplay"><span class="label-term"></span></span>
+                        <span class="cycle-item" id="weekdayDisplay"><span class="label-week"></span></span>
+                        <span class="cycle-item" id="weatherDisplay"><span class="label-weather"></span></span>
+                        <span class="cycle-item" id="tempDisplay"><span class="label-temp"></span></span>
+                    </div>
+                </div>
+                <div class="panel-card">
+                    <div class="todo-inner">
+                        <div class="todo-row">
+                            <div class="todo-icon pending">📋</div>
+                            <div class="todo-info">
+                                <div class="todo-count pending-count" id="pendingCount">--</div>
+                                <div class="todo-label">待办流程</div>
+                            </div>
+                        </div>
+                        <div class="todo-row">
+                            <div class="todo-icon notify">🔔</div>
+                            <div class="todo-info">
+                                <div class="todo-count notify-count" id="notifyCount">--</div>
+                                <div class="todo-label">未读消息</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="panel-card announce-card">
+                    <div class="announce-title">📢 公司公告</div>
+                    <div class="announce-container">
+                        <div class="announce-track" id="announceTrack"></div>
+                    </div>
+                </div>
+                <div class="panel-card attend-card">
+                    <div class="attend-header">
+                        <span class="attend-label">⏰ 考勤打卡</span>
+                        <span class="attend-status" id="attendStatus">--</span>
+                    </div>
+                    <button class="attend-btn" id="attendBtn" onclick="openAttendModal()">打卡</button>
+                </div>
+                <div class="panel-card toolbox-card">
+                    <a href="/dashboard/百宝箱.html" class="toolbox-link">
+                        <span class="toolbox-icon">🧰</span>
+                        <span class="toolbox-label">百宝箱</span>
+                        <span class="toolbox-arrow">→</span>
+                    </a>
+                </div>
+            </div>
+            <div class="stage-frame-wrap">
+                <div class="stage-toolbar">
+                    <div class="st-left">
+                        <button class="st-btn" onclick="prevSource()" title="上一个">◀</button>
+                        <span class="st-label" id="sourceLabel">数据源 1/3</span>
+                        <button class="st-btn" onclick="nextSource()" title="下一个">▶</button>
+                    </div>
+                    <button class="fs-btn" onclick="toggleFullscreen()">⛶ 全屏</button>
+                </div>
+                <iframe id="externFrame" src="" allowfullscreen sandbox="allow-scripts allow-forms allow-same-origin allow-popups"></iframe>
+                <div class="zoom-bar" id="zoomBar">
+                    <button class="zoom-btn" onclick="zoomFrame(0.2)" title="放大">＋</button>
+                    <button class="zoom-btn" onclick="zoomFrame(-0.2)" title="缩小">－</button>
+                    <button class="zoom-btn" onclick="zoomFrame(0,true)" title="重置">↺</button>
+                    <span class="zoom-pct" id="zoomPct">100%</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 工作版块 -->
+        <div class="work-section">
+            <div class="section-header">工作版块</div>
+            <div class="works-grid" id="worksGrid"></div>
+        </div>
+
+        <div class="footer">
+            <p>
+               <button class="footer-attend" onclick="openAttendModal()" style="display:none">打卡</button>
+               <span id="adminLinks" style="display:none"><a href="/admin/alruvklcz9v" target="_blank">管理后台</a> | <a href="/admin/alruvklcz9v" target="_blank">访问系统</a></span>
+               <a class="footer-toolbox" href="/dashboard/百宝箱.html" style="display:none">百宝箱</a>
+               <span>贵州遵大数智化平台 v2.0.57 | 服务器: 110.42.236.231 | 运行时间: <span id="uptime"></span></span>
+            </p>
+        </div>
+    </div>
+
+    <script>
+        // ============================================================
+        //  数据大屏接入源 — 增删改直接编辑此数组即可
+        // ============================================================
+        const EXTERN_URLS = [
+            { label: '智慧云屏', url: 'https://road.xiangsu.work/bvr/zydlxc/#/homePage' },
+            { label: '巡查管理', url: 'https://road.xiangsu.work/bvr/zydlxc/#/' },
+            { label: '数据大屏 2', url: 'https://example.com' }
+        ];
+        let sourceIndex = 0;
+
+        const RP = { base: 'https://road.xiangsu.work/bvr/zydlxc', user: 'zydlxc', pass: '123456' };
+        let rpCancel = false, rpTimer = null;
+
+        function doRoadPatrol(frame) {
+            rpCancel = false;
+            const hf = document.createElement('iframe');
+            hf.name = 'rpLogin'; hf.style.display = 'none';
+            document.body.appendChild(hf);
+            const eps = [
+                { url: RP.base + '/api/user/login', fields: { username: RP.user, password: RP.pass } },
+                { url: RP.base + '/api/login',      fields: { username: RP.user, password: RP.pass } },
+                { url: RP.base + '/user/login',     fields: { username: RP.user, password: RP.pass } },
+            ];
+            eps.forEach(ep => {
+                const form = document.createElement('form');
+                form.method = 'POST'; form.action = ep.url; form.target = 'rpLogin';
+                form.style.display = 'none';
+                Object.entries(ep.fields).forEach(([k, v]) => {
+                    const inp = document.createElement('input');
+                    inp.name = k; inp.value = v; form.appendChild(inp);
+                });
+                document.body.appendChild(form); form.submit(); form.remove();
+            });
+            fetch(RP.base + '/api/getToken', {
+                method: 'POST', credentials: 'include',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ clientId: RP.user, clientSecret: RP.pass })
+            }).catch(() => {});
+            rpTimer = setTimeout(() => {
+                if (rpCancel) return;
+                hf.remove(); frame.src = EXTERN_URLS[sourceIndex].url;
+            }, 500);
+        }
+
+        function loadSource(idx) {
+            sourceIndex = ((idx % EXTERN_URLS.length) + EXTERN_URLS.length) % EXTERN_URLS.length;
+            rpCancel = true; clearTimeout(rpTimer);
+            const frame = document.getElementById('externFrame');
+            frame.setAttribute('sandbox', sourceIndex === 1
+                ? 'allow-scripts allow-forms allow-same-origin allow-popups'
+                : 'allow-scripts allow-forms allow-same-origin');
+            if (sourceIndex === 0 || sourceIndex === 1) { doRoadPatrol(frame); }
+            else { frame.src = EXTERN_URLS[sourceIndex].url; }
+            document.getElementById('sourceLabel').textContent = `${EXTERN_URLS[sourceIndex].label} ${sourceIndex+1}/${EXTERN_URLS.length}`;
+        }
+
+        function prevSource() { loadSource(sourceIndex - 1); }
+        function nextSource() { loadSource(sourceIndex + 1); }
+
+        // 工作版块配置
+        const workSections = [
+            {
+                title: 'A 研发管理', adminOnly: false,
+                bg: '#2a0f1c', border: '#993556', color: '#e890b0',
+                btnBg: '#3d1828', btnBorder: '#993556', btnColor: '#f4c0d1',
+                items: [
+                    { label: '研发项目', url: '/admin/gmhyblvl16o' }, { label: '研发记录', url: '/admin/s6j338yz3i2' },
+                    { label: '研发归档', url: '/admin/5ty5vupwq62' }, { label: '研发验收', url: '/admin/quezp14dok9' },
+                    { label: '物料领用', url: '/admin/ola7umdnmyz' }, { label: '研发人员', url: '/admin/n3nft95ki1w' },
+                    { label: '研发会议', url: '/admin/x23rf37jxb1' }, { label: '研发费用', url: '/admin/ogybv5ukbwg' },
+                    { label: '设备使用', url: '/admin/4uwkfqpz781' }, { label: '研发工时', url: '/admin/8wtfmqucj1p' }
+                ]
+            },
+            {
+                title: 'B 项目中心', adminOnly: false,
+                bg: '#0f1f3d', border: '#185FA5', color: '#8cc4ff',
+                btnBg: '#1a3055', btnBorder: '#185FA5', btnColor: '#b5d4f4',
+                items: [
+                    { label: '项目清单', url: '/admin/nzqtepnaklg' }, { label: '项目文档', url: '/admin/pamw08zpag6' },
+                    { label: '成本库', url: '/admin/visdef7mujx' }, { label: '日志填报', url: '/admin/95q6zzzqj9' },
+                    { label: '施工日志', url: '/admin/68nvr7tszqj' }, { label: '安全会', url: '/admin/y25rk07pr6z' },
+                    { label: '日常报备', url: '/admin/oa082ymyhpc' }, { label: '对甲计量', url: '/admin/hkcwvuo9l4d' },
+                    { label: '分包计价', url: '/admin/pbb3clqs91a' }
+                ]
+            },
+            {
+                title: 'C 物资采购', adminOnly: false,
+                bg: '#0f2a20', border: '#0f6e56', color: '#5cccb0',
+                btnBg: '#1a3d30', btnBorder: '#0f6e56', btnColor: '#9fe1cb',
+                items: [
+                    { label: '物资库', url: '/admin/ui1d106a3c' }, { label: '供应商', url: '/admin/uibab268d5' },
+                    { label: '需求计划', url: '/admin/uia3ab7463' }, { label: '采购计划', url: '/admin/uid1b5e817' },
+                    { label: '采购订单', url: '/admin/ui5d66371c' }, { label: '入库', url: '/admin/uiaeaa7f29' },
+                    { label: '出库', url: '/admin/ui6dd4eb4d' }, { label: '实时库存', url: '/admin/uic0c97799' },
+                    { label: '库存盘点', url: '/admin/uica2dba0b' }, { label: '供应商结算', url: '/admin/960ews9jibd' }
+                ]
+            },
+            {
+                title: 'D 合同管理', adminOnly: false,
+                bg: '#2a1f0b', border: '#854F0B', color: '#f0b84d',
+                btnBg: '#3d2e14', btnBorder: '#854F0B', btnColor: '#fac775',
+                items: [
+                    { label: '合同库', url: '/admin/01zkrtol7d6' }, { label: '供应商信息', url: '/admin/gqak47qsuaw' },
+                    { label: '合作准入', url: '/admin/kyg3ldnu62j' }, { label: '付款台账', url: '/admin/7v5y1hyfm7m' }
+                ]
+            },
+            {
+                title: 'E 财务行政', adminOnly: false,
+                bg: '#2a180b', border: '#b86e20', color: '#f5c87a',
+                btnBg: '#3d2614', btnBorder: '#b86e20', btnColor: '#fadb9a',
+                items: [
+                    { label: '简报', url: '/admin/fq6eb3defao' }, { label: '财务收支', url: '/admin/lmrskqik2tm' },
+                    { label: '公告通知', url: '/admin/1leztg7ou2e' }, { label: '考勤归档', url: '/admin/5qtc3r5n88q' },
+                    { label: '印章使用', url: '/admin/6lr55tm1glf' }
+                ]
+            },
+            {
+                title: 'F 基础数据', adminOnly: false,
+                bg: '#1a1a2e', border: '#4a4e69', color: '#b0b5d4',
+                btnBg: '#282840', btnBorder: '#4a4e69', btnColor: '#ced2e8',
+                items: [
+                    { label: '资质库', url: '/admin/o4kg2kwmgur' }, { label: '资质敏感信息', url: '/admin/hn8ke2a9zcu' },
+                    { label: '制度文件', url: '/admin/sbitmdfbp8d' }, { label: '法规政策', url: '/admin/fizelzr1x6d' },
+                    { label: '标准规范', url: '/admin/ol23gcsrb0x' }, { label: '模板库', url: '/admin/plo1hmfn8pq' },
+                    { label: '案例库', url: '/admin/ey91jn5cxvm' }, { label: '库存编辑', url: '/admin/o4xcn0t982s' }
+                ]
+            },
+            {
+                title: 'G 系统管理', adminOnly: true,
+                bg: '#1a1a1a', border: '#5a5a5a', color: '#a0a0a0',
+                btnBg: '#2a2a2a', btnBorder: '#5a5a5a', btnColor: '#c0c0c0',
+                items: [
+                    { label: '流程日志', url: '/admin/w1l9qyr5ro4' }, { label: '审批记录', url: '/admin/spmliaim71h' },
+                    { label: '自动计数器', url: '/admin/n9ofrd7cctn' }
+                ]
+            }
+        ];
+
+        let isAdmin = false;
+        async function checkAdmin() {
+            try {
+                const resp = await fetch('/api/users:check', { credentials: 'include' });
+                if (resp.ok) {
+                    const data = await resp.json();
+                    const roles = data.data?.roles || [];
+                    isAdmin = roles.some(r => ['admin','superadmin','root'].includes(r.name)); if(isAdmin){var al=document.getElementById('adminLinks');if(al)al.style.display='inline';}
+                }
+            } catch {}
+            renderWorks();
+        }
+
+        function renderWorks() {
+            const grid = document.getElementById('worksGrid');
+            grid.innerHTML = '';
+            workSections.forEach(s => {
+                if (s.adminOnly && !isAdmin) return;
+                const g = document.createElement('div');
+                g.className = 'work-group';
+                g.style.cssText = `background:${s.bg};border-color:${s.border}`;
+                const t = document.createElement('div');
+                t.className = 'group-title'; t.style.color = s.color; t.textContent = s.title;
+                g.appendChild(t);
+                const l = document.createElement('div'); l.className = 'btn-list';
+                s.items.forEach(item => {
+                    const a = document.createElement('a');
+                    a.className = 'btn-item'; a.href = item.url;
+                    a.style.cssText = `background:${s.btnBg};border-color:${s.btnBorder};color:${s.btnColor}`;
+                    a.textContent = item.label;
+                    l.appendChild(a);
+                });
+                g.appendChild(l);
+                grid.appendChild(g);
+            });
+        }
+
+        // 待办
+        async function fetchTodos() {
+            const p = document.getElementById('pendingCount');
+            const n = document.getElementById('notifyCount');
+            try {
+                const r = await fetch('/api/flow_nodes:list?filter[status]=pending&pageSize=1', { credentials:'include' });
+                p.textContent = r.ok ? ((await r.json()).meta?.total ?? '0') : '0';
+            } catch { p.textContent = '0'; }
+            try {
+                const r = await fetch('/api/notifications:list?filter[read]=false&pageSize=1', { credentials:'include' });
+                n.textContent = r.ok ? ((await r.json()).meta?.total ?? '0') : '0';
+            } catch { n.textContent = '0'; }
+        }
+
+        // 公司公告
+        async function fetchAnnouncements() {
+            const track = document.getElementById('announceTrack');
+            try {
+                const r = await fetch(
+                    '/api/announcements:list?filter[status]=published&filter[archived__ne]=true&sort=-publishedAt,-createdAt&pageSize=8',
+                    { credentials: 'include' }
+                );
+                if (!r.ok) throw Error();
+                const data = await r.json();
+                const items = data.data || [];
+                track.innerHTML = '';
+                if (!items.length) {
+                    track.innerHTML = '<div class="announce-item" style="text-align:center;color:#5a6a7a;border:none;background:none;">暂无公告</div>';
+                    track.classList.remove('scrolling');
+                    return;
+                }
+                const render = (list) => list.forEach(item => {
+                    const div = document.createElement('div');
+                    div.className = 'announce-item';
+                    const ts = item.publishedAt || item.createdAt || '';
+                    const date = ts ? new Date(ts).toLocaleDateString('zh-CN', { month:'2-digit', day:'2-digit' }) : '';
+                    div.innerHTML = `<span class="a-time">${date}</span>${item.title || item.name || '(无标题)'}`;
+                    track.appendChild(div);
+                });
+                render(items);
+                render(items); // 副本，实现无缝循环
+                track.classList.add('scrolling');
+            } catch {
+                track.innerHTML = '<div class="announce-item" style="text-align:center;color:#5a6a7a;border:none;background:none;">加载失败</div>';
+                track.classList.remove('scrolling');
+            }
+        }
+
+        // 考勤打卡 - 完整版（拍照 + 定位 + 人脸检测）
+        let attendType = '签到';
+        let attendPhoto = null; // base64 captured photo
+        let attendLocation = null; // {lat, lng, accuracy}
+        let attendLocationText = '--';
+        let cameraStream = null;
+        let faceDetected = false;
+
+        function selectAttendType(type, btn) {
+            attendType = type;
+            document.querySelectorAll('.attend-type-btn').forEach(b => b.classList.remove('selected','checkout'));
+            btn.classList.add('selected');
+            if (type === '签退') btn.classList.add('checkout');
+            updateSubmitState();
+        }
+
+        let _fingerVerified = false;
+        function checkBiometric() {
+            var s = document.getElementById('fingerStatus');
+            var b = document.getElementById('fingerBtn');
+            if (window.PublicKeyCredential && typeof PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable === 'function') {
+                PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable().then(function(avail){
+                    if (avail) {
+                        b.disabled = false;
+                        s.textContent = '可用';
+                        s.className = 'attend-finger-status verified';
+                    } else {
+                        s.textContent = '不支持';
+                        s.className = 'attend-finger-status unavailable';
+                    }
+                }).catch(function(){
+                    s.textContent = '不支持';
+                    s.className = 'attend-finger-status unavailable';
+                });
+            } else {
+                s.textContent = '不支持';
+                s.className = 'attend-finger-status unavailable';
+            }
+        }
+
+        function openAttendModal() {
+            document.getElementById('attendOverlay').classList.add('show');
+            document.getElementById('attendTime').textContent = new Date().toLocaleString('zh-CN');
+            document.getElementById('attendSubmit').disabled = true;
+            document.getElementById('attendLocation').textContent = '获取中...';
+            document.getElementById('locationStatus').className = 'attend-location-status getting';
+            document.getElementById('locationStatus').textContent = '正在获取位置...';
+            document.getElementById('faceStatus').textContent = '📷 请拍摄人脸';
+            document.getElementById('faceStatus').className = 'face-status';
+            document.getElementById('faceIndicator').className = 'face-indicator';
+            document.getElementById('captureBtn').textContent = '📷 拍摄照片';
+            document.getElementById('cameraRetryBtn').style.display = 'none';
+            attendPhoto = null;
+            faceDetected = false;
+            _fingerVerified = false;
+            // Reset fingerprint
+            document.getElementById('fingerStatus').textContent = '检测中...';
+            document.getElementById('fingerStatus').className = 'attend-finger-status unavailable';
+            document.getElementById('fingerBtn').disabled = true;
+            document.getElementById('fingerBtn').className = 'attend-finger-btn';
+            document.getElementById('verifyBar').style.display = 'none';
+            document.getElementById('vGps').className = 'v-item';
+            document.getElementById('vGps').textContent = '📍 定位';
+            document.getElementById('vFace').className = 'v-item';
+            document.getElementById('vFace').textContent = '📷 人脸';
+            document.getElementById('vFinger').className = 'v-item';
+            document.getElementById('vFinger').textContent = '🔐 指纹';
+            _gpsOk = false;
+            checkBiometric();
+            // Start camera
+            startCamera();
+            // Start GPS
+            getLocation();
+            // Update time every second
+            window._attendTimer = setInterval(function(){
+                document.getElementById('attendTime').textContent = new Date().toLocaleString('zh-CN');
+            }, 1000);
+        }
+
+        function closeAttendModal() {
+            document.getElementById('attendOverlay').classList.remove('show');
+            stopCamera();
+            clearInterval(window._attendTimer);
+        }
+
+        function startCamera() {
+            var v = document.getElementById('attendVideo');
+            var retryBtn = document.getElementById('cameraRetryBtn');
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                document.getElementById('faceStatus').textContent = '⚠ 浏览器不支持相机，可跳过拍照直接打卡';
+                document.getElementById('faceStatus').className = 'face-status';
+                document.getElementById('captureBtn').disabled = true;
+                return;
+            }
+            var constraints = {video:{width:{ideal:640},height:{ideal:480},facingMode:'user'}};
+            navigator.mediaDevices.getUserMedia(constraints)
+                .then(function(stream){
+                    cameraStream = stream;
+                    v.srcObject = stream;
+                    v.style.display = 'block';
+                    v.setAttribute('playsinline', '');
+                    v.setAttribute('muted', '');
+                    document.getElementById('captureBtn').disabled = false;
+                    document.getElementById('faceStatus').textContent = '📷 请拍摄人脸';
+                    document.getElementById('faceStatus').className = 'face-status';
+                    if (retryBtn) retryBtn.style.display = 'none';
+                })
+                .catch(function(err){
+                    var msg = '⚠ 相机不可用';
+                    if (err.name === 'NotAllowedError') msg = '⚠ 相机权限被拒绝，请在浏览器设置中允许相机';
+                    else if (err.name === 'NotFoundError') msg = '⚠ 未检测到摄像头';
+                    else if (err.name === 'NotReadableError') msg = '⚠ 摄像头被其他应用占用';
+                    document.getElementById('faceStatus').textContent = msg;
+                    document.getElementById('faceStatus').className = 'face-status unverified';
+                    document.getElementById('captureBtn').disabled = true;
+                    if (retryBtn) retryBtn.style.display = 'block';
+                });
+        }
+
+        function retryCamera() {
+            document.getElementById('faceStatus').textContent = '📷 正在重新连接相机...';
+            document.getElementById('faceStatus').className = 'face-status';
+            document.getElementById('cameraRetryBtn').style.display = 'none';
+            // Try both front and back cameras
+            if (cameraStream) { cameraStream.getTracks().forEach(function(t){t.stop()}); cameraStream = null; }
+            startCamera();
+        }
+
+        function stopCamera() {
+            if (cameraStream) {
+                cameraStream.getTracks().forEach(t => t.stop());
+                cameraStream = null;
+            }
+            var v = document.getElementById('attendVideo');
+            if (v) v.style.display = 'none';
+        }
+
+        function getLocation() {
+            if (!navigator.geolocation) {
+                document.getElementById('attendLocation').textContent = '不支持';
+                document.getElementById('locationStatus').textContent = '⚠ 浏览器不支持定位';
+                document.getElementById('locationStatus').className = 'attend-location-status error';
+                updateSubmitState();
+                return;
+            }
+            document.getElementById('attendLocation').innerHTML = '获取中... <a href="javascript:void(0)" onclick="getLocation()" style="color:#00d4ff;font-size:0.85em">重试</a>';
+            document.getElementById('locationStatus').textContent = '正在获取位置...';
+            document.getElementById('locationStatus').className = 'attend-location-status getting';
+            navigator.geolocation.getCurrentPosition(
+                function(pos){
+                    attendLocation = {
+                        lat: pos.coords.latitude,
+                        lng: pos.coords.longitude,
+                        accuracy: pos.coords.accuracy
+                    };
+                    attendLocationText = pos.coords.latitude.toFixed(5) + ',' + pos.coords.longitude.toFixed(5) + ' (±' + Math.round(pos.coords.accuracy) + 'm)';
+                    document.getElementById('attendLocation').textContent = attendLocationText;
+                    document.getElementById('locationStatus').textContent = '✓ 位置已获取';
+                    document.getElementById('locationStatus').className = 'attend-location-status got';
+                    updateSubmitState();
+                },
+                function(err){
+                    attendLocation = null;
+                    var msg = '获取失败';
+                    if (err.code === 1) msg = '权限被拒绝';
+                    else if (err.code === 2) msg = '位置不可用';
+                    else if (err.code === 3) msg = '获取超时';
+                    document.getElementById('attendLocation').innerHTML = msg + ' <a href="javascript:void(0)" onclick="getLocation()" style="color:#00d4ff;font-size:0.85em">重试</a>';
+                    document.getElementById('locationStatus').textContent = '⚠ 位置获取失败，将不记录坐标';
+                    document.getElementById('locationStatus').className = 'attend-location-status error';
+                    updateSubmitState();
+                },
+                {enableHighAccuracy:true, timeout:8000, maximumAge:60000}
+            );
+        }
+
+        function capturePhoto() {
+            var v = document.getElementById('attendVideo');
+            var c = document.getElementById('attendCanvas');
+            if (!v || !v.videoWidth) return;
+            c.width = v.videoWidth;
+            c.height = v.videoHeight;
+            var ctx = c.getContext('2d');
+            ctx.drawImage(v, 0, 0);
+            attendPhoto = c.toDataURL('image/jpeg', 0.85);
+            document.getElementById('captureBtn').textContent = '✓ 已拍摄，点击重拍';
+            // Face detection
+            detectFace(c);
+        }
+
+        async function detectFace(canvas) {
+            document.getElementById('faceStatus').textContent = '🔍 检测人脸中...';
+            document.getElementById('faceStatus').className = 'face-status';
+            faceDetected = false;
+            // Try FaceDetector API (Chrome 94+)
+            if (typeof FaceDetector !== 'undefined') {
+                try {
+                    var detector = new FaceDetector({fastMode:true});
+                    var faces = await detector.detect(canvas);
+                    if (faces.length > 0) {
+                        faceDetected = true;
+                        document.getElementById('faceStatus').textContent = '✓ 已检测到人脸 (' + faces.length + '人)';
+                        document.getElementById('faceStatus').className = 'face-status verified';
+                        document.getElementById('faceIndicator').className = 'face-indicator verified';
+                    } else {
+                        document.getElementById('faceStatus').textContent = '⚠ 未检测到人脸，请重新拍摄';
+                        document.getElementById('faceStatus').className = 'face-status unverified';
+                        document.getElementById('faceIndicator').className = 'face-indicator unverified';
+                    }
+                } catch(e) {
+                    // FaceDetector failed, fall back to basic check
+                    document.getElementById('faceStatus').textContent = '⚠ 人脸检测不可用，已拍摄照片';
+                    document.getElementById('faceStatus').className = 'face-status';
+                    faceDetected = null; // unknown
+                }
+            } else {
+                // No FaceDetector API
+                document.getElementById('faceStatus').textContent = 'ℹ 浏览器不支持人脸检测，已拍摄照片';
+                document.getElementById('faceStatus').className = 'face-status';
+                faceDetected = null;
+            }
+            updateSubmitState();
+        }
+
+        var _gpsOk = false;
+        function updateSubmitState() {
+            var btn = document.getElementById('attendSubmit');
+            var bar = document.getElementById('verifyBar');
+            bar.style.display = 'flex';
+            var vGps = document.getElementById('vGps');
+            var vFace = document.getElementById('vFace');
+            var vFinger = document.getElementById('vFinger');
+
+            _gpsOk = !!attendLocation;
+            var faceOk = (faceDetected === true);
+            var fingerOk = _fingerVerified;
+
+            // GPS status
+            vGps.className = _gpsOk ? 'v-item ok' : 'v-item fail';
+            vGps.textContent = _gpsOk ? '📍 定位 ✓' : '📍 定位 ✗';
+
+            // Face status
+            if (faceDetected === true) { vFace.className = 'v-item ok'; vFace.textContent = '📷 人脸 ✓'; }
+            else if (!attendPhoto) { vFace.className = 'v-item'; vFace.textContent = '📷 人脸 -'; }
+            else { vFace.className = 'v-item fail'; vFace.textContent = '📷 人脸 ✗'; }
+
+            // Finger status
+            if (fingerOk) { vFinger.className = 'v-item ok'; vFinger.textContent = '🔐 指纹 ✓'; }
+            else if (document.getElementById('fingerBtn').disabled && document.getElementById('fingerStatus').textContent.indexOf('不支持')>=0) {
+                vFinger.className = 'v-item'; vFinger.textContent = '🔐 指纹 -';
+            }
+            else { vFinger.className = 'v-item'; vFinger.textContent = '🔐 指纹 ○'; }
+
+            // LOGIC: GPS is primary
+            if (_gpsOk) {
+                // GPS OK: any one other method is enough
+                if (faceOk || fingerOk || attendPhoto) {
+                    btn.disabled = false;
+                    btn.textContent = '确认打卡';
+                } else {
+                    btn.disabled = true;
+                    btn.textContent = '请完成拍照或指纹验证';
+                }
+                // Mark GPS-required methods as optional
+                if (!faceOk && !fingerOk) {
+                    vFace.className = vFace.className.replace('fail','').trim() + ' need';
+                    vFinger.className = vFinger.className.replace('fail','').trim() + ' need';
+                }
+            } else {
+                // GPS FAILED: need BOTH camera AND fingerprint
+                if (faceOk && fingerOk) {
+                    btn.disabled = false;
+                    btn.textContent = '确认打卡（GPS异常，双因子验证）';
+                } else {
+                    btn.disabled = true;
+                    var missing = [];
+                    if (!faceOk) missing.push('拍照');
+                    if (!fingerOk) missing.push('指纹');
+                    btn.textContent = 'GPS异常，需完成：' + missing.join('+');
+                }
+                // Mark required methods
+                if (!faceOk) vFace.className = vFace.className.replace('fail','').trim() + ' need';
+                if (!fingerOk) vFinger.className = vFinger.className.replace('fail','').trim() + ' need';
+            }
+        }
+
+        var _deviceFp = null; // device fingerprint hash
+        async function verifyFingerprint() {
+            var s = document.getElementById('fingerStatus');
+            var b = document.getElementById('fingerBtn');
+            b.disabled = true;
+            b.textContent = '验证中...';
+            _fingerVerified = false;
+            _deviceFp = null;
+
+            // Build device fingerprint
+            var fp = navigator.userAgent + '|' + screen.width + 'x' + screen.height + '|' +
+                     (navigator.hardwareConcurrency||'') + '|' + (navigator.deviceMemory||'') + '|' +
+                     Intl.DateTimeFormat().resolvedOptions().timeZone;
+            var fpHash = 0;
+            for (var i = 0; i < fp.length; i++) { fpHash = ((fpHash << 5) - fpHash) + fp.charCodeAt(i); fpHash |= 0; }
+            _deviceFp = 'dev_' + Math.abs(fpHash).toString(36);
+
+            // Try platform biometric first
+            try {
+                if (window.PublicKeyCredential) {
+                    var cred = await navigator.credentials.get({
+                        publicKey: {
+                            challenge: new Uint8Array(32),
+                            rpId: window.location.hostname,
+                            allowCredentials: [],
+                            userVerification: 'required',
+                            timeout: 25000
+                        }
+                    }).catch(function(){ return null; });
+                    if (cred) {
+                        _fingerVerified = true;
+                        s.textContent = '✓ 本机指纹通过';
+                        s.className = 'attend-finger-status verified';
+                        b.textContent = '✓ 已验证';
+                        b.className = 'attend-finger-btn verified';
+                        updateSubmitState();
+                        return;
+                    }
+                }
+            } catch(e) {}
+
+            // Fallback: device verification with confirmation
+            s.textContent = '生物识别不可用，切换设备验证...';
+            var confirmed = confirm('生物识别不可用，是否使用本机设备验证？\n\n设备标识：' + _deviceFp.substring(0,16) + '...\n\n点击"确定"以本机设备身份完成验证。');
+            if (confirmed) {
+                _fingerVerified = true;
+                s.textContent = '✓ 本机设备已验证';
+                s.className = 'attend-finger-status verified';
+                b.textContent = '✓ 已验证';
+                b.className = 'attend-finger-btn verified';
+            } else {
+                s.textContent = '验证已取消';
+                s.className = 'attend-finger-status unavailable';
+                b.textContent = '重试';
+                b.disabled = false;
+            }
+            updateSubmitState();
+        }
+
+        async function submitAttendance() {
+            var btn = document.getElementById('attendSubmit');
+            btn.disabled = true;
+            btn.textContent = '提交中...';
+            try {
+                var now = new Date();
+                var body = {
+                    check_type: attendType,
+                    check_time: now.toISOString()
+                };
+                // Location
+                if (attendLocation) {
+                    body.latitude = attendLocation.lat;
+                    body.longitude = attendLocation.lng;
+                    body.gps_accuracy = Math.round(attendLocation.accuracy);
+                }
+                // Build verification status
+                var methods = [];
+                if (_gpsOk) methods.push('gps');
+                if (faceDetected === true) methods.push('face');
+                else if (faceDetected === false) methods.push('face_fail');
+                else if (attendPhoto) methods.push('photo_only');
+                if (_fingerVerified) methods.push('finger');
+                body.verify_status = methods.join('+');
+
+                // Anomaly reason
+                var reasons = [];
+                if (!_gpsOk) reasons.push('GPS定位异常');
+                if (!faceDetected && attendPhoto) reasons.push('人脸检测失败');
+                if (!_fingerVerified && !_gpsOk) reasons.push('未完成双因子验证');
+                body.anomaly_reason = reasons.join('; ') || null;
+
+                // Device fingerprint
+                if (_deviceFp && _fingerVerified) {
+                    body.device_fingerprint = _deviceFp;
+                }
+                // Photo hash
+                if (attendPhoto) {
+                    // Compute simple hash from photo
+                    var hashInput = attendPhoto.substring(attendPhoto.length - 500);
+                    var hashVal = 0;
+                    for (var i = 0; i < hashInput.length; i++) {
+                        hashVal = ((hashVal << 5) - hashVal) + hashInput.charCodeAt(i);
+                        hashVal |= 0;
+                    }
+                    body.photo_hash = 'ph_' + Math.abs(hashVal).toString(16);
+                }
+                // Device fingerprint
+                if (!body.device_fingerprint) { body.device_fingerprint = navigator.userAgent.substring(0, 200) + '|' + screen.width + 'x' + screen.height; }
+
+                var r = await fetch('/api/attendance_records:create', {
+                    method: 'POST', credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                if (r.ok) {
+                    btn.textContent = '✓ 打卡成功！';
+                    btn.style.background = 'linear-gradient(135deg, #00ff88, #00b86b)';
+                    setTimeout(closeAttendModal, 1200);
+                    // Refresh status
+                    fetchAttendance();
+                } else {
+                    var errData = await r.json().catch(function(){return {};});
+                    btn.textContent = '✗ 失败，重试';
+                    btn.disabled = false;
+                    console.error('Attendance failed:', errData);
+                }
+            } catch(e) {
+                btn.textContent = '✗ 网络错误，重试';
+                btn.disabled = false;
+                console.error('Attendance error:', e);
+            }
+        }
+
+        // Click overlay background to close
+        document.addEventListener('DOMContentLoaded', function(){
+            var ov = document.getElementById('attendOverlay');
+            if (ov) {
+                ov.addEventListener('click', function(e){
+                    if (e.target === ov) closeAttendModal();
+                });
+            }
+        });
+
+        // Deskstop attend button
+        document.getElementById('attendBtn').addEventListener('click', function(e){
+            e.preventDefault();
+            openAttendModal();
+        });
+
+        // Fetch current day status for display
+        let attendState = null;
+        async function fetchAttendance() {
+            try {
+                var today = new Date();
+                var start = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString();
+                var end = new Date(today.getFullYear(), today.getMonth(), today.getDate()+1).toISOString();
+                var r = await fetch('/api/attendance_records:list?filter[check_time][$dateBetween]='+start+','+end+'&sort=-check_time&pageSize=10&appends=createdBy', { credentials:'include' });
+                if (r.ok) {
+                    var data = await r.json();
+                    var recs = data.data || [];
+                    var checkIn = null, checkOut = null;
+                    for (var i = 0; i < recs.length; i++) {
+                        if (recs[i].check_type === '签到' && !checkIn) checkIn = recs[i];
+                        if (recs[i].check_type === '签退' && !checkOut) checkOut = recs[i];
+                    }
+                    attendState = { checkIn: !!checkIn, checkOut: !!checkOut, id: checkIn ? checkIn.id : null };
+                    var st = document.getElementById('attendStatus');
+                    var btn = document.getElementById('attendBtn');
+                    if (checkOut) {
+                        st.textContent = '已签退'; st.className = 'attend-status out';
+                        btn.textContent = '已打卡'; btn.className = 'attend-btn checked';
+                    } else if (checkIn) {
+                        st.textContent = '已签到'; st.className = 'attend-status';
+                        btn.textContent = '签退'; btn.className = 'attend-btn';
+                    } else {
+                        st.textContent = '未签到'; st.className = 'attend-status out';
+                        btn.textContent = '签到'; btn.className = 'attend-btn';
+                    }
+                }
+            } catch(e) { console.error('fetchAttendance error:', e); }
+        }
+
+                // 全屏切换
+        var _zoomScale = 1;
+        function zoomFrame(delta, reset) {
+            if (reset) _zoomScale = 1;
+            else _zoomScale = Math.max(0.3, Math.min(3, _zoomScale + delta));
+            var f = document.getElementById('externFrame');
+            f.style.transform = 'scale(' + _zoomScale + ')';
+            f.style.transformOrigin = 'center center';
+            document.getElementById('zoomPct').textContent = Math.round(_zoomScale * 100) + '%';
+        }
+        function toggleFullscreen() {
+            var wrap = document.querySelector('.stage-frame-wrap');
+            if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+                (wrap.requestFullscreen || wrap.webkitRequestFullscreen).call(wrap);
+            } else {
+                (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+                // Reset zoom on exit
+                _zoomScale = 1;
+                document.getElementById('externFrame').style.transform = '';
+                document.getElementById('zoomPct').textContent = '100%';
+            }
+        }
+        // Listen for fullscreen change to show/hide zoom bar
+        document.addEventListener('fullscreenchange', function(){
+            var fs = !!document.fullscreenElement;
+            document.getElementById('zoomBar').style.display = fs ? 'flex' : 'none';
+            var shim = document.getElementById('wheelShim');
+            if (shim) shim.style.pointerEvents = fs ? 'none' : 'auto';
+        });
+        document.addEventListener('webkitfullscreenchange', function(){
+            var fs = !!document.webkitFullscreenElement;
+            document.getElementById('zoomBar').style.display = fs ? 'flex' : 'none';
+            var shim = document.getElementById('wheelShim');
+            if (shim) shim.style.pointerEvents = fs ? 'none' : 'auto';
+        });
+
+        // 透明遮罩截获滚轮，阻止iframe缩放，改为页面滚动
+        (function(){
+            var wrap = document.querySelector('.stage-frame-wrap');
+            if (!wrap) return;
+            var shim = document.createElement('div');
+            shim.id = 'wheelShim';
+            shim.style.cssText = 'position:absolute;inset:0;z-index:5;background:transparent;';
+            // Insert before iframe, after toolbar (toolbar z-index:10)
+            var frame = wrap.querySelector('iframe');
+            if (frame) wrap.insertBefore(shim, frame);
+            // Capture wheel -> scroll page
+            shim.addEventListener('wheel', function(e) {
+                e.preventDefault();
+                window.scrollBy({top: e.deltaY, behavior: 'auto'});
+            }, {passive: false});
+            // Allow clicks through: briefly disable shim on interaction
+            shim.addEventListener('mousedown', function() {
+                shim.style.pointerEvents = 'none';
+                clearTimeout(shim._timer);
+                shim._timer = setTimeout(function(){ shim.style.pointerEvents = 'auto'; }, 300);
+            });
+            shim.addEventListener('mouseup', function() {
+                clearTimeout(shim._timer);
+                shim._timer = setTimeout(function(){ shim.style.pointerEvents = 'auto'; }, 300);
+            });
+        })();
+
+        // 农历 / 节气 / 天气
+        const lunarMonths = ['正','二','三','四','五','六','七','八','九','十','冬','腊'];
+        const lunarDays = ['初一','初二','初三','初四','初五','初六','初七','初八','初九','初十',
+                          '十一','十二','十三','十四','十五','十六','十七','十八','十九','二十',
+                          '廿一','廿二','廿三','廿四','廿五','廿六','廿七','廿八','廿九','三十'];
+        const solarTerms = ['小寒','大寒','立春','雨水','惊蛰','春分','清明','谷雨',
+                           '立夏','小满','芒种','夏至','小暑','大暑','立秋','处暑',
+                           '白露','秋分','寒露','霜降','立冬','小雪','大雪','冬至'];
+        const solarTermsDate = [
+            [1,6],[1,20],[2,4],[2,19],[3,6],[3,21],[4,5],[4,20],
+            [5,6],[5,21],[6,6],[6,21],[7,7],[7,23],[8,7],[8,23],
+            [9,8],[9,23],[10,8],[10,23],[11,7],[11,22],[12,7],[12,22]
+        ];
+        const weatherCodes = {
+            0:'晴',1:'晴',2:'多云',3:'阴',45:'雾',48:'雾',
+            51:'毛毛雨',53:'毛毛雨',55:'毛毛雨',56:'冻雨',57:'冻雨',
+            61:'小雨',63:'中雨',65:'大雨',66:'冻雨',67:'冻雨',
+            71:'小雪',73:'中雪',75:'大雪',77:'雪粒',
+            80:'阵雨',81:'阵雨',82:'阵雨',85:'阵雪',86:'阵雪',
+            95:'雷暴',96:'雷暴',99:'雷暴'
+        };
+        const weekdays = ['星期日','星期一','星期二','星期三','星期四','星期五','星期六'];
+
+        function getSolarTerm(m,d) {
+            for (let i=0;i<solarTermsDate.length;i++)
+                if (solarTermsDate[i][0]===m && solarTermsDate[i][1]===d) return solarTerms[i];
+            for (let i=0;i<solarTermsDate.length;i++) {
+                const df=Math.abs(solarTermsDate[i][1]-d);
+                if (solarTermsDate[i][0]===m && df<=1) return solarTerms[i]+'前后';
+            }
+            return '';
+        }
+        function getLunarDate(date) {
+            const m=date.getMonth()+1, d=date.getDate();
+            return { month: lunarMonths[(m+10)%12], day: lunarDays[(d+10)%30] };
+        }
+
+        let cycleIndex=0;
+        const cycleIds=['dateDisplay','lunarDisplay','termDisplay','weekdayDisplay','weatherDisplay','tempDisplay'];
+        function rotateCycle() {
+            document.querySelectorAll('.cycle-item').forEach(e=>e.classList.remove('active'));
+            document.getElementById(cycleIds[cycleIndex]).classList.add('active');
+            cycleIndex=(cycleIndex+1)%cycleIds.length;
+        }
+
+        let weatherText='获取中…', tempText='--℃';
+        function fetchWeather() {
+            function doFetch(lat,lon){
+                fetch('https://api.open-meteo.com/v1/forecast?latitude='+lat+'&longitude='+lon+'&current_weather=true&timezone=Asia/Shanghai')
+                    .then(r=>r.json())
+                    .then(d=>{ if(d.current_weather){ weatherText=weatherCodes[d.current_weather.weathercode]||'未知'; tempText=d.current_weather.temperature+'℃'; } })
+                    .catch(function(){ weatherText='--'; tempText='--℃'; });
+            }
+            if(navigator.geolocation){
+                navigator.geolocation.getCurrentPosition(function(p){doFetch(p.coords.latitude,p.coords.longitude)},function(){doFetch(29.56,106.55)});
+            } else {
+                doFetch(29.56,106.55);
+            }
+        }
+
+        function updateDisplay() {
+            const n=new Date();
+            const y=n.getFullYear(), mo=String(n.getMonth()+1).padStart(2,'0'), d=String(n.getDate()).padStart(2,'0');
+            const h=String(n.getHours()).padStart(2,'0'), mi=String(n.getMinutes()).padStart(2,'0'), sc=String(n.getSeconds()).padStart(2,'0');
+            document.getElementById('clockHour').textContent=h;
+            document.getElementById('clockMin').textContent=mi;
+            document.querySelector('#dateDisplay .label-date').textContent=`${y}年${mo}月${d}日`;
+            const lu=getLunarDate(n);
+            document.querySelector('#lunarDisplay .label-lunar').textContent=`农历${lu.month}月${lu.day}`;
+            const t=getSolarTerm(n.getMonth()+1,n.getDate());
+            document.querySelector('#termDisplay .label-term').textContent=t||'无节气';
+            document.querySelector('#weekdayDisplay .label-week').textContent=weekdays[n.getDay()];
+            document.querySelector('#weatherDisplay .label-weather').textContent=weatherText;
+            document.querySelector('#tempDisplay .label-temp').textContent=tempText;
+        }
+
+        function updateUptime() {
+            const s=new Date('2026-05-22T00:00:00');
+            const n=new Date();
+            const df=n-s;
+            document.getElementById('uptime').textContent=`${Math.floor(df/86400000)}天 ${Math.floor((df%86400000)/3600000)}小时`;
+        }
+
+        // 从 localStorage 复制 token 到 cookie（供 nginx auth_request 使用）
+        (function(){
+            try {
+                var v = localStorage.getItem("NOCOBASE_TOKEN") || localStorage.getItem("nocobase_token");
+                if (v && v.length > 20 && document.cookie.indexOf("nb_token=") < 0) {
+                    document.cookie = "nb_token=" + v + ";path=/;max-age=3600;SameSite=Lax";
+                }
+            } catch(e){}
+        })();
+
+        loadSource(0);
+        checkAdmin();
+        fetchTodos();
+        fetchAnnouncements();
+        fetchAttendance();
+        fetchWeather();
+        updateDisplay();
+        updateUptime();
+        rotateCycle();
+        setInterval(updateDisplay,1000);
+        setInterval(updateUptime,60000);
+        setInterval(rotateCycle,3000);
+        setInterval(fetchWeather,600000);
+    </script>
+
+    <!-- 打卡弹窗 -->
+    <div class="attend-overlay" id="attendOverlay">
+        <div class="attend-drawer">
+            <button class="attend-close" onclick="closeAttendModal()" title="关闭">✕</button>
+            <h3>📸 考勤打卡</h3>
+            <div class="attend-type-row">
+                <button class="attend-type-btn selected" onclick="selectAttendType('签到',this)">✅ 签到</button>
+                <button class="attend-type-btn" onclick="selectAttendType('签退',this)">🏠 签退</button>
+            </div>
+            <div class="attend-info-row">
+                <span class="label">🕐 当前时间</span>
+                <span class="value" id="attendTime">--</span>
+            </div>
+            <div class="attend-info-row">
+                <span class="label">📍 位置</span>
+                <span class="value" id="attendLocation">获取中...</span>
+            </div>
+            <div class="attend-camera-wrap" id="cameraWrap">
+                <video id="attendVideo" autoplay playsinline></video>
+                <canvas id="attendCanvas"></canvas>
+                <div class="face-indicator" id="faceIndicator"></div>
+                <div class="face-status" id="faceStatus">📷 请拍摄人脸</div>
+            </div>
+            <button class="camera-retry-btn" id="cameraRetryBtn" onclick="retryCamera()">🔄 重新授权相机</button>
+            <button class="attend-capture-btn" id="captureBtn" onclick="capturePhoto()">📷 拍摄照片</button>
+            <div class="attend-finger-row">
+                <span class="label">🔐 本机验证</span>
+                <span class="attend-finger-status unavailable" id="fingerStatus">检测中...</span>
+                <button class="attend-finger-btn" id="fingerBtn" disabled onclick="verifyFingerprint()">本机指纹</button>
+            </div>
+            <div class="attend-verify-bar" id="verifyBar" style="display:none">
+                <div class="v-item" id="vGps">📍 定位</div>
+                <div class="v-item" id="vFace">📷 人脸</div>
+                <div class="v-item" id="vFinger">🔐 指纹</div>
+            </div>
+            <button class="attend-submit" id="attendSubmit" disabled onclick="submitAttendance()">
+                确认打卡
+            </button>
+            <div class="attend-location-status getting" id="locationStatus">正在获取位置...</div>
+        </div>
+    </div>
+
+</body>
+</html>

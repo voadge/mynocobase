@@ -28,3 +28,38 @@ Thumbs.db
 
 # SSH 密钥
 *.pem
+
+# Node
+node_modules/
+
+# IDE
+.idea/
+.vscode/
+
+# Temp / backup
+*.bak
+*.bak.*
+*.save
+*.recover
+*.tmp
+tmp-*
+temp-*
+*.server-backup
+*.old
+*.patched
+test-output.txt
+test_write
+noco-base-inspect.json
+
+# Codegraph
+.codegraph/
+
+# opencode
+.opencode/
+
+# Docker
+acme.sh/
+
+# Misc
+mcp-body.json
+.env

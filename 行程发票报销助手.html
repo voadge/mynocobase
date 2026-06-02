@@ -1,0 +1,1253 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>发票报销助手 - 车票发票自动整理排版打印</title>
+  <script src="/dashboard/lib/tailwind.min.js"></script>
+  <script src="/dashboard/lib/pdf.min.js"></script>
+  <script src="/dashboard/lib/xlsx.full.min.js"></script>
+  <script src="/dashboard/lib/jspdf.umd.min.js"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: { 50:'#eff6ff',100:'#dbeafe',200:'#bfdbfe',300:'#93c5fd',400:'#60a5fa',500:'#3b82f6',600:'#2563eb',700:'#1d4ed8',800:'#1e40af',900:'#1e3a8a' },
+            accent:  { 50:'#f0fdf4',100:'#dcfce7',400:'#4ade80',500:'#22c55e',600:'#16a34a',700:'#15803d' },
+            warm:    { 50:'#fff7ed',100:'#ffedd5',400:'#fb923c',500:'#f97316',600:'#ea580c' }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    @keyframes fadeIn { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+    @keyframes pulse-border { 0%,100%{border-color:#3b82f6} 50%{border-color:#93c5fd} }
+    @keyframes slideUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
+    .fade-in{animation:fadeIn .4s ease-out}
+    .slide-up{animation:slideUp .5s ease-out}
+    .drop-zone-active{animation:pulse-border 1s ease-in-out infinite;background:#eff6ff!important}
+    .ticket-row:hover{background:#f8fafc}
+    .ticket-row td{transition:background .15s}
+    .editable-cell{cursor:text;min-width:30px;display:inline-block}
+    .editable-cell:focus{outline:2px solid #3b82f6;outline-offset:-2px;border-radius:4px;background:#fff}
+    .toast{position:fixed;top:20px;right:20px;z-index:1000;transform:translateX(120%);transition:transform .3s ease}
+    .toast.show{transform:translateX(0)}
+    ::-webkit-scrollbar{width:6px;height:6px}
+    ::-webkit-scrollbar-track{background:#f1f5f9}
+    ::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:3px}
+    ::-webkit-scrollbar-thumb:hover{background:#94a3b8}
+    .a4-sheet{background:#fff;box-shadow:0 2px 12px rgba(0,0,0,.1);position:relative}
+    .cut-line{border-top:1px dashed #cbd5e1}
+    .tag-landscape{background:#dbeafe;color:#2563eb;font-size:10px;padding:1px 6px;border-radius:4px}
+    .tag-portrait{background:#dcfce7;color:#16a34a;font-size:10px;padding:1px 6px;border-radius:4px}
+    .tag-rotated{background:#fef3c7;color:#d97706;font-size:10px;padding:1px 6px;border-radius:4px}
+    .tab-active{background:#3b82f6;color:#fff;box-shadow:0 2px 6px rgba(59,130,246,.3)}
+    .tab-inactive{background:#f1f5f9;color:#64748b}
+    .tab-inactive:hover{background:#e2e8f0}
+    .debug-text{font-family:monospace;font-size:11px;white-space:pre-wrap;word-break:break-all;max-height:260px;overflow-y:auto;background:#f8fafc;padding:8px;border-radius:6px;border:1px solid #e2e8f0;color:#475569;line-height:1.5}
+  </style>
+</head>
+<body class="bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-100 min-h-screen">
+
+  <!-- Toast -->
+  <div id="toast" class="toast bg-white rounded-xl shadow-lg border border-slate-200 px-5 py-3 flex items-center gap-3">
+    <span id="toast-icon" class="text-xl"></span>
+    <span id="toast-msg" class="text-slate-700 text-sm font-medium"></span>
+  </div>
+
+  <!-- Header -->
+  <header class="bg-white/80 backdrop-blur-md border-b border-slate-200/60 sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 bg-gradient-to-br from-primary-500 to-primary-700 rounded-xl flex items-center justify-center shadow-md shadow-primary-200">
+          <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+        </div>
+        <div>
+          <h1 class="text-lg font-bold text-slate-800">发票报销助手</h1>
+          <p class="text-xs text-slate-400">智能识别 · 横竖混排 · 一键打印报销</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <span id="file-count" class="hidden bg-primary-50 text-primary-600 text-xs font-semibold px-2.5 py-1 rounded-full"></span>
+        <button onclick="resetAll()" class="text-sm text-slate-400 hover:text-red-500 transition-colors px-3 py-1.5 rounded-lg hover:bg-red-50" title="清空重置">
+          <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+          重置
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+
+    <!-- Step 1: Upload -->
+    <section id="step-upload" class="slide-up">
+      <div class="flex items-center gap-2 mb-4">
+        <span class="w-7 h-7 rounded-full bg-primary-500 text-white text-sm font-bold flex items-center justify-center">1</span>
+        <h2 class="text-base font-semibold text-slate-700">上传车票发票 / 行程单</h2>
+        <span class="text-xs text-slate-400 ml-2">支持 PDF，可批量上传</span>
+      </div>
+
+      <div id="dropZone" class="border-2 border-dashed border-slate-300 rounded-2xl bg-white/60 hover:bg-white/80 transition-all duration-200 cursor-pointer group"
+           ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event)" onclick="document.getElementById('fileInput').click()">
+        <div class="py-14 flex flex-col items-center gap-4">
+          <div class="w-20 h-20 rounded-2xl bg-primary-50 flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
+            <svg class="w-10 h-10 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+            </svg>
+          </div>
+          <div class="text-center">
+            <p class="text-slate-600 font-medium">拖拽 PDF 到此处，或 <span class="text-primary-500 font-semibold">点击选择</span></p>
+            <p class="text-xs text-slate-400 mt-1">火车票电子发票 · 行程单 · 增值税发票 · 批量上传</p>
+          </div>
+        </div>
+        <input type="file" id="fileInput" class="hidden" accept=".pdf" multiple onchange="handleFiles(this.files)" />
+      </div>
+
+      <div id="progress-area" class="hidden mt-4 fade-in">
+        <div class="bg-white rounded-xl p-4 border border-slate-200/60">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-sm font-medium text-slate-600" id="progress-text">正在解析...</span>
+            <span class="text-sm text-primary-600 font-semibold" id="progress-percent">0%</span>
+          </div>
+          <div class="w-full bg-slate-100 rounded-full h-2">
+            <div id="progress-bar" class="bg-gradient-to-r from-primary-400 to-primary-600 h-2 rounded-full transition-all duration-300" style="width:0%"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Step 2: Tabs -->
+    <section id="step-preview" class="hidden">
+      <div class="flex items-center gap-2 mb-4">
+        <span class="w-7 h-7 rounded-full bg-primary-500 text-white text-sm font-bold flex items-center justify-center">2</span>
+        <h2 class="text-base font-semibold text-slate-700">核对信息 & 排版打印</h2>
+      </div>
+
+      <!-- Tabs -->
+      <div class="flex gap-2 mb-4">
+        <button id="tab-data" onclick="switchTab('data')" class="tab-active px-4 py-2 rounded-lg text-sm font-medium transition-all">📋 票据数据</button>
+        <button id="tab-print" onclick="switchTab('print')" class="tab-inactive px-4 py-2 rounded-lg text-sm font-medium transition-all">🖨️ 排版打印</button>
+        <button id="tab-debug" onclick="switchTab('debug')" class="tab-inactive px-4 py-2 rounded-lg text-sm font-medium transition-all">🔍 解析原文</button>
+      </div>
+
+      <!-- Tab: Data -->
+      <div id="panel-data">
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+          <div class="bg-white rounded-xl p-4 border border-slate-200/60">
+            <p class="text-xs text-slate-400 mb-1">票据数量</p>
+            <p class="text-2xl font-bold text-slate-800" id="stat-count">0</p>
+          </div>
+          <div class="bg-white rounded-xl p-4 border border-slate-200/60">
+            <p class="text-xs text-slate-400 mb-1">总金额</p>
+            <p class="text-2xl font-bold text-primary-600" id="stat-total">¥0.00</p>
+          </div>
+          <div class="bg-white rounded-xl p-4 border border-slate-200/60">
+            <p class="text-xs text-slate-400 mb-1">乘车人</p>
+            <p class="text-lg font-bold text-slate-800 truncate" id="stat-passenger">-</p>
+          </div>
+          <div class="bg-white rounded-xl p-4 border border-slate-200/60">
+            <p class="text-xs text-slate-400 mb-1">日期范围</p>
+            <p class="text-sm font-bold text-slate-800" id="stat-daterange">-</p>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-xl border border-slate-200/60 overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead class="bg-slate-50/80">
+                <tr>
+                  <th class="px-3 py-3 text-left font-semibold text-slate-500 text-xs uppercase tracking-wider w-10">#</th>
+                  <th class="px-3 py-3 text-left font-semibold text-slate-500 text-xs uppercase tracking-wider">类型</th>
+                  <th class="px-3 py-3 text-left font-semibold text-slate-500 text-xs uppercase tracking-wider">乘车人</th>
+                  <th class="px-3 py-3 text-left font-semibold text-slate-500 text-xs uppercase tracking-wider">出发站</th>
+                  <th class="px-3 py-3 text-left font-semibold text-slate-500 text-xs uppercase tracking-wider">到达站</th>
+                  <th class="px-3 py-3 text-left font-semibold text-slate-500 text-xs uppercase tracking-wider">车次</th>
+                  <th class="px-3 py-3 text-left font-semibold text-slate-500 text-xs uppercase tracking-wider">日期</th>
+                  <th class="px-3 py-3 text-left font-semibold text-slate-500 text-xs uppercase tracking-wider">席别</th>
+                  <th class="px-3 py-3 text-right font-semibold text-slate-500 text-xs uppercase tracking-wider">金额</th>
+                  <th class="px-3 py-3 text-left font-semibold text-slate-500 text-xs uppercase tracking-wider">发票代码</th>
+                  <th class="px-3 py-3 text-left font-semibold text-slate-500 text-xs uppercase tracking-wider">发票号码</th>
+                  <th class="px-3 py-3 text-center font-semibold text-slate-500 text-xs uppercase tracking-wider w-14">操作</th>
+                </tr>
+              </thead>
+              <tbody id="ticket-table-body" class="divide-y divide-slate-100"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="mt-3 flex justify-end">
+          <button onclick="addEmptyRow()" class="text-sm text-primary-600 hover:text-primary-700 font-medium px-3 py-1.5 rounded-lg hover:bg-primary-50 transition-colors flex items-center gap-1">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" /></svg>手动添加
+          </button>
+        </div>
+      </div>
+
+      <!-- Tab: Print -->
+      <div id="panel-print" class="hidden">
+        <div class="bg-white rounded-xl border border-slate-200/60 p-4 mb-4">
+          <div class="flex flex-wrap items-center gap-3 mb-4">
+            <div class="flex items-center gap-2 bg-slate-50 rounded-lg px-3 py-1.5">
+              <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" /></svg>
+              <span class="text-sm text-slate-600 font-medium">排版规则：</span>
+              <span class="text-xs text-slate-500">横版原样 · 竖版两两并排 · 单竖版旋转90°变横版</span>
+            </div>
+            <label class="flex items-center gap-1.5 cursor-pointer ml-auto">
+              <input type="checkbox" id="show-cut-line" checked onchange="renderPrintPreview()" class="w-4 h-4 text-primary-600 rounded border-slate-300 focus:ring-primary-500" />
+              <span class="text-sm text-slate-500">裁切线</span>
+            </label>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <button onclick="generatePrintPDF()" class="bg-gradient-to-r from-warm-500 to-warm-600 hover:from-warm-600 hover:to-warm-600 text-white font-medium py-2.5 px-5 rounded-xl shadow-md shadow-orange-200 hover:shadow-lg transition-all duration-200 flex items-center gap-2 text-sm">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+              下载排版 PDF
+            </button>
+            <button onclick="directPrint()" class="bg-white hover:bg-slate-50 text-slate-700 font-medium py-2.5 px-5 rounded-xl border border-slate-300 hover:border-slate-400 transition-all duration-200 flex items-center gap-2 text-sm">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" /></svg>
+              直接打印
+            </button>
+          </div>
+        </div>
+
+        <div id="print-loading" class="hidden bg-white rounded-xl border border-slate-200/60 p-8 text-center text-sm text-slate-500">
+          <svg class="animate-spin w-5 h-5 inline mr-2 text-primary-500" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+          正在计算排版（含旋转处理）...
+        </div>
+
+        <div class="bg-slate-200/50 rounded-xl p-4 overflow-auto" style="max-height:800px">
+          <div id="print-preview-area" class="flex flex-col items-center gap-6">
+            <div class="text-sm text-slate-400 py-12">预览将在此处生成...</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab: Debug -->
+      <div id="panel-debug" class="hidden">
+        <div class="bg-white rounded-xl border border-slate-200/60 p-4">
+          <p class="text-sm text-slate-500 mb-3">以下为每个 PDF 文件提取的原始文本（含坐标排序还原），用于排查信息提取不全的问题。如果自动识别有误，可在「票据数据」中手动修正。</p>
+          <div id="debug-area" class="space-y-3"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Step 3: Export -->
+    <section id="step-export" class="hidden">
+      <div class="flex items-center gap-2 mb-4">
+        <span class="w-7 h-7 rounded-full bg-primary-500 text-white text-sm font-bold flex items-center justify-center">3</span>
+        <h2 class="text-base font-semibold text-slate-700">生成报销单</h2>
+      </div>
+
+      <div class="bg-white rounded-xl border border-slate-200/60 p-6">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+          <div>
+            <label class="block text-sm font-medium text-slate-600 mb-1">报销人</label>
+            <input id="reimburser" type="text" placeholder="请输入报销人姓名" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-600 mb-1">部门</label>
+            <input id="department" type="text" placeholder="请输入部门名称" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-600 mb-1">报销事由</label>
+            <input id="reason" type="text" placeholder="如：出差交通费" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-600 mb-1">报销日期</label>
+            <input id="reimb-date" type="date" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition" />
+          </div>
+        </div>
+
+        <div class="flex flex-col sm:flex-row gap-3">
+          <button onclick="exportExcel()" class="flex-1 bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700 text-white font-medium py-3 px-6 rounded-xl shadow-md shadow-primary-200 hover:shadow-lg transition-all duration-200 flex items-center justify-center gap-2">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+            导出报销单 Excel
+          </button>
+          <button onclick="exportCSV()" class="flex-1 bg-white hover:bg-slate-50 text-slate-700 font-medium py-3 px-6 rounded-xl border border-slate-300 hover:border-slate-400 transition-all duration-200 flex items-center justify-center gap-2">
+            导出 CSV
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Guide -->
+    <section class="mt-8">
+      <div class="bg-white/60 rounded-xl border border-slate-200/60 p-6">
+        <h3 class="text-sm font-semibold text-slate-600 mb-3 flex items-center gap-2">
+          <svg class="w-4 h-4 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+          使用说明
+        </h3>
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 text-xs text-slate-500">
+          <div class="flex gap-2"><span class="text-primary-400 font-bold">①</span><p>将邮件中收到的火车票发票/行程单 PDF 下载后上传，支持批量。</p></div>
+          <div class="flex gap-2"><span class="text-primary-400 font-bold">②</span><p>自动识别票面信息，可手动修正。如提取不全，点「🔍 解析原文」查看原始文本。</p></div>
+          <div class="flex gap-2"><span class="text-warm-400 font-bold">③</span><p>排版规则：横版原样排入；竖版两两并排；单张竖版自动旋转90°变横版。每页 A4 排 2 行。</p></div>
+          <div class="flex gap-2"><span class="text-accent-400 font-bold">④</span><p>下载排版 PDF 打印附件 + 导出 Excel 报销单，一起提交财务。</p></div>
+        </div>
+        <div class="mt-3 p-3 bg-amber-50 rounded-lg border border-amber-200/60 text-xs text-amber-700">
+          <strong>提示：</strong>所有数据浏览器本地处理，不上传服务器。打印排版 PDF 时请选"实际大小"或 100% 缩放。竖版行程单会自动旋转适配 A4 排版。
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="mt-12 py-6 text-center text-xs text-slate-400 border-t border-slate-200/60">
+    发票报销助手 · 纯前端本地处理 · 数据不离开您的浏览器
+  </footer>
+
+<script>
+// ==================== State ====================
+let tickets = [];
+let pdfPages = [];   // { dataURL, origW, origH, fileName, pageIndex, orientation, rotatedDataURL?, rotatedW?, rotatedH? }
+let rawTexts = [];   // { fileName, text, rawItems? } for debug view
+let currentTab = 'data';
+let layoutCache = null; // cached computed layout
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = '/dashboard/lib/pdf.worker.min.js';
+
+// ==================== Image Rotation Helper ====================
+// Rotate image 90° clockwise by drawing to a temp canvas
+function rotateImage90CW(dataURL) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement('canvas');
+      c.width = img.naturalHeight;   // swapped
+      c.height = img.naturalWidth;    // swapped
+      const ctx = c.getContext('2d');
+      // White background
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, c.width, c.height);
+      ctx.translate(c.width, 0);
+      ctx.rotate(Math.PI / 2);
+      ctx.drawImage(img, 0, 0);
+      resolve(c.toDataURL('image/jpeg', 0.95));
+    };
+    img.onerror = () => resolve(dataURL); // fallback: return original
+    img.src = dataURL;
+  });
+}
+
+// Render a single PDF page to a high-quality data URL
+// Uses scale 3.0 for crisp printing (≈216 DPI effective at A4 half-page)
+// CRITICAL: disableFontFace=true forces PDF.js to render text as vector paths
+// instead of using browser @font-face. This fixes 12306 embedded Chinese fonts
+// that silently drop characters when using normal font rendering.
+async function renderPageToImage(page) {
+  const vp1 = page.getViewport({scale:1.0});
+  // Dynamic scale: target ~3x but cap at 5000px per dimension to avoid canvas limits
+  let scale = 3.0;
+  if(vp1.width * scale > 5000) scale = 5000 / vp1.width;
+  if(vp1.height * scale > 5000) scale = Math.min(scale, 5000 / vp1.height);
+
+  const vp = page.getViewport({scale, intent:'display'});
+  const c = document.createElement('canvas');
+  c.width = vp.width;
+  c.height = vp.height;
+  const ctx = c.getContext('2d', { willReadFrequently: false });
+
+  // Fill white background (PDF pages may have transparent bg)
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, c.width, c.height);
+
+  // ALWAYS use disableFontFace=true for reliable Chinese font rendering.
+  // 12306 PDFs embed Chinese fonts that silently fail with normal @font-face mode.
+  await page.render({
+    canvasContext: ctx,
+    viewport: vp,
+    annotationMode: 2,
+    disableFontFace: true
+  }).promise;
+
+  // Use JPEG for smaller data URLs (much smaller than PNG at high resolution)
+  const dataURL = c.toDataURL('image/jpeg', 0.95);
+  return { dataURL, origW: vp1.width, origH: vp1.height, renderScale: scale };
+}
+
+// Ensure rotated version exists for a page
+async function ensureRotated(pg) {
+  if (pg.rotatedDataURL) return pg;
+  pg.rotatedDataURL = await rotateImage90CW(pg.dataURL);
+  pg.rotatedW = pg.origH;  // swapped dimensions
+  pg.rotatedH = pg.origW;
+  return pg;
+}
+
+function invalidateLayoutCache() { layoutCache = null; }
+
+// ==================== Tabs ====================
+function switchTab(tab) {
+  currentTab = tab;
+  ['data','print','debug'].forEach(t => {
+    document.getElementById('tab-'+t).className = (t===tab ? 'tab-active' : 'tab-inactive') + ' px-4 py-2 rounded-lg text-sm font-medium transition-all';
+    document.getElementById('panel-'+t).classList.toggle('hidden', t!==tab);
+  });
+  if (tab==='print') renderPrintPreview();
+}
+
+// ==================== Upload ====================
+function handleDragOver(e){e.preventDefault();e.stopPropagation();document.getElementById('dropZone').classList.add('drop-zone-active')}
+function handleDragLeave(e){e.preventDefault();e.stopPropagation();document.getElementById('dropZone').classList.remove('drop-zone-active')}
+function handleDrop(e){e.preventDefault();e.stopPropagation();document.getElementById('dropZone').classList.remove('drop-zone-active');handleFiles(e.dataTransfer.files)}
+
+async function handleFiles(fileList) {
+  const pdfFiles = Array.from(fileList).filter(f=>f.type==='application/pdf'||f.name.toLowerCase().endsWith('.pdf'));
+  if(!pdfFiles.length){showToast('请上传 PDF 格式文件','warning');return}
+
+  const pA=document.getElementById('progress-area'), pB=document.getElementById('progress-bar'),
+        pT=document.getElementById('progress-text'), pP=document.getElementById('progress-percent');
+  pA.classList.remove('hidden');
+  let done=0; const total=pdfFiles.length;
+
+  for(const file of pdfFiles){
+    try{
+      pT.textContent=`正在解析：${file.name}`;
+      const ab=await file.arrayBuffer();
+      const pdf=await pdfjsLib.getDocument({
+        data:ab,
+        isOffscreenCanvasSupported:false,
+        // CRITICAL for CJK font rendering: load external CMap data
+        // 12306 PDFs use CIDFont which requires CMap to decode Chinese characters.
+        // Without these, glyphs are silently dropped (no error, just missing text).
+        cMapUrl:'/dashboard/lib/cmaps/',
+        cMapPacked:true,
+        // Standard font data for proper rendering
+        standardFontDataUrl:'/dashboard/lib/standard_fonts/',
+        // Use system fonts as fallback when embedded fonts fail
+        useSystemFonts:true,
+        // Disable XFA which can interfere with rendering
+        enableXfa:false
+      }).promise;
+
+      // --- Extract text with position-aware sorting ---
+      // Use disableCombineTextItems to get individual text segments
+      let fullText='';
+      let allStructuredItems=[]; // collect from ALL pages
+
+      for(let i=1;i<=pdf.numPages;i++){
+        const page=await pdf.getPage(i);
+        const vp=page.getViewport({scale:1.0});
+
+        // Try both modes for maximum coverage
+        const tc=await page.getTextContent({disableCombineTextItems:true});
+        const items=tc.items.filter(it=>it.str&&it.str.trim()).map(it=>({
+          str:it.str.trim(),
+          x: Math.round(it.transform[4]),
+          y: Math.round(it.transform[5]),
+          h: Math.round(Math.abs(it.transform[3])),
+          w: Math.round(it.width||0)
+        }));
+
+        // Sort by Y desc (PDF Y goes up), then X asc
+        items.sort((a,b)=>b.y-a.y || a.x-b.x);
+
+        // Group into lines with adaptive Y-tolerance (12px for varying font sizes)
+        let lines=[];
+        let currentLine={y:items[0]?.y||0, texts:[]};
+        for(const it of items){
+          // Adaptive tolerance: use max of 12px or half the text height
+          const tol=Math.max(12, it.h*0.6);
+          if(Math.abs(it.y-currentLine.y)>tol){
+            lines.push(currentLine);
+            currentLine={y:it.y,texts:[]};
+          }
+          currentLine.texts.push(it.str);
+        }
+        if(currentLine.texts.length) lines.push(currentLine);
+
+        const pageText=lines.map(l=>l.texts.join(' ')).join('\n');
+        fullText+=pageText+'\n';
+
+        // Collect structured items from ALL pages
+        allStructuredItems.push(...items);
+      }
+
+      rawTexts.push({fileName:file.name, text:fullText, rawItems:allStructuredItems});
+
+      // --- Parse ticket info ---
+      const info=extractTicketInfo(fullText, allStructuredItems);
+
+      // --- Render pages to high-quality images (scale 3x for crisp printing) ---
+      for(let i=1;i<=pdf.numPages;i++){
+        const page=await pdf.getPage(i);
+        const {dataURL, origW, origH}=await renderPageToImage(page);
+        const orientation=origW>origH?'landscape':'portrait';
+
+        const pageObj={dataURL, origW, origH, fileName:file.name, pageIndex:i, orientation};
+        pdfPages.push(pageObj);
+
+        if(i===1) tickets.push({...info, fileName:file.name, id:Date.now()+Math.random(), pageIndices:[pdfPages.length-1]});
+        else if(tickets.length>0){
+          const last=tickets[tickets.length-1];
+          if(!last.pageIndices) last.pageIndices=[];
+          last.pageIndices.push(pdfPages.length-1);
+        }
+      }
+    }catch(err){
+      console.error('PDF parse error:',err);
+      showToast(`${file.name} 解析失败：${err.message}`,'error');
+    }
+    done++;
+    const pct=Math.round(done/total*100);
+    pB.style.width=pct+'%'; pP.textContent=pct+'%';
+  }
+
+  invalidateLayoutCache();
+  pT.textContent=`解析完成，${pdfPages.length} 页 / ${tickets.length} 张票据`;
+  setTimeout(()=>pA.classList.add('hidden'),1500);
+  updateUI();
+  showToast(`成功：${pdfPages.length} 页，${tickets.length} 张票据`,'success');
+}
+
+// ==================== Enhanced 12306 Extraction ====================
+// Known false-positive amounts that should never be treated as ticket prices
+const FALSE_POSITIVE_AMOUNTS = new Set(['12306','95306']);
+// Reasonable single-ticket price range (CNY)
+const MIN_TICKET_PRICE = 1;
+const MAX_TICKET_PRICE = 5000;
+
+// Validate a captured price string against false positives and reasonableness
+function validatePrice(numStr, rawText) {
+  if(!numStr) return false;
+  const n = parseFloat(numStr);
+  if(isNaN(n) || n < MIN_TICKET_PRICE || n > MAX_TICKET_PRICE) return false;
+  // Known false-positive values (e.g. 12306 in "买票请到12306")
+  if(FALSE_POSITIVE_AMOUNTS.has(numStr)) return false;
+  // Reject if raw text contains "请到" immediately before the number
+  if(rawText && new RegExp('请到\\s*' + numStr.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).test(rawText)) return false;
+  return true;
+}
+
+function extractTicketInfo(text, structuredItems) {
+  const raw=text.replace(/\s+/g,' ').trim();
+  const lines=text.split('\n').map(l=>l.trim()).filter(Boolean);
+
+  const info={passenger:'',fromStation:'',toStation:'',trainNo:'',date:'',seat:'',price:'',invoiceCode:'',invoiceNo:'',invoiceType:''};
+
+  // ---- Detect invoice type ----
+  let isRailwayInvoice=false, isItinerary=false, isVAT=false;
+  if(raw.match(/铁路电子客票|电子发票.*铁路|铁路客票|中国铁路|12306/)) { isRailwayInvoice=true; info.invoiceType='铁路电子客票'; }
+  else if(raw.match(/行程单|航空运输电子客票行程单|机票/)) { isItinerary=true; info.invoiceType='行程单'; }
+  else if(raw.match(/增值税电子普通发票|增值税电子专用发票|增值税/)) { isVAT=true; info.invoiceType='增值税发票'; }
+  else { info.invoiceType='其他'; }
+
+  // ---- Common fields (all types) ----
+  let m;
+
+  // 发票代码 - try multiple patterns
+  m=raw.match(/发票代码[：:\s]*(\d{10,12})/);
+  if(m) info.invoiceCode=m[1];
+  if(!info.invoiceCode) {
+    m=raw.match(/发票代码[：:\s]*(\d{4,12})/);
+    if(m) info.invoiceCode=m[1];
+  }
+  // Structured fallback: find "发票代码" text item, then take next numeric item
+  if(!info.invoiceCode && structuredItems) {
+    for(let i=0;i<structuredItems.length-1;i++){
+      if(structuredItems[i].str.includes('发票代码') || structuredItems[i].str==='发票代码'){
+        const next=structuredItems[i+1]?.str||'';
+        const nm=next.match(/^(\d{4,12})$/);
+        if(nm) info.invoiceCode=nm[1];
+        break;
+      }
+    }
+  }
+
+  // 发票号码
+  m=raw.match(/发票号码[：:\s]*(\d{8})/);
+  if(m) info.invoiceNo=m[1];
+  if(!info.invoiceNo) {
+    m=raw.match(/发票号码[：:\s]*(\d{4,20})/);
+    if(m) info.invoiceNo=m[1];
+  }
+  // Structured fallback
+  if(!info.invoiceNo && structuredItems) {
+    for(let i=0;i<structuredItems.length-1;i++){
+      if(structuredItems[i].str.includes('发票号码') || structuredItems[i].str==='发票号码'){
+        const next=structuredItems[i+1]?.str||'';
+        const nm=next.match(/^(\d{4,20})$/);
+        if(nm) info.invoiceNo=nm[1];
+        break;
+      }
+    }
+  }
+
+  // ---- Railway e-invoice (铁路电子客票) ----
+  if(isRailwayInvoice) {
+    // Passenger: try multiple patterns with increasing fallback
+    // Pattern 1: explicit keyword
+    m=raw.match(/(?:乘车人|姓名|旅客姓名)[：:\s]*([\u4e00-\u9fa5]{2,4})/);
+    if(m) info.passenger=m[1];
+
+    // Pattern 2: Chinese name before masked ID (e.g. "张三 ****1234")
+    if(!info.passenger) {
+      m=raw.match(/([\u4e00-\u9fa5]{2,4})\s*[\*＊xX\d]{2,}/);
+      if(m && !/^(发票|车次|席别|票价|金额|合计|铁路|电子|客票)/.test(m[1])) info.passenger=m[1];
+    }
+
+    // Pattern 3: structured coordinate-based matching (2-4 char Chinese name near ID pattern)
+    if(!info.passenger && structuredItems && structuredItems.length>0) {
+      for(let i=0;i<structuredItems.length;i++){
+        const s=structuredItems[i].str;
+        if(/^[\u4e00-\u9fa5]{2,4}$/.test(s) && !/^(发票|车次|席别|票价|金额|合计|铁路|电子|客票|购买|销售|名称|纳税|地址|电话|开户|账号|备注|大写|拾|佰|仟|万|开票|校验|密码|发票|号码|代码|税率|税额|规格|型号|单位|数量|单价|复核|收款|开票人|注|张|份|页|第|共)$/.test(s)){
+          // Check next 5 items for ID pattern
+          const next5=structuredItems.slice(i+1,i+6).map(x=>x.str).join('');
+          if(/[\*＊]{1,}[\d]{2,}/.test(next5) || /[\*＊xX]{3,}/.test(next5)){
+            info.passenger=s; break;
+          }
+        }
+      }
+    }
+
+    // Stations: "北京南→上海虹桥" or "北京南站→上海虹桥站" or arrows
+    m=raw.match(/([\u4e00-\u9fa5]{2,8}(?:站)?)\s*[→➡➔➘➙\-—–]+\s*([\u4e00-\u9fa5]{2,8}(?:站)?)/);
+    if(m){ info.fromStation=m[1].replace(/站$/,''); info.toStation=m[2].replace(/站$/,''); }
+    if(!info.fromStation) {
+      m=raw.match(/(?:出发站|始发站|乘车站|出发)[：:\s]*([\u4e00-\u9fa5]{2,8})/);
+      if(m) info.fromStation=m[1].replace(/站$/,'');
+    }
+    if(!info.toStation) {
+      m=raw.match(/(?:到达站|终到站|到达)[：:\s]*([\u4e00-\u9fa5]{2,8})/);
+      if(m) info.toStation=m[1].replace(/站$/,'');
+    }
+    // Fallback: "XX开往YY"
+    if(!info.fromStation||!info.toStation){
+      m=raw.match(/([\u4e00-\u9fa5]{2,8})开往([\u4e00-\u9fa5]{2,8})/);
+      if(m){ if(!info.fromStation)info.fromStation=m[1]; if(!info.toStation)info.toStation=m[2]; }
+    }
+    // Fallback: structured items - find station-like Chinese words near arrow or "站" keyword
+    if((!info.fromStation || !info.toStation) && structuredItems) {
+      for(let i=0;i<structuredItems.length;i++){
+        if(/[→➡➔➘➙\-—–]/.test(structuredItems[i].str) && i>0 && i<structuredItems.length-1){
+          const prev=structuredItems[i-1].str;
+          const next=structuredItems[i+1].str;
+          if(/^[\u4e00-\u9fa5]{2,8}/.test(prev) && /^[\u4e00-\u9fa5]{2,8}/.test(next)){
+            if(!info.fromStation) info.fromStation=prev.replace(/站$/,'');
+            if(!info.toStation) info.toStation=next.replace(/站$/,'');
+            break;
+          }
+        }
+      }
+    }
+    // Fallback: structured - find items ending with "站" or 2-4 char Chinese near "站" keyword
+    if(!info.fromStation && structuredItems) {
+      const stationLike=structuredItems.filter(it=>/^[\u4e00-\u9fa5]{2,4}站?$/.test(it.str) && !/^(发票|铁路|电子|客票|购买|销售)/.test(it.str));
+      if(stationLike.length>=2){
+        info.fromStation=stationLike[0].str.replace(/站$/,'');
+        info.toStation=stationLike[1].str.replace(/站$/,'');
+      }
+    }
+
+    // Train number - try multiple patterns
+    m=raw.match(/(?:车次|班次|列车)[：:\s]*([GDCZTKTLTY]\d{1,5})/i);
+    if(m) info.trainNo=m[1].toUpperCase();
+    if(!info.trainNo) {
+      // Standalone train number pattern
+      m=raw.match(/\b([GDCZTKTLTY]\d{1,5})\b/i);
+      if(m) info.trainNo=m[1].toUpperCase();
+    }
+    if(!info.trainNo && structuredItems) {
+      // Find from structured items
+      for(const it of structuredItems){
+        if(/^([GDCZTKTLTY]\d{1,5})$/i.test(it.str)){
+          info.trainNo=it.str.toUpperCase(); break;
+        }
+      }
+    }
+
+    // Date: try multiple formats
+    // Priority: 乘车日期 > 开票日期 > generic date
+    m=raw.match(/(?:乘车日期|旅行日期|出发日期|乘车时间)[：:\s]*(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日/);
+    if(m) info.date=`${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`;
+    if(!info.date) {
+      m=raw.match(/(?:开票日期)[：:\s]*(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日/);
+      if(m) info.date=`${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`;
+    }
+    if(!info.date) {
+      m=raw.match(/(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日/);
+      if(m) info.date=`${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`;
+    }
+    if(!info.date){
+      m=raw.match(/(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})/);
+      if(m && parseInt(m[2])<=12 && parseInt(m[3])<=31) info.date=`${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`;
+    }
+    if(!info.date) {
+      m=raw.match(/(\d{4})\s*\.?\s*(\d{2})\s*\.?\s*(\d{2})/);
+      if(m && parseInt(m[2])<=12 && parseInt(m[3])<=31) info.date=`${m[1]}-${m[2]}-${m[3]}`;
+    }
+    // Structured item date match
+    if(!info.date && structuredItems) {
+      for(const it of structuredItems){
+        const dm=it.str.match(/^(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})$/);
+        if(dm && parseInt(dm[2])<=12 && parseInt(dm[3])<=31){
+          info.date=`${dm[1]}-${dm[2].padStart(2,'0')}-${dm[3].padStart(2,'0')}`;
+          break;
+        }
+      }
+    }
+    // Structured: find date after "乘车日期"/"开票日期" keyword
+    if(!info.date && structuredItems) {
+      for(let i=0;i<structuredItems.length-1;i++){
+        const s=structuredItems[i].str;
+        if(/^(乘车日期|旅行日期|出发日期|开票日期)$/.test(s)){
+          // Next item might be the date
+          const next=structuredItems[i+1]?.str||'';
+          const dm=next.match(/^(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})$/);
+          if(dm && parseInt(dm[2])<=12 && parseInt(dm[3])<=31){
+            info.date=`${dm[1]}-${dm[2].padStart(2,'0')}-${dm[3].padStart(2,'0')}`;
+            break;
+          }
+          // Or combined: "2025年01月01日"
+          const ym=next.match(/^(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日$/);
+          if(ym){ info.date=`${ym[1]}-${ym[2].padStart(2,'0')}-${ym[3].padStart(2,'0')}`; break; }
+        }
+      }
+    }
+
+    // Seat class
+    const seatPatterns=['二等座','一等座','商务座','特等座','硬座','硬卧','软卧','无座','动卧','高级软卧','硬卧上','硬卧中','硬卧下','软卧上','软卧下'];
+    for(const sp of seatPatterns){
+      if(raw.includes(sp)){info.seat=sp;break;}
+    }
+
+    // Price - comprehensive extraction with priority
+    // Priority: 价税合计 > 合计金额 > 票价 > 金额 > ¥符号 > structured fallback
+    const pricePatterns=[
+      /(?:价税合计)[（(]大写[）)]*[：:\s]*[¥￥]?\s*.*?[¥￥]\s*(\d+\.?\d{0,2})/,
+      /(?:价税合计)[^¥￥]*[¥￥]\s*(\d+\.?\d{0,2})/,
+      /(?:价税合计)[：:\s]*[¥￥]?\s*(\d+\.?\d{0,2})/,
+      /(?:合计金额|合计)[：:\s]*[¥￥]?\s*(\d+\.?\d{0,2})/,
+      /(?:票价|金额)[：:\s]*[¥￥]?\s*(\d+\.?\d{0,2})/,
+      /[¥￥]\s*(\d{1,5}\.?\d{0,2})\s*元?/,
+      /(\d{1,5}\.?\d{0,2})\s*元/
+    ];
+    for(const pp of pricePatterns){
+      m=raw.match(pp);
+      if(m && validatePrice(m[1], raw)){info.price=m[1];break;}
+    }
+
+    // If still no price, try structured items - find amount near ¥ or "元"
+    if(!info.price && structuredItems) {
+      // Find items that look like prices (number with ¥ or nearby ¥ symbol)
+      for(let i=0;i<structuredItems.length;i++){
+        const s=structuredItems[i].str;
+        if(/^[¥￥]/.test(s)){
+          const numMatch=s.match(/[¥￥]\s*(\d+\.?\d{0,2})/);
+          if(numMatch && validatePrice(numMatch[1], raw)){info.price=numMatch[1]; break;}
+        }
+        if(/^\d+\.?\d{0,2}$/.test(s) && validatePrice(s, raw)){
+          // Check if previous item is ¥ or next item is 元
+          const prev=structuredItems[i-1]?.str||'';
+          const next=structuredItems[i+1]?.str||'';
+          if(/^[¥￥元]$/.test(prev)||/^元$/.test(next)){
+            info.price=s; break;
+          }
+        }
+      }
+    }
+
+    // Last resort: find the last standalone numeric amount that passes validation
+    if(!info.price && structuredItems) {
+      const amounts=structuredItems.filter(it=>/^\d+\.?\d{0,2}$/.test(it.str)&&validatePrice(it.str, raw));
+      if(amounts.length>0) info.price=amounts[amounts.length-1].str;
+    }
+  }
+
+  // ---- Itinerary (行程单/机票) ----
+  if(isItinerary) {
+    m=raw.match(/(?:旅客姓名|乘机人|姓名)[：:\s]*([\u4e00-\u9fa5]{2,4})/);
+    if(m) info.passenger=m[1];
+    if(!info.passenger) {
+      m=raw.match(/([\u4e00-\u9fa5]{2,4})\s*[\*＊xX]{2,}/);
+      if(m) info.passenger=m[1];
+    }
+    // Flight
+    m=raw.match(/(?:航班号|航班)[：:\s]*([A-Z0-9]{2,6})/);
+    if(m) info.trainNo=m[1];
+    if(!info.trainNo) {
+      m=raw.match(/\b([A-Z]{2}\d{2,4})\b/);
+      if(m) info.trainNo=m[1];
+    }
+    // Route
+    m=raw.match(/(?:出发城市|出发地|始发地|FROM)[：:\s]*([\u4e00-\u9fa5]{2,10})/);
+    if(m) info.fromStation=m[1];
+    m=raw.match(/(?:到达城市|目的地|到达地|TO)[：:\s]*([\u4e00-\u9fa5]{2,10})/);
+    if(m) info.toStation=m[1];
+    // Date
+    m=raw.match(/(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日/);
+    if(m) info.date=`${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`;
+    // Price
+    m=raw.match(/(?:票价|金额|价税合计|合计)[：:\s]*[¥￥]?\s*(\d+\.?\d{0,2})/);
+    if(m && validatePrice(m[1], raw)) info.price=m[1];
+    if(!info.price){m=raw.match(/[¥￥]\s*(\d+\.?\d{0,2})/);if(m && validatePrice(m[1], raw))info.price=m[1];}
+    // Seat -> cabin class
+    m=raw.match(/(经济舱|公务舱|头等舱)/);
+    if(m) info.seat=m[1];
+  }
+
+  // ---- VAT invoice (增值税发票) ----
+  if(isVAT) {
+    m=raw.match(/(?:购买方名称|购买方)[：:\s]*([\u4e00-\u9fa5\w]{2,20})/);
+    if(m) info.passenger=m[1];
+    m=raw.match(/(?:价税合计|合计金额)[：:\s]*[¥￥]?\s*(\d+\.?\d{0,2})/);
+    if(m && validatePrice(m[1], raw)) info.price=m[1];
+  }
+
+  // ---- Fallback: generic patterns if above didn't fill ----
+  if(!info.passenger) {
+    m=raw.match(/([\u4e00-\u9fa5]{2,4})\s*[\*＊]{2,}/);
+    if(m) info.passenger=m[1];
+  }
+  if(!info.price){
+    const allPrices=[...raw.matchAll(/[¥￥]\s*(\d+\.?\d{0,2})/g)].map(x=>x[1]).filter(p=>validatePrice(p, raw));
+    if(allPrices.length>0) info.price=allPrices[allPrices.length-1];
+  }
+
+  return info;
+}
+
+// ==================== Layout Engine ====================
+// Computes layout with rotation logic:
+// - Landscape pages: 1 per row, as-is
+// - Two consecutive portrait pages: paired side-by-side
+// - Single portrait page: rotated 90° CW to become landscape, 1 per row
+// Returns array of A4 pages, each containing array of rows.
+// Each row is array of {dataURL, origW, origH, orientation, _wasRotated?}
+async function computeLayout() {
+  if(layoutCache) return layoutCache;
+
+  const rows=[];
+  let portraitBuffer=null;
+
+  for(const pg of pdfPages){
+    if(pg.orientation==='landscape'){
+      // Flush any buffered portrait first (single portrait → rotate)
+      if(portraitBuffer){
+        await ensureRotated(portraitBuffer);
+        rows.push([{
+          dataURL: portraitBuffer.rotatedDataURL,
+          origW: portraitBuffer.rotatedW,
+          origH: portraitBuffer.rotatedH,
+          orientation: 'landscape',
+          _wasRotated: true,
+          fileName: portraitBuffer.fileName,
+          pageIndex: portraitBuffer.pageIndex
+        }]);
+        portraitBuffer=null;
+      }
+      rows.push([{
+        dataURL: pg.dataURL,
+        origW: pg.origW,
+        origH: pg.origH,
+        orientation: 'landscape',
+        _wasRotated: false,
+        fileName: pg.fileName,
+        pageIndex: pg.pageIndex
+      }]);
+    } else {
+      // Portrait: try to pair with previous portrait
+      if(portraitBuffer){
+        // Two portraits → pair side-by-side, no rotation
+        rows.push([{
+          dataURL: portraitBuffer.dataURL,
+          origW: portraitBuffer.origW,
+          origH: portraitBuffer.origH,
+          orientation: 'portrait',
+          _wasRotated: false,
+          fileName: portraitBuffer.fileName,
+          pageIndex: portraitBuffer.pageIndex
+        }, {
+          dataURL: pg.dataURL,
+          origW: pg.origW,
+          origH: pg.origH,
+          orientation: 'portrait',
+          _wasRotated: false,
+          fileName: pg.fileName,
+          pageIndex: pg.pageIndex
+        }]);
+        portraitBuffer=null;
+      } else {
+        portraitBuffer=pg;
+      }
+    }
+  }
+  // Flush remaining single portrait → rotate
+  if(portraitBuffer){
+    await ensureRotated(portraitBuffer);
+    rows.push([{
+      dataURL: portraitBuffer.rotatedDataURL,
+      origW: portraitBuffer.rotatedW,
+      origH: portraitBuffer.rotatedH,
+      orientation: 'landscape',
+      _wasRotated: true,
+      fileName: portraitBuffer.fileName,
+      pageIndex: portraitBuffer.pageIndex
+    }]);
+  }
+
+  // Group rows into A4 pages (2 rows per page)
+  const a4Pages=[];
+  for(let i=0;i<rows.length;i+=2){
+    a4Pages.push({ rows: rows.slice(i, i+2), pageNum: Math.floor(i/2)+1 });
+  }
+
+  layoutCache=a4Pages;
+  return a4Pages;
+}
+
+// ==================== Print Preview ====================
+async function renderPrintPreview() {
+  const area=document.getElementById('print-preview-area');
+  const loading=document.getElementById('print-loading');
+  if(!pdfPages.length){area.innerHTML='<div class="text-sm text-slate-400 py-12">暂无发票页面</div>';return}
+
+  loading.classList.remove('hidden');
+  area.innerHTML='';
+
+  const showCut=document.getElementById('show-cut-line').checked;
+  const a4Pages=await computeLayout();
+
+  loading.classList.add('hidden');
+
+  // A4 preview: 595 x 842 px at 72dpi
+  const A4W=595, A4H=842, margin=20;
+  const contentW=A4W-margin*2, contentH=A4H-margin*2;
+  const rowH=contentH/2-4; // 2 rows per page
+
+  let html='';
+  for(const a4 of a4Pages){
+    html+=`<div class="a4-sheet mb-2" style="width:${A4W}px;height:${A4H}px;padding:${margin}px;position:relative;box-sizing:border-box">`;
+    html+=`<div style="position:absolute;top:4px;right:8px;font-size:10px;color:#94a3b8">第 ${a4.pageNum} 页</div>`;
+
+    a4.rows.forEach((row,ri)=>{
+      const rowTop=ri===0?0:(contentH/2+4);
+      const isPaired=row.length===2; // two portrait pages side by side
+      // After rotation, all pages in a row are landscape
+      const isSingle=row.length===1;
+
+      if(ri>0 && showCut){
+        html+=`<div class="cut-line" style="margin:4px 20px;position:relative"><span style="position:absolute;left:0;top:-8px;font-size:9px;color:#94a3b8">✂</span></div>`;
+      }
+
+      html+=`<div style="display:flex;gap:6px;height:${rowH}px;align-items:center;justify-content:center">`;
+
+      row.forEach((pg,ci)=>{
+        const imgRatio=pg.origW/pg.origH;
+        let slotW, slotH;
+        if(isPaired){
+          slotW=contentW/2-4;
+          slotH=rowH;
+        } else {
+          // Single (landscape, possibly rotated from portrait)
+          slotW=contentW;
+          slotH=rowH;
+        }
+
+        let imgW, imgH;
+        const slotRatio=slotW/slotH;
+        if(imgRatio>slotRatio){imgW=slotW;imgH=slotW/imgRatio;}
+        else{imgH=slotH;imgW=slotH*imgRatio;}
+
+        let tag='';
+        if(pg._wasRotated) tag='<span class="tag-rotated">竖→横</span>';
+        else if(pg.orientation==='landscape') tag='<span class="tag-landscape">横版</span>';
+        else tag='<span class="tag-portrait">竖版</span>';
+
+        html+=`<div style="width:${slotW}px;height:${slotH}px;display:flex;align-items:center;justify-content:center;background:#fafafa;border-radius:4px;overflow:hidden;position:relative">`;
+        html+=`<img src="${pg.dataURL}" style="width:${imgW}px;height:${imgH}px;object-fit:contain;border-radius:2px" />`;
+        html+=`<div style="position:absolute;top:2px;left:4px">${tag}</div>`;
+        html+=`<div style="position:absolute;bottom:2px;right:4px;font-size:9px;color:#cbd5e1;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${pg.fileName} #${pg.pageIndex}</div>`;
+        html+=`</div>`;
+      });
+
+      html+=`</div>`;
+    });
+
+    html+=`</div>`;
+  }
+
+  area.innerHTML=html;
+}
+
+// ==================== Generate Print PDF ====================
+async function generatePrintPDF() {
+  if(!pdfPages.length){showToast('没有可导出的页面','warning');return}
+  showToast('正在生成排版 PDF（含旋转处理）...','info');
+
+  const showCut=document.getElementById('show-cut-line').checked;
+  const a4Pages=await computeLayout();
+  const {jsPDF}=window.jspdf;
+  const doc=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
+
+  const A4W=210, A4H=297, margin=8;
+  const contentW=A4W-margin*2, contentH=A4H-margin*2;
+  const rowH=contentH/2-3;
+
+  let first=true;
+  for(const a4 of a4Pages){
+    if(!first) doc.addPage();
+    first=false;
+
+    a4.rows.forEach((row,ri)=>{
+      const rowY=margin+ri*(rowH+6);
+      const isPaired=row.length===2;
+
+      row.forEach((pg,ci)=>{
+        let slotW, slotX;
+        if(isPaired){
+          slotW=contentW/2-2;
+          slotX=margin+ci*(slotW+4);
+        } else {
+          slotW=contentW;
+          slotX=margin;
+        }
+
+        const imgRatio=pg.origW/pg.origH;
+        const slotRatio=slotW/rowH;
+        let imgW, imgH, imgX, imgY;
+        if(imgRatio>slotRatio){
+          imgW=slotW; imgH=slotW/imgRatio;
+          imgX=slotX; imgY=rowY+(rowH-imgH)/2;
+        } else {
+          imgH=rowH; imgW=rowH*imgRatio;
+          imgX=slotX+(slotW-imgW)/2; imgY=rowY;
+        }
+
+        doc.addImage(pg.dataURL,'JPEG',imgX,imgY,imgW,imgH);
+      });
+
+      // Cut line between rows
+      if(ri<a4.rows.length-1 && showCut){
+        const cutY=rowY+rowH+3;
+        doc.setDrawColor(200,200,200);
+        doc.setLineDashPattern([3,3],0);
+        doc.line(margin+10,cutY,A4W-margin-10,cutY);
+        doc.setLineDashPattern([],0);
+        doc.setFontSize(6);
+        doc.setTextColor(180,180,180);
+        doc.text('\u2702',margin+4,cutY+1);
+      }
+    });
+  }
+
+  const name=(document.getElementById('reimburser').value||'发票');
+  doc.save(`发票排版_${name}_${new Date().toISOString().split('T')[0]}.pdf`);
+  showToast('排版 PDF 已导出','success');
+}
+
+// ==================== Direct Print ====================
+async function directPrint() {
+  if(!pdfPages.length){showToast('没有可打印的页面','warning');return}
+  showToast('正在准备打印预览...','info');
+
+  const showCut=document.getElementById('show-cut-line').checked;
+  const a4Pages=await computeLayout();
+
+  let html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>发票打印</title>
+  <style>
+    @page{size:A4 portrait;margin:8mm}
+    body{margin:0;padding:0;font-family:sans-serif}
+    .sheet{page-break-after:always;width:100%;height:100vh;display:flex;flex-direction:column;justify-content:center;padding:8mm;box-sizing:border-box}
+    .sheet:last-child{page-break-after:auto}
+    .row{display:flex;gap:4px;justify-content:center;align-items:center;flex:1;width:100%}
+    .slot{display:flex;align-items:center;justify-content:center}
+    .slot img{max-width:100%;max-height:100%;object-fit:contain}
+    .cut-line{width:80%;border-top:1px dashed #ccc;margin:2px auto;font-size:8px;color:#ccc;text-align:center}
+  </style></head><body>`;
+
+  for(const a4 of a4Pages){
+    html+='<div class="sheet">';
+    a4.rows.forEach((row,ri)=>{
+      if(ri>0 && showCut) html+='<div class="cut-line">\u2702</div>';
+      html+='<div class="row">';
+      row.forEach(pg=>{
+        const w=row.length===2?'48%':'96%';
+        html+=`<div class="slot" style="width:${w}"><img src="${pg.dataURL}" /></div>`;
+      });
+      html+='</div>';
+    });
+    html+='</div>';
+  }
+
+  html+='</body></html>';
+  const w=window.open('','_blank');
+  w.document.write(html); w.document.close();
+  w.onload=()=>w.print();
+}
+
+// ==================== UI Updates ====================
+function updateUI() {
+  const previewSection=document.getElementById('step-preview');
+  const exportSection=document.getElementById('step-export');
+  const fileCount=document.getElementById('file-count');
+
+  if(pdfPages.length>0){
+    previewSection.classList.remove('hidden');
+    exportSection.classList.remove('hidden');
+    fileCount.classList.remove('hidden');
+    const lc=pdfPages.filter(p=>p.orientation==='landscape').length;
+    const pc=pdfPages.filter(p=>p.orientation==='portrait').length;
+    fileCount.textContent=`${pdfPages.length} 页（横${lc} 竖${pc}）/${tickets.length} 票`;
+  } else {
+    previewSection.classList.add('hidden');
+    exportSection.classList.add('hidden');
+    fileCount.classList.add('hidden');
+  }
+
+  renderTable();
+  updateStats();
+  renderDebug();
+  if(!document.getElementById('reimb-date').value){
+    document.getElementById('reimb-date').value=new Date().toISOString().split('T')[0];
+  }
+}
+
+function renderTable() {
+  const tbody=document.getElementById('ticket-table-body');
+  tbody.innerHTML='';
+  tickets.forEach((t,idx)=>{
+    const tr=document.createElement('tr');
+    tr.className='ticket-row';
+    const cell=(f,v,c='')=>`<span contenteditable="true" class="editable-cell px-1 py-0.5 rounded ${c}" data-idx="${idx}" data-field="${f}">${v}</span>`;
+    const typeBadge=t.invoiceType?`<span class="text-xs px-1.5 py-0.5 rounded ${t.invoiceType==='铁路电子客票'?'bg-blue-50 text-blue-600':t.invoiceType==='行程单'?'bg-green-50 text-green-600':'bg-slate-100 text-slate-500'}">${t.invoiceType}</span>`:'';
+    tr.innerHTML=`
+      <td class="px-3 py-3 text-slate-400 text-xs">${idx+1}</td>
+      <td class="px-3 py-3 text-xs">${typeBadge}</td>
+      <td class="px-3 py-3">${cell('passenger',t.passenger)}</td>
+      <td class="px-3 py-3">${cell('fromStation',t.fromStation)}</td>
+      <td class="px-3 py-3">${cell('toStation',t.toStation)}</td>
+      <td class="px-3 py-3 font-mono text-xs">${cell('trainNo',t.trainNo)}</td>
+      <td class="px-3 py-3 text-xs">${cell('date',t.date)}</td>
+      <td class="px-3 py-3 text-xs">${cell('seat',t.seat)}</td>
+      <td class="px-3 py-3 text-right font-semibold text-primary-600">${cell('price',t.price,'text-right')}</td>
+      <td class="px-3 py-3 text-xs text-slate-400">${cell('invoiceCode',t.invoiceCode)}</td>
+      <td class="px-3 py-3 text-xs text-slate-400">${cell('invoiceNo',t.invoiceNo)}</td>
+      <td class="px-3 py-3 text-center">
+        <button onclick="deleteTicket(${idx})" class="text-slate-300 hover:text-red-500 transition-colors p-1 rounded hover:bg-red-50" title="删除">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+        </button>
+      </td>`;
+    tbody.appendChild(tr);
+  });
+  document.querySelectorAll('.editable-cell').forEach(c=>{
+    c.addEventListener('blur',function(){
+      tickets[parseInt(this.dataset.idx)][this.dataset.field]=this.textContent.trim();
+      updateStats();
+    });
+  });
+}
+
+function updateStats() {
+  const count=tickets.length;
+  const total=tickets.reduce((s,t)=>s+parseFloat(t.price||0),0);
+  const passengers=[...new Set(tickets.map(t=>t.passenger).filter(Boolean))];
+  const dates=tickets.map(t=>t.date).filter(Boolean).sort();
+  document.getElementById('stat-count').textContent=count;
+  document.getElementById('stat-total').textContent=`¥${total.toFixed(2)}`;
+  document.getElementById('stat-passenger').textContent=passengers.length?passengers.join('、'):'-';
+  document.getElementById('stat-daterange').textContent=dates.length>=2?`${dates[0]} 至 ${dates[dates.length-1]}`:dates.length===1?dates[0]:'-';
+}
+
+function renderDebug() {
+  const area=document.getElementById('debug-area');
+  if(!rawTexts.length){area.innerHTML='<p class="text-sm text-slate-400">暂无数据</p>';return}
+  area.innerHTML=rawTexts.map(r=>`
+    <div>
+      <div class="flex items-center gap-2 mb-1">
+        <span class="text-sm font-medium text-slate-700">${r.fileName}</span>
+        <span class="text-xs text-slate-400">${r.rawItems?.length||0} 个文本项</span>
+        <button onclick="navigator.clipboard.writeText(this.parentElement.nextElementSibling.textContent);showToast('已复制','success')" class="text-xs text-primary-500 hover:text-primary-700">复制文本</button>
+      </div>
+      <div class="debug-text">${escapeHtml(r.text)}</div>
+    </div>
+  `).join('');
+}
+
+function escapeHtml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+
+// ==================== Actions ====================
+function addEmptyRow(){
+  tickets.push({passenger:'',fromStation:'',toStation:'',trainNo:'',date:'',seat:'',price:'',invoiceCode:'',invoiceNo:'',invoiceType:'手动添加',fileName:'手动添加',id:Date.now()+Math.random()});
+  updateUI();showToast('已添加空白行','success');
+}
+
+function deleteTicket(idx){
+  const t=tickets[idx];
+  if(t.pageIndices&&t.pageIndices.length){
+    const indices=[...t.pageIndices].sort((a,b)=>b-a);
+    indices.forEach(i=>pdfPages.splice(i,1));
+    tickets.forEach((tk,ti)=>{
+      if(ti!==idx&&tk.pageIndices){
+        tk.pageIndices=tk.pageIndices.map(pi=>{
+          const removed=indices.filter(ri=>ri<pi).length;
+          return pi-removed;
+        });
+      }
+    });
+  }
+  rawTexts.splice(idx,1);
+  tickets.splice(idx,1);
+  invalidateLayoutCache();
+  updateUI();
+  if(currentTab==='print') renderPrintPreview();
+}
+
+function resetAll(){
+  if(pdfPages.length>0&&!confirm('确认清空所有数据？'))return;
+  tickets=[];pdfPages=[];rawTexts=[];
+  invalidateLayoutCache();
+  updateUI();
+  document.getElementById('progress-area').classList.add('hidden');
+  showToast('已重置','success');
+}
+
+// ==================== Export ====================
+function exportExcel(){
+  if(!tickets.length){showToast('没有可导出的数据','warning');return}
+  const r=document.getElementById('reimburser').value||'';
+  const d=document.getElementById('department').value||'';
+  const reason=document.getElementById('reason').value||'';
+  const rd=document.getElementById('reimb-date').value||new Date().toISOString().split('T')[0];
+  const total=tickets.reduce((s,t)=>s+parseFloat(t.price||0),0);
+  const wb=XLSX.utils.book_new();
+
+  const wsData=[
+    ['差旅费报销单'],[],
+    ['报销人：',r,'','部门：',d,'','日期：',rd],
+    ['报销事由：',reason],[],
+    ['序号','类型','乘车人','出发站','到达站','车次','乘车日期','席别','金额（元）','发票代码','发票号码'],
+    ...tickets.map((t,i)=>[i+1,t.invoiceType||'',t.passenger,t.fromStation,t.toStation,t.trainNo,t.date,t.seat,parseFloat(t.price||0),t.invoiceCode,t.invoiceNo]),
+    [],['','','','','','','','合计',total,'',''],
+    [],['报销人签字：','','','部门负责人签字：','','','财务审核：','','','审批：']
+  ];
+  const ws=XLSX.utils.aoa_to_sheet(wsData);
+  ws['!cols']=[{wch:5},{wch:10},{wch:10},{wch:10},{wch:10},{wch:10},{wch:12},{wch:8},{wch:12},{wch:14},{wch:12}];
+  ws['!merges']=[{s:{r:0,c:0},e:{r:0,c:10}}];
+  XLSX.utils.book_append_sheet(wb,ws,'报销单');
+
+  const fn=`报销单_${r||'未命名'}_${rd}.xlsx`;
+  XLSX.writeFile(wb,fn);
+  showToast(`已导出：${fn}`,'success');
+}
+
+function exportCSV(){
+  if(!tickets.length){showToast('没有可导出的数据','warning');return}
+  const h=['序号','类型','乘车人','出发站','到达站','车次','日期','席别','金额','发票代码','发票号码'];
+  const rows=tickets.map((t,i)=>[i+1,t.invoiceType,t.passenger,t.fromStation,t.toStation,t.trainNo,t.date,t.seat,t.price,t.invoiceCode,t.invoiceNo]);
+  const blob=new Blob(['\uFEFF'+[h,...rows].map(r=>r.join(',')).join('\n')],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`火车票明细_${new Date().toISOString().split('T')[0]}.csv`;a.click();
+  showToast('CSV 已导出','success');
+}
+
+// ==================== Toast ====================
+function showToast(msg,type='info'){
+  const t=document.getElementById('toast');
+  const icons={success:'✅',error:'❌',warning:'⚠️',info:'ℹ️'};
+  document.getElementById('toast-icon').textContent=icons[type]||icons.info;
+  document.getElementById('toast-msg').textContent=msg;
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),3000);
+}
+</script>
+</body>
+</html>
