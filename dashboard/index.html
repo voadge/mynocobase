@@ -469,8 +469,8 @@
         .attend-drawer {
             background: linear-gradient(160deg, #111827 0%, #1a2332 100%);
             border: 1px solid rgba(0,212,255,0.25);
-            border-radius: 16px; width: 92vw; max-width: 420px; max-height: 90vh;
-            overflow-y: auto; padding: 24px 20px 20px;
+            border-radius: 16px; width: 92vw; max-width: 420px;
+            overflow-y: hidden; padding: 24px 20px 20px;
             box-shadow: 0 20px 60px rgba(0,0,0,0.6);
             animation: slideUp 0.3s ease;
         }
@@ -487,16 +487,10 @@
             line-height: 1; z-index: 5;
         }
         .attend-close:hover { color: #ff6b6b; }
-        .attend-info-row {
-            display: flex; justify-content: space-between; align-items: center;
-            padding: 10px 12px; border-radius: 8px; margin-bottom: 10px;
-            background: rgba(255,255,255,0.03); font-size: 0.78em;
-        }
-        .attend-info-row .label { color: #5a6a7a; }
         .attend-info-row .value { color: #e0e6ed; font-weight: 500; }
         .attend-camera-wrap {
             position: relative; border-radius: 12px; overflow: hidden;
-            background: #000; aspect-ratio: 4/3; margin-bottom: 12px;
+            background: #000; aspect-ratio: 4/3; margin-bottom: 8px;
             border: 2px solid rgba(0,212,255,0.15);
         }
         .attend-camera-wrap video, .attend-camera-wrap canvas {
@@ -505,8 +499,9 @@
         .attend-camera-wrap canvas { position: absolute; top: 0; left: 0; }
         .attend-camera-wrap .face-indicator {
             position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
-            width: 140px; height: 170px; border: 2px dashed rgba(0,255,136,0.6);
-            border-radius: 50% / 40%; pointer-events: none;
+            width: min(50%, 160px); height: min(82%, 320px);
+            border: 2px dashed rgba(0,255,136,0.6);
+            border-radius: 45% / 30%; pointer-events: none;
         }
         .attend-camera-wrap .face-indicator.verified { border-color: #00ff88; border-style: solid; }
         .attend-camera-wrap .face-indicator.unverified { border-color: #ff6b6b; }
@@ -518,13 +513,16 @@
         .attend-camera-wrap .face-status.verified { color: #00ff88; }
         .attend-camera-wrap .face-status.unverified { color: #ff6b6b; }
         .attend-capture-btn {
-            display: block; width: 100%; padding: 10px; border-radius: 8px;
-            border: 1px solid rgba(0,212,255,0.3); background: rgba(0,212,255,0.1);
-            color: #00d4ff; font-size: 0.9em; cursor: pointer; margin-bottom: 12px;
-            transition: all 0.2s; font-family: inherit;
+            position: absolute; bottom: 12px; right: 12px;
+            width: 54px; height: 54px; border-radius: 50%;
+            border: 3px solid #00d4ff; background: rgba(0,212,255,0.15);
+            color: #00d4ff; font-size: 1.6em; cursor: pointer; line-height: 1;
+            transition: all 0.2s; font-family: inherit; z-index: 2;
+            display: flex; align-items: center; justify-content: center;
+            backdrop-filter: blur(4px);
         }
-        .attend-capture-btn:hover { background: rgba(0,212,255,0.2); }
-        .attend-capture-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .attend-capture-btn:hover { background: rgba(0,212,255,0.3); }
+        .attend-capture-btn:disabled { opacity: 0.3; cursor: not-allowed; }
         .attend-submit {
             display: block; width: 100%; padding: 12px; border-radius: 10px;
             border: none; font-size: 1em; font-weight: 600; letter-spacing: 2px;
@@ -570,11 +568,16 @@
         }
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
         .camera-retry-btn {
-            display: none; padding: 10px; border-radius: 6px; border: 1px solid rgba(255,107,107,0.3);
-            background: rgba(255,107,107,0.08); color: #ff6b6b;
-            font-size: 0.85em; cursor: pointer; font-family: inherit; transition: all 0.2s;
+            display: none; position: absolute; top: 8px; right: 8px;
+            width: 34px; height: 34px; border-radius: 50%; z-index: 2;
+            border: 1px solid rgba(255,107,107,0.4); background: rgba(0,0,0,0.4);
+            color: #ff6b6b; font-size: 1em; cursor: pointer;
+            transition: all 0.2s; font-family: inherit;
+            display: none; align-items: center; justify-content: center;
+            backdrop-filter: blur(4px);
         }
-        .camera-retry-btn:hover { background: rgba(255,107,107,0.15); }
+        .camera-retry-btn:hover { background: rgba(255,107,107,0.3); }
+
 
         .attend-submit:disabled { opacity: 0.3; cursor: not-allowed; }
         .attend-submit:hover:not(:disabled) { filter: brightness(1.15); }
@@ -584,6 +587,7 @@
         .attend-location-status.getting { color: #ffd93d; }
         .attend-location-status.got { color: #00ff88; }
         .attend-location-status.error { color: #ff6b6b; }
+        .attend-manual-location input:focus { outline:none; border-color:#00d4ff; }
 
         /* 4 标签切换 */
         .attend-type-tabs { display: flex; gap: 6px; margin-bottom: 16px; }
@@ -636,15 +640,14 @@
         .attend-leave-status.rejected { display: block; background: rgba(255,107,107,0.1); border: 1px solid rgba(255,107,107,0.3); color: #ff6b6b; }
 
         /* 摄像头切换 */
-        .camera-action-row { display: flex; gap: 8px; margin-bottom: 12px; }
-        .camera-action-row button {
-            flex: 1; padding: 10px; border-radius: 8px; font-family: inherit;
-            font-size: 0.85em; cursor: pointer; transition: all 0.2s;
-            line-height: 1.4; display: flex; align-items: center; justify-content: center;
-        }
         .camera-switch-btn {
-            border: 1px solid rgba(0,212,255,0.25); background: rgba(0,212,255,0.06);
-            color: #00d4ff;
+            position: absolute; bottom: 12px; left: 12px;
+            width: 40px; height: 40px; border-radius: 50%; z-index: 2;
+            border: 1px solid rgba(0,212,255,0.4); background: rgba(0,0,0,0.4);
+            color: #00d4ff; font-size: 1.2em; cursor: pointer;
+            transition: all 0.2s; font-family: inherit;
+            display: flex; align-items: center; justify-content: center;
+            backdrop-filter: blur(4px);
         }
         .camera-switch-btn:hover { background: rgba(0,212,255,0.14); }
         .camera-switch-btn:disabled { opacity: 0.4; cursor: not-allowed; }
@@ -1004,7 +1007,7 @@
         }
 
         // 考勤打卡 - 完整版（拍照 + 定位 + 人脸检测 + 请假/出差）
-        let attendType = '签到';
+        let attendType = '上班';
         let attendPhoto = null;
         let attendLocation = null;
         let attendLocationText = '--';
@@ -1015,6 +1018,8 @@
         let _deviceFp = null;
         let _fingerVerifiedAt = null;
         let _cameraFacingMode = 'user';
+        let _manualLocation = null;
+        let _cameraFallbackMode = false;
 
         function onAttendTypeChange(type, el) {
             attendType = type;
@@ -1047,6 +1052,60 @@
             }
         }
 
+        async function preCheckPermissions() {
+            var result = {camera: 'prompt', geolocation: 'prompt'};
+            if (navigator.permissions) {
+                try {
+                    var g = await navigator.permissions.query({name:'geolocation'});
+                    result.geolocation = g.state;
+                } catch(e) {}
+                try {
+                    var c = await navigator.permissions.query({name:'camera'});
+                    result.camera = c.state;
+                } catch(e) {}
+            }
+            if (result.geolocation === 'denied') {
+                document.getElementById('locationStatus').innerHTML = '⚠ 定位权限已被浏览器拒绝，请在浏览器网站设置中开启定位权限';
+                document.getElementById('locationStatus').className = 'attend-location-status error';
+            }
+            if (result.camera === 'denied') {
+                document.getElementById('faceStatus').textContent = '⚠ 相机不可用，请用相册上传';
+                document.getElementById('faceStatus').className = 'face-status unverified';
+                document.getElementById('captureBtn').disabled = true;
+                document.getElementById('cameraSwitchBtn').disabled = true;
+                _cameraFallbackMode = true;
+            }
+            return result;
+        }
+
+        function confirmManualLocation() {
+            var val = document.getElementById('manualLocationInput').value.trim();
+            if (!val) return;
+            _manualLocation = val;
+            document.getElementById('attendLocation').textContent = '手动: ' + val;
+            document.getElementById('locationStatus').innerHTML = '✓ 位置已手动确认';
+            document.getElementById('locationStatus').className = 'attend-location-status got';
+            gpsState = 'manual';
+            document.getElementById('manualLocationSection').style.display = 'none';
+            updateSubmitState();
+        }
+
+        function _handleFilePhoto(e) {
+            var file = e.target.files && e.target.files[0];
+            if (!file) return;
+            var reader = new FileReader();
+            reader.onload = function(ev) {
+                attendPhoto = ev.target.result;
+                document.getElementById('captureBtn').textContent = '📷';
+                document.getElementById('faceStatus').textContent = 'ℹ 已通过相册上传照片';
+                document.getElementById('faceStatus').className = 'face-status';
+                faceDetected = null;
+                updateSubmitState();
+            };
+            reader.readAsDataURL(file);
+            e.target.value = '';
+        }
+
         function openAttendModal() {
             document.getElementById('attendOverlay').classList.add('show');
             document.getElementById('attendTime').textContent = new Date().toLocaleString('zh-CN');
@@ -1058,9 +1117,9 @@
             if (attendState && attendState.leaveRejected) {
                 attendType = attendState.leaveRec.check_type === '出差' ? '出差' : '请假';
             } else if (attendState && attendState.checkIn && !attendState.checkOut && !attendState.leavePending && !attendState.leaveApproved) {
-                attendType = '签退';
+                attendType = '下班';
             } else {
-                attendType = '签到';
+                attendType = '上班';
             }
             // Reset UI
             var tabs = document.querySelectorAll('.attend-type-tab');
@@ -1084,7 +1143,7 @@
             document.getElementById('faceStatus').textContent = '📷 请拍摄人脸';
             document.getElementById('faceStatus').className = 'face-status';
             document.getElementById('faceIndicator').className = 'face-indicator';
-            document.getElementById('captureBtn').textContent = '📷 拍摄照片';
+            document.getElementById('captureBtn').textContent = '📷';
             document.getElementById('captureBtn').disabled = true;
             var retryBtn = document.getElementById('cameraRetryBtn');
             if (retryBtn) retryBtn.style.display = 'none';
@@ -1106,9 +1165,15 @@
             document.getElementById('vFinger').className = 'v-item';
             document.getElementById('vFinger').textContent = '🔐 指纹';
             gpsState = 'fail';
+            _manualLocation = null;
+            _cameraFallbackMode = false;
+            document.getElementById('manualLocationSection').style.display = 'none';
+            document.getElementById('manualLocationInput').value = '';
             document.getElementById('fingerConfirmOverlay').classList.remove('visible');
+            preCheckPermissions();
+            setTimeout(verifyFingerprint, 400);
             // Start camera
-            startCamera();
+            if (!_cameraFallbackMode) startCamera();
             // Start GPS
             getLocation();
             // Update time every second
@@ -1124,17 +1189,21 @@
             fetchAttendance();
         }
 
+        var _cameraZoom = 0.8;
         var _cameraResLevel = 0;
         var _cameraResolutions = [
             {width:{ideal:1280},height:{ideal:720}},
             {width:{ideal:640},height:{ideal:480}},
             {width:{ideal:320},height:{ideal:240}}
         ];
+
         function startCamera() {
+            _cameraZoom = 0.8;
             var v = document.getElementById('attendVideo');
+            if (v) v.style.transform = 'scale(1)';
             var retryBtn = document.getElementById('cameraRetryBtn');
             if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                document.getElementById('faceStatus').textContent = '⚠ 浏览器不支持相机，可跳过拍照直接打卡';
+                document.getElementById('faceStatus').textContent = '⚠ 相机不可用';
                 document.getElementById('faceStatus').className = 'face-status';
                 document.getElementById('captureBtn').disabled = true;
                 document.getElementById('cameraSwitchBtn').disabled = true;
@@ -1152,12 +1221,14 @@
                 s.innerHTML = '⚠ 相机不可用，请在浏览器网站设置中允许摄像头权限后重试';
             }
             s.className = 'face-status unverified';
+            _cameraFallbackMode = true;
+            document.getElementById('captureBtn').disabled = false;
+            document.getElementById('captureBtn').textContent = '📁';
         }
 
         function _tryCamera(v, retryBtn) {
             if (_cameraResLevel >= _cameraResolutions.length) {
                 _showCameraHelp();
-                document.getElementById('captureBtn').disabled = true;
                 document.getElementById('cameraSwitchBtn').disabled = true;
                 if (retryBtn) retryBtn.style.display = 'block';
                 return;
@@ -1180,7 +1251,6 @@
                 .catch(function(err){
                     if (_cameraResLevel === 0 && err.name === 'NotAllowedError') {
                         _showCameraHelp();
-                        document.getElementById('captureBtn').disabled = true;
                         document.getElementById('cameraSwitchBtn').disabled = true;
                         if (retryBtn) retryBtn.style.display = 'block';
                         return;
@@ -1192,6 +1262,7 @@
 
         function switchCamera() {
             _cameraFacingMode = (_cameraFacingMode === 'user') ? 'environment' : 'user';
+            _cameraZoom = 0.8;
             stopCamera();
             document.getElementById('faceStatus').textContent = '🔄 切换中...';
             document.getElementById('captureBtn').disabled = true;
@@ -1200,6 +1271,7 @@
         }
 
         function retryCamera() {
+            _cameraZoom = 0.8;
             document.getElementById('faceStatus').textContent = '📷 正在重新连接相机...';
             document.getElementById('faceStatus').className = 'face-status';
             document.getElementById('cameraRetryBtn').style.display = 'none';
@@ -1244,6 +1316,34 @@
             loc.className = 'attend-location-status error';
         }
 
+        function _getLocationByIP() {
+            document.getElementById('attendLocation').innerHTML = 'IP定位中...';
+            document.getElementById('locationStatus').innerHTML = '正在通过IP获取位置...';
+            document.getElementById('locationStatus').className = 'attend-location-status getting';
+            fetch('https://ip-api.com/json/?lang=zh-CN&fields=status,country,regionName,city,lat,lon,query')
+                .then(function(r){ return r.json(); })
+                .then(function(data){
+                    if (data && data.status === 'success') {
+                        attendLocation = {lat: data.lat, lng: data.lon, accuracy: null};
+                        gpsState = 'ip';
+                        attendLocationText = 'IP定位: ' + data.regionName + data.city + ' (IP: ' + data.query + ')';
+                        document.getElementById('attendLocation').textContent = attendLocationText;
+                        document.getElementById('locationStatus').innerHTML = '✓ IP定位成功（城市级精度）';
+                        document.getElementById('locationStatus').className = 'attend-location-status got';
+                        document.getElementById('manualLocationSection').style.display = 'none';
+                    } else {
+                        _showGpsHelp();
+                        document.getElementById('manualLocationSection').style.display = 'block';
+                    }
+                    updateSubmitState();
+                })
+                .catch(function(){
+                    _showGpsHelp();
+                    document.getElementById('manualLocationSection').style.display = 'block';
+                    updateSubmitState();
+                });
+        }
+
         function _getLocationOnce(highAccuracy) {
             navigator.geolocation.getCurrentPosition(
                 function(pos){
@@ -1281,8 +1381,7 @@
                     else if (err.code === 2) msg = '位置不可用';
                     else if (err.code === 3) msg = '获取超时';
                     document.getElementById('attendLocation').innerHTML = msg + ' <a href="javascript:void(0)" onclick="getLocation()" style="color:#00d4ff;font-size:0.82em">重试</a>';
-                    _showGpsHelp();
-                    updateSubmitState();
+                    _getLocationByIP();
                 },
                 {enableHighAccuracy:highAccuracy, timeout:15000, maximumAge:5000}
             );
@@ -1291,13 +1390,26 @@
         function capturePhoto() {
             var v = document.getElementById('attendVideo');
             var c = document.getElementById('attendCanvas');
-            if (!v || !v.videoWidth) return;
+            if (!v || !v.videoWidth) {
+                if (_cameraFallbackMode || !cameraStream) {
+                    document.getElementById('cameraFileInput').click();
+                }
+                return;
+            }
             c.width = v.videoWidth;
             c.height = v.videoHeight;
             var ctx = c.getContext('2d');
-            ctx.drawImage(v, 0, 0);
+            if (_cameraZoom > 1) {
+                var cw = v.videoWidth / _cameraZoom;
+                var ch = v.videoHeight / _cameraZoom;
+                var cx = (v.videoWidth - cw) / 2;
+                var cy = (v.videoHeight - ch) / 2;
+                ctx.drawImage(v, cx, cy, cw, ch, 0, 0, c.width, c.height);
+            } else {
+                ctx.drawImage(v, 0, 0);
+            }
             attendPhoto = c.toDataURL('image/jpeg', 0.92);
-            document.getElementById('captureBtn').textContent = '✓ 已拍摄，点击重拍';
+            document.getElementById('captureBtn').textContent = '✓';
             detectFace(c);
         }
 
@@ -1346,12 +1458,12 @@
                         document.getElementById('faceIndicator').className = 'face-indicator unverified';
                     }
                 } catch(e) {
-                    document.getElementById('faceStatus').textContent = '⚠ 人脸检测不可用，已拍摄照片';
+                    document.getElementById('faceStatus').textContent = '📷 已拍照';
                     document.getElementById('faceStatus').className = 'face-status';
                     faceDetected = null;
                 }
             } else {
-                document.getElementById('faceStatus').textContent = 'ℹ 浏览器不支持人脸检测，已拍摄照片';
+                document.getElementById('faceStatus').textContent = '📷 已拍照';
                 document.getElementById('faceStatus').className = 'face-status';
                 faceDetected = null;
             }
@@ -1378,18 +1490,20 @@
             var faceOk = (faceDetected === true);
             var fingerOk = _fingerVerified;
 
-            var gpsClass = gpsState === 'ok' ? 'ok' : 'fail';
+            var gpsOk = (gpsState === 'ok' || gpsState === 'manual' || gpsState === 'ip');
+            var gpsClass = gpsOk ? 'ok' : 'fail';
             vGps.className = 'v-item ' + gpsClass;
-            vGps.textContent = gpsState === 'ok' ? '📍 定位 ✓' : '📍 定位 ✗';
+            vGps.textContent = gpsOk ? (gpsState === 'manual' ? '📍 定位（手动）✓' : gpsState === 'ip' ? '📍 IP定位 ✓' : '📍 定位 ✓') : '📍 定位 ✗';
 
             if (faceDetected === true) { vFace.className = 'v-item ok'; vFace.textContent = '📷 人脸 ✓'; }
+            else if (faceDetected === null) { vFace.className = 'v-item ok'; vFace.textContent = '📷 已拍照'; }
             else if (!attendPhoto) { vFace.className = 'v-item need'; vFace.textContent = '📷 人脸 ○'; }
             else { vFace.className = 'v-item fail'; vFace.textContent = '📷 人脸 ✗'; }
 
             if (fingerOk) { vFinger.className = 'v-item ok'; vFinger.textContent = '🔐 指纹 ✓'; }
             else { vFinger.className = 'v-item need'; vFinger.textContent = '🔐 指纹 ○'; }
 
-            if (gpsState === 'ok') {
+            if (gpsOk) {
                 if (faceOk || fingerOk || attendPhoto) {
                     btn.disabled = false;
                     btn.textContent = '确认打卡';
@@ -1515,6 +1629,8 @@
                     body.latitude = attendLocation.lat;
                     body.longitude = attendLocation.lng;
                     body.gps_accuracy = Math.round(attendLocation.accuracy);
+                } else if (_manualLocation) {
+                    body.manual_location = _manualLocation;
                 }
 
                 if (isLeave) {
@@ -1535,6 +1651,8 @@
                     // Normal check-in/out
                     var methods = [];
                     if (gpsState === 'ok') methods.push('gps');
+                    else if (gpsState === 'ip') methods.push('ip_location');
+                    else if (gpsState === 'manual') methods.push('manual_location');
                     if (faceDetected === true) methods.push('face');
                     else if (faceDetected === false) methods.push('face_fail');
                     else if (attendPhoto) methods.push('photo_only');
@@ -1542,9 +1660,9 @@
                     body.verify_status = methods.join('+');
 
                     var reasons = [];
-                    if (gpsState !== 'ok') reasons.push('GPS定位异常');
-                    if (!faceDetected && attendPhoto) reasons.push('人脸检测失败');
-                    if (!_fingerVerified && gpsState !== 'ok') reasons.push('未完成双因子验证');
+                    if (gpsState !== 'ok' && gpsState !== 'ip' && gpsState !== 'manual') reasons.push('GPS定位异常');
+                    if (faceDetected === false && attendPhoto) reasons.push('人脸检测失败');
+                    if (!_fingerVerified && gpsState !== 'ok' && gpsState !== 'ip' && gpsState !== 'manual') reasons.push('未完成双因子验证');
                     body.anomaly_reason = reasons.join('; ') || null;
 
                     if (_deviceFp && _fingerVerified) {
@@ -1557,19 +1675,18 @@
                     if (attendPhoto) {
                         body.photo_hash = await computePhotoHash(attendPhoto);
                     }
-                    // Conditionally upload full photo when GPS failed
-                    if (attendPhoto && gpsState !== 'ok') {
-                        body.photo = attendPhoto;
-                    }
                     // Fallback device fingerprint
                     if (!body.device_fingerprint) {
                         body.device_fingerprint = navigator.userAgent.substring(0, 200) + '|' + screen.width + 'x' + screen.height;
                     }
                 }
 
+                var _token = localStorage.getItem("NOCOBASE_TOKEN") || localStorage.getItem("nocobase_token");
+                var _headers = { 'Content-Type': 'application/json' };
+                if (_token) _headers['Authorization'] = 'Bearer ' + _token;
                 var r = await fetch('/api/attendance_records:create', {
                     method: 'POST', credentials: 'include',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: _headers,
                     body: JSON.stringify(body)
                 });
                 if (r.ok) {
@@ -1586,8 +1703,10 @@
                     }
                     fetchAttendance();
                 } else {
-                    var errData = await r.json().catch(function(){return {};});
-                    btn.textContent = '✗ 失败，重试';
+                    var errData = await r.json().catch(function(){return {error: '无法解析错误响应'};});
+                    var errMsg = (errData && (errData.errors || errData.error || JSON.stringify(errData))) || 'HTTP ' + r.status;
+                    if (typeof errMsg === 'object') errMsg = JSON.stringify(errMsg);
+                    btn.textContent = '✗ ' + errMsg.substring(0, 60) + (errMsg.length > 60 ? '...' : '');
                     btn.disabled = false;
                     console.error('Attendance failed:', errData);
                 }
@@ -1614,6 +1733,10 @@
                     }
                 });
             }
+            var fileInput = document.getElementById('cameraFileInput');
+            if (fileInput) {
+                fileInput.addEventListener('change', _handleFilePhoto);
+            }
         });
 
 
@@ -1625,17 +1748,20 @@
                 var today = new Date();
                 var start = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString();
                 var end = new Date(today.getFullYear(), today.getMonth(), today.getDate()+1).toISOString();
+                var _listToken = localStorage.getItem("NOCOBASE_TOKEN") || localStorage.getItem("nocobase_token");
+                var _listHeaders = {};
+                if (_listToken) _listHeaders['Authorization'] = 'Bearer ' + _listToken;
                 var r = await fetch('/api/attendance_records:list?filter[check_time][$dateBetween]=' +
                     encodeURIComponent(start) + ',' + encodeURIComponent(end) +
-                    '&sort=-check_time&pageSize=10&appends=createdBy', { credentials:'include' });
+                    '&sort=-check_time&pageSize=10&appends=createdBy', { credentials:'include', headers:_listHeaders });
                 if (r.ok) {
                     var data = await r.json();
                     var recs = data.data || [];
                     var checkIn = null, checkOut = null, leaveRec = null;
                     for (var i = 0; i < recs.length; i++) {
                         var t = recs[i];
-                        if (t.check_type === '签到' && !checkIn) checkIn = t;
-                        if (t.check_type === '签退' && !checkOut) checkOut = t;
+                        if (t.check_type === '上班' && !checkIn) checkIn = t;
+                        if (t.check_type === '下班' && !checkOut) checkOut = t;
                         if ((t.check_type === '请假' || t.check_type === '出差') && !leaveRec) leaveRec = t;
                     }
                     attendState = {
@@ -1661,14 +1787,14 @@
                         st.textContent = '❌' + label3 + '被驳回'; st.className = 'attend-status rejected';
                         btn.textContent = label3 + '被驳回，点击重试'; btn.className = 'attend-btn';
                     } else if (checkOut) {
-                        st.textContent = '已签退'; st.className = 'attend-status out';
+                        st.textContent = '已下班'; st.className = 'attend-status out';
                         btn.textContent = '已打卡'; btn.className = 'attend-btn checked';
                     } else if (checkIn) {
-                        st.textContent = '已签到'; st.className = 'attend-status';
-                        btn.textContent = '签退'; btn.className = 'attend-btn';
+                        st.textContent = '已上班'; st.className = 'attend-status';
+                        btn.textContent = '下班'; btn.className = 'attend-btn';
                     } else {
-                        st.textContent = '未签到'; st.className = 'attend-status out';
-                        btn.textContent = '签到'; btn.className = 'attend-btn';
+                        st.textContent = '未上班'; st.className = 'attend-status out';
+                        btn.textContent = '上班'; btn.className = 'attend-btn';
                     }
                 }
             } catch(e) { console.error('fetchAttendance error:', e); }
@@ -1851,32 +1977,33 @@
             <button class="attend-close" onclick="closeAttendModal()" title="关闭">✕</button>
             <h3>📸 考勤打卡</h3>
             <div class="attend-type-tabs" id="attendTypeTabs">
-                <div class="attend-type-tab selected" data-type="签到" onclick="onAttendTypeChange('签到',this)">✅ 签到</div>
-                <div class="attend-type-tab" data-type="签退" onclick="onAttendTypeChange('签退',this)">🏠 签退</div>
+                <div class="attend-type-tab selected" data-type="上班" onclick="onAttendTypeChange('上班',this)">✅ 上班</div>
+                <div class="attend-type-tab" data-type="下班" onclick="onAttendTypeChange('下班',this)">🏠 下班</div>
                 <div class="attend-type-tab" data-type="请假" onclick="onAttendTypeChange('请假',this)">📋 请假</div>
                 <div class="attend-type-tab" data-type="出差" onclick="onAttendTypeChange('出差',this)">🚗 出差</div>
             </div>
-            <div class="attend-info-row">
-                <span class="label">🕐 当前时间</span>
-                <span class="value" id="attendTime">--</span>
+            <div class="attend-info-row" style="display:flex;gap:8px;">
+                <div style="flex:1;display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border-radius:8px;background:rgba(255,255,255,0.03);font-size:0.72em;gap:4px;">
+                    <span style="color:#5a6a7a;">🕐</span>
+                    <span class="value" id="attendTime" style="color:#e0e6ed;font-weight:500;font-size:0.9em;">--</span>
+                </div>
+                <div style="flex:3;display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border-radius:8px;background:rgba(255,255,255,0.03);font-size:0.72em;">
+                    <span style="color:#5a6a7a;flex-shrink:0;">📍</span>
+                    <span class="value" id="attendLocation" style="color:#e0e6ed;font-weight:500;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-left:6px;">获取中...</span>
+                </div>
             </div>
-            <div class="attend-info-row">
-                <span class="label">📍 位置</span>
-                <span class="value" id="attendLocation">获取中...</span>
-            </div>
-            <!-- 正常打卡区域（签到/签退） -->
+            <!-- 正常打卡区域（上班/下班） -->
             <div id="attendNormalSection">
                 <div class="attend-camera-wrap" id="cameraWrap">
                     <video id="attendVideo" autoplay playsinline></video>
                     <canvas id="attendCanvas"></canvas>
                     <div class="face-indicator" id="faceIndicator"></div>
                     <div class="face-status" id="faceStatus">📷 请拍摄人脸</div>
+                    <button class="camera-switch-btn" id="cameraSwitchBtn" onclick="switchCamera()">🔄</button>
+                    <button class="camera-retry-btn" id="cameraRetryBtn" onclick="retryCamera()">🔄</button>
+                    <button class="attend-capture-btn" id="captureBtn" onclick="capturePhoto()">📷</button>
                 </div>
-                <div class="camera-action-row">
-                    <button class="camera-retry-btn" id="cameraRetryBtn" onclick="retryCamera()">🔄 重连相机</button>
-                    <button class="camera-switch-btn" id="cameraSwitchBtn" onclick="switchCamera()">🔄 切换摄像头</button>
-                </div>
-                <button class="attend-capture-btn" id="captureBtn" onclick="capturePhoto()">📷 拍摄照片</button>
+                <input type="file" id="cameraFileInput" accept="image/*" capture="environment" style="display:none">
                 <div class="attend-finger-row">
                     <span class="label">🔐 本机验证</span>
                     <span class="attend-finger-status unavailable" id="fingerStatus">检测中...</span>
@@ -1909,6 +2036,10 @@
                 确认打卡
             </button>
             <div class="attend-location-status getting" id="locationStatus">正在获取位置...</div>
+            <div class="attend-manual-location" id="manualLocationSection" style="display:none;margin-top:6px">
+                <input type="text" id="manualLocationInput" placeholder="输入位置描述或坐标（如：公司A栋3楼）" style="width:100%;padding:6px 10px;border-radius:6px;border:1px solid #334;background:#1a2332;color:#e0e6ed;font-size:0.85em">
+                <button class="attend-manual-loc-btn" id="manualLocationBtn" onclick="confirmManualLocation()" style="margin-top:4px;padding:4px 12px;border-radius:6px;border:1px solid #00d4ff;background:transparent;color:#00d4ff;font-size:0.82em;cursor:pointer">✓ 确认位置</button>
+            </div>
             <!-- 指纹确认框（嵌入） -->
             <div class="finger-confirm-overlay" id="fingerConfirmOverlay">
                 <div class="finger-confirm-dialog">
