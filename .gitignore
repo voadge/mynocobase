@@ -63,3 +63,9 @@ acme.sh/
 # Misc
 mcp-body.json
 .env
+
+# Business documents
+*.docx
+
+# Plugins (boilerplate)
+plugins/
