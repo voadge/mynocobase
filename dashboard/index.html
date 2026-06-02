@@ -570,10 +570,9 @@
         }
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
         .camera-retry-btn {
-            display: none; margin-top: -8px; margin-bottom: 10px; width: 100%;
-            padding: 6px; border-radius: 6px; border: 1px solid rgba(255,107,107,0.3);
+            display: none; padding: 10px; border-radius: 6px; border: 1px solid rgba(255,107,107,0.3);
             background: rgba(255,107,107,0.08); color: #ff6b6b;
-            font-size: 0.75em; cursor: pointer; text-align: center; font-family: inherit;
+            font-size: 0.85em; cursor: pointer; font-family: inherit; transition: all 0.2s;
         }
         .camera-retry-btn:hover { background: rgba(255,107,107,0.15); }
 
@@ -605,10 +604,16 @@
         .attend-leave-section .date-row {
             display: flex; gap: 8px; margin-bottom: 10px;
         }
+        .attend-leave-section .date-row .date-field {
+            flex: 1; display: flex; flex-direction: column; gap: 3px;
+        }
+        .attend-leave-section .date-row .date-field label {
+            font-size: 0.7em; color: #5a6a7a; letter-spacing: 1px;
+        }
         .attend-leave-section .date-row input[type="date"] {
-            flex: 1; padding: 8px 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.15);
+            width: 100%; padding: 8px 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.15);
             background: rgba(255,255,255,0.05); color: #e0e6ed; font-size: 0.82em;
-            font-family: inherit; outline: none;
+            font-family: inherit; outline: none; box-sizing: border-box;
         }
         .attend-leave-section .date-row input[type="date"]:focus { border-color: #00d4ff; }
         .attend-leave-section .date-row input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.7); cursor: pointer; }
@@ -632,10 +637,14 @@
 
         /* 摄像头切换 */
         .camera-action-row { display: flex; gap: 8px; margin-bottom: 12px; }
-        .camera-action-row button { flex: 1; padding: 10px; border-radius: 8px; font-family: inherit; }
+        .camera-action-row button {
+            flex: 1; padding: 10px; border-radius: 8px; font-family: inherit;
+            font-size: 0.85em; cursor: pointer; transition: all 0.2s;
+            line-height: 1.4; display: flex; align-items: center; justify-content: center;
+        }
         .camera-switch-btn {
             border: 1px solid rgba(0,212,255,0.25); background: rgba(0,212,255,0.06);
-            color: #00d4ff; font-size: 0.85em; cursor: pointer; transition: all 0.2s;
+            color: #00d4ff;
         }
         .camera-switch-btn:hover { background: rgba(0,212,255,0.14); }
         .camera-switch-btn:disabled { opacity: 0.4; cursor: not-allowed; }
@@ -1036,7 +1045,7 @@
             document.getElementById('attendSubmit').disabled = true;
             document.getElementById('attendLocation').textContent = '获取中...';
             document.getElementById('locationStatus').className = 'attend-location-status getting';
-            document.getElementById('locationStatus').textContent = '正在获取位置...';
+            document.getElementById('locationStatus').innerHTML = '正在获取位置...';
             // Determine attendType from attendState
             if (attendState && attendState.checkIn && !attendState.checkOut && !attendState.leavePending && !attendState.leaveApproved) {
                 attendType = '签退';
@@ -1118,17 +1127,26 @@
             _tryCamera(v, retryBtn);
         }
 
+        function _showCameraHelp() {
+            var s = document.getElementById('faceStatus');
+            if (_isMobile) {
+                s.innerHTML = '⚠ 相机不可用：浏览器相机权限未允许，请在浏览器设置中开启相机后重试';
+            } else {
+                s.innerHTML = '⚠ 相机不可用，请在浏览器网站设置中允许摄像头权限后重试';
+            }
+            s.className = 'face-status unverified';
+        }
+
         function _tryCamera(v, retryBtn) {
             if (_cameraResLevel >= _cameraResolutions.length) {
-                document.getElementById('faceStatus').textContent = '⚠ 相机不可用';
-                document.getElementById('faceStatus').className = 'face-status unverified';
+                _showCameraHelp();
                 document.getElementById('captureBtn').disabled = true;
                 document.getElementById('cameraSwitchBtn').disabled = true;
                 if (retryBtn) retryBtn.style.display = 'block';
                 return;
             }
             var res = _cameraResolutions[_cameraResLevel];
-            var constraints = {video:Object.assign({}, res, {facingMode:_cameraFacingMode})};
+            var constraints = {video:Object.assign({}, res, {facingMode:_cameraFacingMode}), audio:false};
             navigator.mediaDevices.getUserMedia(constraints)
                 .then(function(stream){
                     cameraStream = stream;
@@ -1142,7 +1160,14 @@
                     document.getElementById('faceStatus').className = 'face-status';
                     if (retryBtn) retryBtn.style.display = 'none';
                 })
-                .catch(function(){
+                .catch(function(err){
+                    if (_cameraResLevel === 0 && err.name === 'NotAllowedError') {
+                        _showCameraHelp();
+                        document.getElementById('captureBtn').disabled = true;
+                        document.getElementById('cameraSwitchBtn').disabled = true;
+                        if (retryBtn) retryBtn.style.display = 'block';
+                        return;
+                    }
                     _cameraResLevel++;
                     _tryCamera(v, retryBtn);
                 });
@@ -1175,20 +1200,31 @@
         }
 
         var _gpsRetried = false;
+        var _isMobile = /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
         function getLocation() {
             if (!navigator.geolocation) {
                 document.getElementById('attendLocation').textContent = '不支持';
-                document.getElementById('locationStatus').textContent = '⚠ 浏览器不支持定位';
+                document.getElementById('locationStatus').innerHTML = '⚠ 浏览器不支持定位';
                 document.getElementById('locationStatus').className = 'attend-location-status error';
                 gpsState = 'fail';
                 updateSubmitState();
                 return;
             }
             document.getElementById('attendLocation').innerHTML = '获取中... <a href="javascript:void(0)" onclick="getLocation()" style="color:#00d4ff;font-size:0.82em">重试</a>';
-            document.getElementById('locationStatus').textContent = '正在获取位置...';
+            document.getElementById('locationStatus').innerHTML = '正在获取位置...';
             document.getElementById('locationStatus').className = 'attend-location-status getting';
             _gpsRetried = false;
             _getLocationOnce(true);
+        }
+
+        function _showGpsHelp() {
+            var loc = document.getElementById('locationStatus');
+            if (_isMobile) {
+                loc.innerHTML = '⚠ 定位失败：浏览器位置权限未允许，请在浏览器设置中开启定位后重试';
+            } else {
+                loc.innerHTML = '⚠ 定位失败，请在浏览器网站设置中允许位置权限后重试';
+            }
+            loc.className = 'attend-location-status error';
         }
 
         function _getLocationOnce(highAccuracy) {
@@ -1207,7 +1243,7 @@
                     else accLabel = '（精度低）';
                     attendLocationText = pos.coords.latitude.toFixed(5) + ',' + pos.coords.longitude.toFixed(5) + ' ±' + acc + 'm ' + accLabel;
                     document.getElementById('attendLocation').textContent = attendLocationText;
-                    document.getElementById('locationStatus').textContent = '✓ 位置已获取';
+                    document.getElementById('locationStatus').innerHTML = '✓ 位置已获取';
                     document.getElementById('locationStatus').className = 'attend-location-status got';
                     if (attendType === '请假' || attendType === '出差') {
                         // Keep optional status
@@ -1228,8 +1264,7 @@
                     else if (err.code === 2) msg = '位置不可用';
                     else if (err.code === 3) msg = '获取超时';
                     document.getElementById('attendLocation').innerHTML = msg + ' <a href="javascript:void(0)" onclick="getLocation()" style="color:#00d4ff;font-size:0.82em">重试</a>';
-                    document.getElementById('locationStatus').textContent = '⚠ 位置获取失败，将不记录坐标';
-                    document.getElementById('locationStatus').className = 'attend-location-status error';
+                    _showGpsHelp();
                     updateSubmitState();
                 },
                 {enableHighAccuracy:highAccuracy, timeout:15000, maximumAge:5000}
@@ -1831,8 +1866,14 @@
             <!-- 请假/出差区域 -->
             <div class="attend-leave-section" id="attendLeaveSection">
                 <div class="date-row">
-                    <input type="date" id="leaveStartDate">
-                    <input type="date" id="leaveEndDate">
+                    <div class="date-field">
+                        <label>开始日期</label>
+                        <input type="date" id="leaveStartDate">
+                    </div>
+                    <div class="date-field">
+                        <label>结束日期</label>
+                        <input type="date" id="leaveEndDate">
+                    </div>
                 </div>
                 <textarea id="leaveReason" placeholder="请输入事由说明..."></textarea>
             </div>
