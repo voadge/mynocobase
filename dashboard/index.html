@@ -1034,7 +1034,15 @@
                 document.getElementById('attendSubmit').disabled = !reasonOk;
                 document.getElementById('attendSubmit').textContent = '提交' + type;
                 document.getElementById('attendLocation').textContent = attendLocation ? attendLocationText : '（可选，获取中...）';
+                if (!document.getElementById('leaveStartDate').value) {
+                    var todayStr = new Date().toISOString().substring(0, 10);
+                    document.getElementById('leaveStartDate').value = todayStr;
+                    document.getElementById('leaveEndDate').value = todayStr;
+                }
             } else {
+                document.getElementById('leaveStartDate').value = '';
+                document.getElementById('leaveEndDate').value = '';
+                document.getElementById('leaveReason').value = '';
                 updateSubmitState();
             }
         }
@@ -1047,7 +1055,9 @@
             document.getElementById('locationStatus').className = 'attend-location-status getting';
             document.getElementById('locationStatus').innerHTML = '正在获取位置...';
             // Determine attendType from attendState
-            if (attendState && attendState.checkIn && !attendState.checkOut && !attendState.leavePending && !attendState.leaveApproved) {
+            if (attendState && attendState.leaveRejected) {
+                attendType = attendState.leaveRec.check_type === '出差' ? '出差' : '请假';
+            } else if (attendState && attendState.checkIn && !attendState.checkOut && !attendState.leavePending && !attendState.leaveApproved) {
                 attendType = '签退';
             } else {
                 attendType = '签到';
@@ -1060,10 +1070,16 @@
                     t.classList.add('selected');
                 }
             });
-            document.getElementById('attendNormalSection').style.display = '';
-            document.getElementById('attendLeaveSection').classList.remove('visible');
+            var isLeaveTab = (attendType === '请假' || attendType === '出差');
+            document.getElementById('attendNormalSection').style.display = isLeaveTab ? 'none' : '';
+            document.getElementById('attendLeaveSection').classList.toggle('visible', isLeaveTab);
             document.getElementById('attendLeaveStatus').className = 'attend-leave-status';
             document.getElementById('attendLeaveStatus').style.display = 'none';
+            if (isLeaveTab) {
+                document.getElementById('verifyBar').style.display = 'none';
+                document.getElementById('attendSubmit').disabled = false;
+                document.getElementById('attendSubmit').textContent = '提交' + attendType;
+            }
             // Reset normal section
             document.getElementById('faceStatus').textContent = '📷 请拍摄人脸';
             document.getElementById('faceStatus').className = 'face-status';
@@ -1105,6 +1121,7 @@
             document.getElementById('attendOverlay').classList.remove('show');
             stopCamera();
             clearInterval(window._attendTimer);
+            fetchAttendance();
         }
 
         var _cameraResLevel = 0;
@@ -1503,8 +1520,15 @@
                 if (isLeave) {
                     // Leave/travel submission
                     body.reason = document.getElementById('leaveReason').value.trim();
-                    body.start_date = document.getElementById('leaveStartDate').value || now.toISOString();
-                    body.end_date = document.getElementById('leaveEndDate').value || now.toISOString();
+                    var sd = document.getElementById('leaveStartDate').value;
+                    var ed = document.getElementById('leaveEndDate').value;
+                    if (sd && ed && sd > ed) {
+                        btn.textContent = '✗ 开始日期不能晚于结束日期';
+                        btn.disabled = false;
+                        return;
+                    }
+                    body.start_date = sd || now.toISOString();
+                    body.end_date = ed || now.toISOString();
                     body.workflow_status = 'pending';
                     body.verify_status = 'leave_auto';
                 } else {
@@ -1592,11 +1616,7 @@
             }
         });
 
-        // Desktop attend button
-        document.getElementById('attendBtn').addEventListener('click', function(e){
-            e.preventDefault();
-            openAttendModal();
-        });
+
 
         // Fetch current day status for display
         let attendState = null;
