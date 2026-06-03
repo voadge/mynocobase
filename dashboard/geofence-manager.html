@@ -136,12 +136,7 @@
             subdomains: ['1','2','3','4'], maxZoom: 18,
             attribution: '&copy; 高德地图'
         });
-        var osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            maxZoom: 19,
-            attribution: '&copy; OpenStreetMap'
-        });
         amap.addTo(map);
-        L.control.layers({ '高德地图': amap, 'OpenStreetMap': osm }).addTo(map);
 
         var currentPoints = [];
         var markers = [];
@@ -404,28 +399,21 @@
             container.innerHTML = '<div style="color:#5a6a7a">搜索中...</div>';
             container.style.display = 'block';
             try {
-                var url = '/geofence/geocode?q=' + encodeURIComponent(q);
-                var r = await fetch(url, { headers: headers });
+                var url = 'https://restapi.amap.com/v3/geocode/geo?key=31e73c1d12b2848e7bd964774782a954&address=' + encodeURIComponent(q) + '&output=json&city=贵州';
+                var r = await fetch(url);
                 container.style.display = 'block';
                 if (!r.ok) { container.innerHTML = '<div style="color:#ff6b6b">搜索服务不可用 (' + r.status + ')</div>'; return; }
                 var data = await r.json();
-                var features = data && data.features;
-                if (!features || features.length === 0) {
+                if (data.status !== '1' || !data.geocodes || data.geocodes.length === 0) {
                     container.innerHTML = '<div style="color:#5a6a7a">未找到结果</div>';
                     return;
                 }
-                container.innerHTML = features.map(function(f) {
-                    var p = f.properties || {};
-                    var name = p.name || '';
-                    var parts = [];
-                    if (p.city && p.city !== name) parts.push(p.city);
-                    if (p.state && p.state !== name) parts.push(p.state);
-                    if (p.country && p.country !== name) parts.push(p.country);
-                    var label = name + (parts.length ? ', ' + parts.join(', ') : '');
-                    var coords = f.geometry && f.geometry.coordinates;
-                    if (!coords) return '';
-                    return '<div onclick="flyTo(' + coords[1] + ',' + coords[0] + ')">' + escHtml(label.substring(0, 60)) + '</div>';
-                }).filter(Boolean).join('');
+                container.innerHTML = data.geocodes.map(function(g) {
+                    var label = g.formatted_address || '';
+                    var parts = g.location.split(',');
+                    if (parts.length < 2) return '';
+                    return '<div onclick="flyTo(' + parts[1] + ',' + parts[0] + ')">' + escHtml(label.substring(0, 60)) + '</div>';
+                }).join('');
             } catch(e) {
                 container.innerHTML = '<div style="color:#ff6b6b">搜索失败: ' + e.message + '</div>';
                 container.style.display = 'block';
