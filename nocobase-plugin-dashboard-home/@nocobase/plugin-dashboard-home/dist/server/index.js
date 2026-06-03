@@ -2,6 +2,7 @@
 
 const { Plugin } = require('@nocobase/server');
 const http = require('http');
+const https = require('https');
 const fs = require('fs');
 const path = require('path');
 
@@ -24,6 +25,36 @@ module.exports = class DashboardHomePlugin extends Plugin {
       }
       ctx.status = await this.isAuthenticated(ctx) ? 200 : 401;
       ctx.body = ctx.status === 200 ? 'ok' : 'Unauthorized';
+    });
+
+    // Geocode proxy (uses photon.komoot.io, accessible from China)
+    this.app.use(async (ctx, next) => {
+      if (ctx.method !== 'GET' || ctx.path !== '/api/__gf__/geocode') {
+        return await next();
+      }
+      if (!await this.isAuthenticated(ctx)) {
+        ctx.status = 401;
+        ctx.body = 'Unauthorized';
+        return;
+      }
+      var q = ctx.query.q;
+      if (!q) { ctx.body = { features: [] }; return; }
+      try {
+        var url = 'https://photon.komoot.io/api/?q=' + encodeURIComponent(q) + '&limit=7&lang=zh';
+        var data = await new Promise(function(resolve, reject) {
+          https.get(url, function(res) {
+            var body = '';
+            res.on('data', function(c) { body += c; });
+            res.on('end', function() {
+              try { resolve(JSON.parse(body)); } catch(e) { reject(e); }
+            });
+          }).on('error', reject);
+        });
+        ctx.body = data;
+      } catch(e) {
+        ctx.status = 502;
+        ctx.body = { error: e.message };
+      }
     });
 
     // Page serving middleware

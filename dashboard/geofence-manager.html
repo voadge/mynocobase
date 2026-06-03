@@ -403,8 +403,8 @@
             container.innerHTML = '<div style="color:#5a6a7a">搜索中...</div>';
             container.style.display = 'block';
             try {
-                var url = 'https://photon.komoot.io/api/?q=' + encodeURIComponent(q) + '&limit=7&lang=zh';
-                var r = await fetch(url);
+                var url = '/geofence/geocode?q=' + encodeURIComponent(q);
+                var r = await fetch(url, { headers: headers });
                 container.style.display = 'block';
                 if (!r.ok) { container.innerHTML = '<div style="color:#ff6b6b">搜索服务不可用 (' + r.status + ')</div>'; return; }
                 var data = await r.json();
