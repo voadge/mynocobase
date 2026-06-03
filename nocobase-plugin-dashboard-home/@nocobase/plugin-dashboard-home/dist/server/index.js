@@ -27,9 +27,9 @@ module.exports = class DashboardHomePlugin extends Plugin {
       ctx.body = ctx.status === 200 ? 'ok' : 'Unauthorized';
     });
 
-    // Geocode proxy (uses photon.komoot.io, accessible from China)
+    // Geocode + IP locate proxy (via Amap, server-side to respect IP whitelist)
     this.app.use(async (ctx, next) => {
-      if (ctx.method !== 'GET' || ctx.path !== '/api/__gf__/geocode') {
+      if (ctx.method !== 'GET' || !(ctx.path.endsWith('/geocode') || ctx.path.endsWith('/locate'))) {
         return await next();
       }
       if (!await this.isAuthenticated(ctx)) {
@@ -37,25 +37,47 @@ module.exports = class DashboardHomePlugin extends Plugin {
         ctx.body = 'Unauthorized';
         return;
       }
-      var q = ctx.query.q;
-      if (!q) { ctx.body = { features: [] }; return; }
-      try {
-        var url = 'https://photon.komoot.io/api/?q=' + encodeURIComponent(q) + '&limit=7&lang=zh';
-        var data = await new Promise(function(resolve, reject) {
-          https.get(url, function(res) {
-            var body = '';
-            res.on('data', function(c) { body += c; });
-            res.on('end', function() {
-              try { resolve(JSON.parse(body)); } catch(e) { reject(e); }
-            });
-          }).on('error', reject);
-        });
-        ctx.body = data;
-      } catch(e) {
-        ctx.status = 502;
-        ctx.body = { error: e.message };
+      ctx.withoutDataWrapping = true;
+      ctx.type = 'application/json; charset=utf-8';
+      var amapKey = '31e73c1d12b2848e7bd964774782a954';
+      if (ctx.path.endsWith('/geocode')) {
+        var q = ctx.query.q;
+        if (!q) { ctx.body = { status: '0', tips: [] }; return; }
+        try {
+          var url = 'https://restapi.amap.com/v3/assistant/inputtips?key=' + amapKey + '&keywords=' + encodeURIComponent(q) + '&output=json&offset=20';
+          var data = await new Promise(function(resolve, reject) {
+            https.get(url, function(res) {
+              var body = '';
+              res.on('data', function(c) { body += c; });
+              res.on('end', function() {
+                try { resolve(JSON.parse(body)); } catch(e) { reject(e); }
+              });
+            }).on('error', reject);
+          });
+          ctx.body = data;
+        } catch(e) {
+          ctx.status = 502;
+          ctx.body = { status: '0', tips: [], error: e.message };
+        }
+      } else {
+        try {
+          var url = 'https://restapi.amap.com/v3/ip?key=' + amapKey + '&output=json';
+          var data = await new Promise(function(resolve, reject) {
+            https.get(url, function(res) {
+              var body = '';
+              res.on('data', function(c) { body += c; });
+              res.on('end', function() {
+                try { resolve(JSON.parse(body)); } catch(e) { reject(e); }
+              });
+            }).on('error', reject);
+          });
+          ctx.body = data;
+        } catch(e) {
+          ctx.status = 502;
+          ctx.body = { status: '0', rectangle: null, city: null, province: null, error: e.message };
+        }
       }
-    });
+    }, { tag: 'dashboard-home', before: 'dataSource' });
 
     // Page serving middleware
     this.app.use(async (ctx, next) => {
@@ -65,6 +87,9 @@ module.exports = class DashboardHomePlugin extends Plugin {
 
       if (await this.isAuthenticated(ctx)) {
         ctx.withoutDataWrapping = true;
+        ctx.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+        ctx.set('Pragma', 'no-cache');
+        ctx.set('Expires', '0');
         try {
           const fileName = PAGE_MAP[ctx.path];
           const htmlPath = path.join(STORAGE_DIR, fileName);

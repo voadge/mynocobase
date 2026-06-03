@@ -254,6 +254,15 @@
         .toolbox-label { font-size: 0.85em; color: #00d4ff; font-weight: 600; letter-spacing: 1px; }
         .toolbox-arrow { font-size: 0.9em; color: #5a6a7a; transition: transform 0.2s; }
         .toolbox-card:hover .toolbox-arrow { transform: translateX(3px); }
+        .toolbox-shortcuts { display: flex; gap: 4px; width: 100%; margin-top: 6px; }
+        .toolbox-shortcuts a { flex: 1; text-align: center; padding: 6px 2px; border-radius: 6px; font-size: 0.65em; text-decoration: none; color: #aab; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); transition: all 0.2s; }
+        .toolbox-shortcuts a:hover { background: rgba(0,212,255,0.08); border-color: rgba(0,212,255,0.3); color: #00d4ff; }
+        .attend-quick-types { display: flex; gap: 4px; width: 100%; margin-top: 4px; }
+        .attend-quick-types span { flex: 1; text-align: center; padding: 4px 2px; border-radius: 6px; font-size: 0.65em; cursor: pointer; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); transition: all 0.2s; white-space: nowrap; }
+        .attend-quick-types span:hover { background: rgba(0,212,255,0.1); border-color: rgba(0,212,255,0.3); }
+        .attend-title-row { display: flex; align-items: center; justify-content: center; margin-bottom: 16px; position: relative; }
+        .attend-title-row h3 { margin: 0; }
+        .attend-time-display { position: absolute; right: 0; top: 50%; transform: translateY(-50%); color: #5a6a7a; font-size: 0.72em; white-space: nowrap; }
 
         /* 大屏 iframe 容器 —— 占 4/5 */
         .stage-frame-wrap {
@@ -457,6 +466,11 @@
         @media (max-width: 480px) {
             .header h1 { font-size: 1.1em; }
             .works-grid { grid-template-columns: repeat(2, 1fr); gap: 4px; }
+            .attend-drawer { max-height: 90vh; padding: 14px 14px 12px; }
+            .attend-camera-wrap { flex: 1; aspect-ratio: unset; min-height: 120px; }
+            .attend-type-tabs { margin-bottom: 10px; }
+            .attend-finger-row { padding: 6px 10px; margin-bottom: 6px; }
+            .attend-verify-bar { margin-bottom: 6px; }
         }
 
         /* === 打卡弹窗 === */
@@ -470,7 +484,8 @@
             background: linear-gradient(160deg, #111827 0%, #1a2332 100%);
             border: 1px solid rgba(0,212,255,0.25);
             border-radius: 16px; width: 92vw; max-width: 420px;
-            overflow-y: hidden; padding: 24px 20px 20px;
+            max-height: 92vh; display: flex; flex-direction: column;
+            overflow-y: hidden; padding: 20px 20px 16px;
             box-shadow: 0 20px 60px rgba(0,0,0,0.6);
             animation: slideUp 0.3s ease;
         }
@@ -490,8 +505,8 @@
         .attend-info-row .value { color: #e0e6ed; font-weight: 500; }
         .attend-camera-wrap {
             position: relative; border-radius: 12px; overflow: hidden;
-            background: #000; aspect-ratio: 4/3; margin-bottom: 8px;
-            border: 2px solid rgba(0,212,255,0.15);
+            background: #000; flex: unset; aspect-ratio: 3/4;
+            margin-bottom: 8px; border: 2px solid rgba(0,212,255,0.15);
         }
         .attend-camera-wrap video, .attend-camera-wrap canvas {
             width: 100%; height: 100%; object-fit: cover;
@@ -499,9 +514,9 @@
         .attend-camera-wrap canvas { position: absolute; top: 0; left: 0; }
         .attend-camera-wrap .face-indicator {
             position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
-            width: min(50%, 160px); height: min(82%, 320px);
+            width: min(46%, 160px); aspect-ratio: 3/4;
             border: 2px dashed rgba(0,255,136,0.6);
-            border-radius: 45% / 30%; pointer-events: none;
+            border-radius: 50% / 40%; pointer-events: none;
         }
         .attend-camera-wrap .face-indicator.verified { border-color: #00ff88; border-style: solid; }
         .attend-camera-wrap .face-indicator.unverified { border-color: #ff6b6b; }
@@ -530,6 +545,7 @@
             background: linear-gradient(135deg, #00d4ff, #7b2cbf); color: #fff;
         }
         
+        #attendNormalSection { display: flex; flex-direction: column; flex: 1; min-height: 0; }
         .attend-finger-row {
             display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
             padding: 10px 12px; border-radius: 8px;
@@ -741,6 +757,11 @@
                         <span class="attend-status" id="attendStatus">--</span>
                     </div>
                     <button class="attend-btn" id="attendBtn" onclick="openAttendModal()">打卡</button>
+                    <div class="attend-quick-types">
+                        <span onclick="openAttendModal()">✅ 打卡</span>
+                        <span onclick="openAttendModal('请假')">📋 请假</span>
+                        <span onclick="openAttendModal('出差')">🚗 出差</span>
+                    </div>
                 </div>
                 <div class="panel-card toolbox-card">
                     <a href="/dashboard/百宝箱.html" class="toolbox-link">
@@ -748,6 +769,10 @@
                         <span class="toolbox-label">百宝箱</span>
                         <span class="toolbox-arrow">→</span>
                     </a>
+                    <div class="toolbox-shortcuts">
+                        <a href="/dashboard/行程发票报销助手.html" target="_blank">🧾 发票</a>
+                        <a href="/dashboard/智能排版打印助手.html" target="_blank">🖨️ 排版</a>
+                    </div>
                 </div>
             </div>
             <div class="stage-frame-wrap">
@@ -1030,6 +1055,42 @@
         var __geofencesCacheTime = 0;        // 缓存时间戳
         var __polylineGeofenceResult = null; // { inside, distance, fenceId, fenceName, bufferRadius, matched }
 
+        // ---- WGS-84 ↔ GCJ-02 坐标转换（匹配高德瓦片偏移）----
+        var _pi = 3.141592653589793;
+        var _a = 6378245.0;
+        var _ee = 0.00669342162296594323;
+        function _transformLat(x, y) {
+            var ret = -100 + 2*x + 3*y + 0.2*y*y + 0.1*x*y + 0.2*Math.sqrt(Math.abs(x));
+            ret += (20*Math.sin(6*x*_pi) + 20*Math.sin(2*x*_pi)) * 2/3;
+            ret += (20*Math.sin(y*_pi) + 40*Math.sin(y/3*_pi)) * 2/3;
+            ret += (160*Math.sin(y/12*_pi) + 320*Math.sin(y*_pi/30)) * 2/3;
+            return ret;
+        }
+        function _transformLng(x, y) {
+            var ret = 300 + x + 2*y + 0.1*x*x + 0.1*x*y + 0.1*Math.sqrt(Math.abs(x));
+            ret += (20*Math.sin(6*x*_pi) + 20*Math.sin(2*x*_pi)) * 2/3;
+            ret += (20*Math.sin(x*_pi) + 40*Math.sin(x/3*_pi)) * 2/3;
+            ret += (150*Math.sin(x/12*_pi) + 300*Math.sin(x/30*_pi)) * 2/3;
+            return ret;
+        }
+        function _outOfChina(lat, lng) { return lng < 72.004 || lng > 137.8347 || lat < 0.8293 || lat > 55.8271; }
+        function wgs84ToGcj02(lat, lng) {
+            if (_outOfChina(lat, lng)) return [lat, lng];
+            var dLat = _transformLat(lng - 105, lat - 35);
+            var dLng = _transformLng(lng - 105, lat - 35);
+            var radLat = lat / 180 * _pi;
+            var magic = Math.sin(radLat);
+            magic = 1 - _ee * magic * magic;
+            var sqrtMagic = Math.sqrt(magic);
+            dLat = (dLat * 180) / ((_a * (1 - _ee)) / (magic * sqrtMagic) * _pi);
+            dLng = (dLng * 180) / (_a / sqrtMagic * Math.cos(radLat) * _pi);
+            return [lat + dLat, lng + dLng];
+        }
+        function wgs84ToGcj02Point(lat, lng) {
+            var p = wgs84ToGcj02(lat, lng);
+            return { lat: p[0], lng: p[1] };
+        }
+
         // 获取围栏列表（带 session 级缓存）
         async function fetchGeofences() {
             var now = Date.now();
@@ -1257,7 +1318,7 @@
             e.target.value = '';
         }
 
-        function openAttendModal() {
+        function openAttendModal(presetType) {
             document.getElementById('attendOverlay').classList.add('show');
             document.getElementById('attendTime').textContent = new Date().toLocaleString('zh-CN');
             document.getElementById('attendSubmit').disabled = true;
@@ -1267,7 +1328,9 @@
             document.getElementById('locationStatus').innerHTML = locGetting;
             document.getElementById('locationStatus').setAttribute('data-base', locGetting);
             // Determine attendType from attendState
-            if (attendState && attendState.leaveRejected) {
+            if (presetType) {
+                attendType = presetType;
+            } else if (attendState && attendState.leaveRejected) {
                 attendType = attendState.leaveRec.check_type === '出差' ? '出差' : '请假';
             } else if (attendState && attendState.checkIn && !attendState.checkOut && !attendState.leavePending && !attendState.leaveApproved) {
                 attendType = '下班';
@@ -1477,23 +1540,30 @@
             document.getElementById('locationStatus').innerHTML = locGettingIP;
             document.getElementById('locationStatus').setAttribute('data-base', locGettingIP);
             document.getElementById('locationStatus').className = 'attend-location-status getting';
-            fetch('https://ip-api.com/json/?lang=zh-CN&fields=status,country,regionName,city,lat,lon,query')
-                .then(function(r){ return r.json(); })
+            var _tk = localStorage.getItem("NOCOBASE_TOKEN") || localStorage.getItem("nocobase_token");
+            var _hd = { 'Content-Type': 'application/json' };
+            if (_tk) _hd['Authorization'] = 'Bearer ' + _tk;
+            fetch('/geofence/locate', { headers: _hd })
+                .then(function(r){ if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
                 .then(function(data){
-                    if (data && data.status === 'success') {
-                        attendLocation = {lat: data.lat, lng: data.lon, accuracy: null};
+                    if (data && data.status === '1' && data.rectangle) {
+                        var parts = data.rectangle.split(';');
+                        var sw = parts[0].split(',');
+                        var ne = parts[1].split(',');
+                        var lat = (parseFloat(sw[1]) + parseFloat(ne[1])) / 2;
+                        var lng = (parseFloat(sw[0]) + parseFloat(ne[0])) / 2;
+                        attendLocation = {lat: lat, lng: lng, accuracy: null};
                         gpsState = 'ip';
-                        var gf = checkGeofence(data.lat, data.lon);
+                        var gf = checkGeofence(lat, lng);
                         var gfLabel = gf.inside ? '✅ 围栏内' : '❌ 围栏外';
-                        attendLocationText = 'IP定位: ' + data.regionName + data.city + ' (IP: ' + data.query + ') | ' + gfLabel;
+                        attendLocationText = 'IP定位: ' + (data.city || data.province || '') + ' | ' + gfLabel;
                         document.getElementById('attendLocation').textContent = attendLocationText;
                         var locMsg = '✓ IP定位成功（城市级精度）';
                         document.getElementById('locationStatus').innerHTML = locMsg;
                         document.getElementById('locationStatus').setAttribute('data-base', locMsg);
                         document.getElementById('locationStatus').className = 'attend-location-status got';
                         document.getElementById('manualLocationSection').style.display = 'none';
-                        // 折线围栏检测完成后更新状态
-                        checkPolylineGeofence(data.lat, data.lon).then(function(){ updateSubmitState(); }).catch(function(){ updateSubmitState(); });
+                        checkPolylineGeofence(lat, lng).then(function(){ updateSubmitState(); }).catch(function(){ updateSubmitState(); });
                     } else {
                         _showGpsHelp();
                         document.getElementById('manualLocationSection').style.display = 'block';
@@ -1510,9 +1580,11 @@
         function _getLocationOnce(highAccuracy) {
             navigator.geolocation.getCurrentPosition(
                 function(pos){
+                    var rawLat = pos.coords.latitude, rawLng = pos.coords.longitude;
+                    var gcj = wgs84ToGcj02(rawLat, rawLng);
                     attendLocation = {
-                        lat: pos.coords.latitude,
-                        lng: pos.coords.longitude,
+                        lat: gcj[0],
+                        lng: gcj[1],
                         accuracy: pos.coords.accuracy
                     };
                     gpsState = 'ok';
@@ -1521,19 +1593,12 @@
                     if (acc < 5) accLabel = '（高精度）';
                     else if (acc < 50) accLabel = '（一般）';
                     else accLabel = '（精度低）';
-                    attendLocationText = pos.coords.latitude.toFixed(5) + ',' + pos.coords.longitude.toFixed(5) + ' ±' + acc + 'm ' + accLabel;
-                    // 地理围栏检查（圆圈+折线）
-                    var gf = checkGeofence(pos.coords.latitude, pos.coords.longitude);
-                    var gfLabel = gf.inside ? '✅ 围栏内' : '❌ 围栏外';
-                    attendLocationText += ' | ' + gfLabel;
-                    if (!gf.skipped) attendLocationText += ' (' + gf.distance + 'm)';
-                    document.getElementById('attendLocation').textContent = attendLocationText;
+                    document.getElementById('attendLocation').textContent = gcj[0].toFixed(5) + ',' + gcj[1].toFixed(5) + ' ±' + acc + 'm ' + accLabel;
                     var locMsg = '✓ 位置已获取';
                     document.getElementById('locationStatus').innerHTML = locMsg;
                     document.getElementById('locationStatus').setAttribute('data-base', locMsg);
                     document.getElementById('locationStatus').className = 'attend-location-status got';
-                    // 折线围栏检测完成后统一更新状态
-                    checkPolylineGeofence(pos.coords.latitude, pos.coords.longitude).then(function(){ updateSubmitState(); }).catch(function(){ updateSubmitState(); });
+                    checkPolylineGeofence(gcj[0], gcj[1]).then(function(){ updateSubmitState(); }).catch(function(){ updateSubmitState(); });
                     if (attendType === '请假' || attendType === '出差') {
                         // Keep optional status
                     }
@@ -2210,22 +2275,15 @@
     <div class="attend-overlay" id="attendOverlay">
         <div class="attend-drawer">
             <button class="attend-close" onclick="closeAttendModal()" title="关闭">✕</button>
-            <h3>📸 考勤打卡</h3>
+            <div class="attend-title-row">
+                <h3>📸 考勤打卡</h3>
+                <span class="attend-time-display">🕐 <span id="attendTime">--</span></span>
+            </div>
             <div class="attend-type-tabs" id="attendTypeTabs">
                 <div class="attend-type-tab selected" data-type="上班" onclick="onAttendTypeChange('上班',this)">✅ 上班</div>
                 <div class="attend-type-tab" data-type="下班" onclick="onAttendTypeChange('下班',this)">🏠 下班</div>
                 <div class="attend-type-tab" data-type="请假" onclick="onAttendTypeChange('请假',this)">📋 请假</div>
                 <div class="attend-type-tab" data-type="出差" onclick="onAttendTypeChange('出差',this)">🚗 出差</div>
-            </div>
-            <div class="attend-info-row" style="display:flex;gap:8px;">
-                <div style="flex:1;display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border-radius:8px;background:rgba(255,255,255,0.03);font-size:0.72em;gap:4px;">
-                    <span style="color:#5a6a7a;">🕐</span>
-                    <span class="value" id="attendTime" style="color:#e0e6ed;font-weight:500;font-size:0.9em;">--</span>
-                </div>
-                <div style="flex:3;display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border-radius:8px;background:rgba(255,255,255,0.03);font-size:0.72em;">
-                    <span style="color:#5a6a7a;flex-shrink:0;">📍</span>
-                    <span class="value" id="attendLocation" style="color:#e0e6ed;font-weight:500;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-left:6px;">获取中...</span>
-                </div>
             </div>
             <!-- 正常打卡区域（上班/下班） -->
             <div id="attendNormalSection">
@@ -2288,6 +2346,7 @@
                     </div>
                 </div>
             </div>
+            <span id="attendLocation" style="display:none"></span>
         </div>
     </div>
 

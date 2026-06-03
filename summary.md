@@ -1,41 +1,62 @@
-# Session Summary — NocoBase Dashboard Plugin
+# 考勤系统 — 折线地理围栏
 
 ## Goal
-Deploy a NocoBase server-only plugin that authenticates `/home` and serves dashboard HTML.
+- 将考勤系统的圆形围栏升级为折线围栏，支持管理员在地图上绘制、员工打卡时检测围栏状态并标记异常
 
-## Architecture (Final)
-```
-Browser → nginx-proxy (/home location)
-         → proxy_pass http://app:13000/api/__dh__
-         → NocoBase Gateway (passes API path to app.callback())
-         → Plugin middleware (before dataSource)
-           → Check auth (cookie → Bearer token → internal /api/auth:check)
-           → Authenticated: serve dashboard HTML from /app/nocobase/storage/dashboard/index.html
-           → Unauthenticated: 302 redirect to /signin
-```
+## Constraints & Preferences
+- 使用 NocoBase 现有架构（自定义插件 + nginx-proxy）
+- 前端 GPS 精度 >100m 标记异常，围栏外允许打卡但标记异常
+- 缓冲区可配置（默认 200m），后端工作流强制覆盖前端值防篡改
+- 管理页面需放在 NocoBase 管理后台标签页
+- 地理编码/定位必须走服务器代理（高德 API），国内直连 Nomimatin/photon/ip-api.com 被阻断
 
-**Why not nginx `auth_request`?** NocoBase's `/api/auth:check` does NOT extract tokens from cookies (only Bearer header). Plugin's cookie→Bearer conversion solves this.
+## Progress
+### Done
+- ✅ `geofences` 表已创建（含 bbox + `sort` 字段），MCP 元数据已恢复
+- ✅ `attendance_records` 已添加 `geofence_inside`/`geofence_distance`/`geofence_id`
+- ✅ `att_archives` 已添加 `geofence_inside_days`/`geofence_outside_days`/`geofence_anomaly_count`
+- ✅ 工作流「围栏校验+归档统计」已创建启用
+- ✅ `dashboard/index.html` + `dashboard.html`：折线围栏检测、bbox 扩展缓冲区、5 分钟缓存、渐变警告等级
+- ✅ 修复 bbox 预过滤扩展缓冲区半径、移除旧圆围栏回退逻辑、修复竞态条件、围栏信息合并到位置栏
+- ✅ 插件 `/api/__gf__` 路由 + nginx `/geofence` 代理已配置
+- ✅ `geofence-manager.html`：地图改用 flex 全高布局、去掉 OSM 图层仅保留高德瓦片
+- ✅ 搜索栏（服务器代理 → 高德 InputTips 地理编码）+ 坐标导入 + 节点删除（右键/列表 ✕/按钮）
+- ✅ 修复 `redraw()`/`resetEditor()` 同步问题
+- ✅ `dashboard/index.html`：恢复被误删的 `closeAttendModal`/`startCamera`/`stopCamera`/`switchCamera`/`retryCamera` 函数
+- ✅ 插件 `index.js` 新增 `/api/__gf__/geocode` + `/api/__gf__/locate` 服务端代理（高德 InputTips + IP 定位）
+- ✅ 容器重启、SCP 部署、Cache-Control 防浏览器缓存
+- ✅ WGS-84 → GCJ-02 坐标转换（匹配高德瓦片偏移，纯 JS `wgs84ToGcj02`）
+- ✅ `◎` 按钮：高德 IP 定位 → 回退浏览器定位 + 城市查询回退
+- ✅ 相机上方定位文字已移除（`display:none`）
+- ✅ 搜索定位智能缩放（省→zoom 7，市→zoom 9，区县→zoom 12，POI→zoom 15）
 
-**Why not plugin directly on `/home`?** NocoBase Gateway intercepts all non-API paths for static SPA serving before reaching Koa middleware.
+### In Progress
+- (none)
+
+### Blocked
+- (none)
 
 ## Key Decisions
-1. **Plugin registers middleware BEFORE dataSource** via `{ tag: 'dashboard-home', before: 'dataSource' }` — intercepts `/api/__dh__` before resource manager
-2. **`ctx.withoutDataWrapping = true`** — prevents NocoBase response wrapping (`{"data":"..."}`)
-3. **Auth flow**: `ctx.state.currentUser` (not set for direct page loads) → fallback: extract `nb_token` cookie → internal HTTP to `127.0.0.1:13000/api/auth:check` with Bearer header
-4. **Front nginx-proxy** handles `/home` by proxying to app's Node port directly (13000) bypassing internal nginx
+- **底图方案**：Leaflet + 高德瓦片 + 高德地理编码
+- **坐标系统**：因高德瓦片存在 GCJ-02 偏移，GPS 打卡时做 WGS-84→GCJ-02 转换后再比围栏
+- **桌面定位**：先高德 IP 定位（服务器代理），失败回退浏览器定位
+- **服务器 IP 问题**：数据中心 IP 无法被高德 IP API 识别（返回空数组），桌面端只能回退浏览器的 IP 定位
+- **地理编码代理**：高德 InputTips API 替代 geocode API，支持模糊搜索
+- **Key 安全**：高德 Key 存服务端，不暴露前端
 
-## Files
-- **Plugin**: `E:\my-project\nocobase-plugin-dashboard-home\dist\server\index.js`
-- **Deployed**: `/opt/noco-base/storage/plugins/@nocobase/plugin-dashboard-home/dist/server/index.js`
-- **Front nginx**: `/opt/noco-base/nginx.conf` — `/home` → `http://app:13000/api/__dh__`
-- **Dashboard HTML**: `/opt/noco-base/dashboard/index.html` (mounted as `/app/nocobase/storage/dashboard/index.html` in container)
+## Critical Context
+- **Docker 远程** `110.42.236.231`，容器 `noco-base-app-1` / `noco-base-nginx-proxy-1`
+- **高德 Key**：`31e73c1d12b2848e7bd964774782a954`（Web 服务类型，IP 白名单已配服务器 IP）
+- **STORAGE_DIR** = `/app/nocobase/storage/dashboard` → 宿主 `/opt/noco-base/dashboard`
+- **`:ro` 挂载改 `:rw`**：修改插件 `index.js` 直接 SCP 覆盖后 `docker restart`
+- **搜索 API 历程**：Nominatim（阻断）→ photon.komoot.io（阻断）→ 插件直连 Amap InputTips ✓
+- **定位历程**：浏览器 geolocation（安徽）→ Amap IP API（数据中心返回 `[]`）→ 回退浏览器 geolocation
+- **坐标修正历程**：原始 GPS（围栏外）→ WGS-84→GCJ-02 转换（围栏内 ✓）
 
-## Testing
-- `https://<host>:668/home` without auth → **302** `/signin`
-- `https://<host>:668/home` with `nb_token` cookie → **200** HTML
-- Plugin endpoint directly: `curl http://app:13000/api/__dh__` → 302/200
-
-## Remaining Concerns
-1. **Internal nginx startup script** (`10-dashboard.sh`) adds `auth_request` for `/dashboard/` to internal nginx — conflicts with this approach if `/dashboard/` is accessed directly
-2. **Dashboard JS** sets `nb_token` cookie from localStorage for subsequent requests — relies on NocoBase SPA auth flow being present
-3. **HEAD requests** to `/api/__dh__` return 404 (middleware checks `ctx.method !== 'GET'`)
+## Relevant Files
+- `dashboard/geofence-manager.html` - 围栏管理（Leaflet + 高德瓦片 + 高德 InputTips 搜索 + 坐标导入 + 节点编辑）
+- `dashboard/index.html` - 主打卡面板（折线检测 + bbox + GCJ-02 转换 + 验证状态栏）
+- `dashboard.html` - 简易打卡页
+- `nginx.conf` - `/geofence` 代理路由
+- `nocobase-plugin-dashboard-home/dist/server/index.js` - 插件（含 `/geocode`, `/locate` 代理路由）
+- `workflow-scripts/围栏校验+归档统计__367898725974016.js` - 工作流 JS 节点备份

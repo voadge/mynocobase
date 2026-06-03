@@ -61,6 +61,9 @@
         .node-item .node-del { color: #ff6b6b; cursor: pointer; padding: 0 4px; font-size: 1.1em; line-height: 1; }
         .node-item .node-del:hover { color: #ff4444; }
         .node-idx { color: #5a6a7a; margin-right: 6px; }
+        .type-badge { font-size: 0.7em; padding: 1px 6px; border-radius: 4px; background: rgba(0,212,255,0.1); color: #00d4ff; white-space: nowrap; }
+        .search-results { max-height: 320px; }
+        .locate-btn { font-size: 1.1em; line-height: 1; padding: 3px 8px !important; }
     </style>
 </head>
 <body>
@@ -71,8 +74,9 @@
                 <div id="map"></div>
                 <div class="map-tip" id="mapTip">点击添加节点 · 右键删除节点 · 拖拽移动</div>
                 <div class="search-bar">
-                    <input type="text" id="searchInput" placeholder="搜索地名..." onkeydown="if(event.key==='Enter') searchPlace()">
+                    <input type="text" id="searchInput" placeholder="搜索地名/POI..." onkeydown="if(event.key==='Enter') searchPlace()">
                     <button onclick="searchPlace()">🔍</button>
+                    <button class="locate-btn" onclick="locateMe()" title="定位当前位置">◎</button>
                 </div>
                 <div class="search-results" id="searchResults"></div>
             </div>
@@ -144,6 +148,7 @@
         var bufferLayer = null;
         var selectedFenceId = null;
         var allFences = [];
+        var currentLocationMarker = null;
 
         // ---------- 计算 Bbox ----------
         function computeBbox(points) {
@@ -391,42 +396,135 @@
             renderFenceList();
         }
 
-        // ---------- 地名搜索 ----------
+        // ---------- 地名/POI 搜索（高德 InputTips）----------
         async function searchPlace() {
             var q = document.getElementById('searchInput').value.trim();
             if (!q) return;
             var container = document.getElementById('searchResults');
-            container.innerHTML = '<div style="color:#5a6a7a">搜索中...</div>';
+            container.innerHTML = '<div style="color:#5a6a7a;padding:6px 10px">搜索中...</div>';
             container.style.display = 'block';
             try {
-                var url = 'https://restapi.amap.com/v3/geocode/geo?key=31e73c1d12b2848e7bd964774782a954&address=' + encodeURIComponent(q) + '&output=json&city=贵州';
-                var r = await fetch(url);
-                container.style.display = 'block';
-                if (!r.ok) { container.innerHTML = '<div style="color:#ff6b6b">搜索服务不可用 (' + r.status + ')</div>'; return; }
+                var url = '/geofence/geocode?q=' + encodeURIComponent(q);
+                var r = await fetch(url, { headers: headers });
+                if (!r.ok) { container.innerHTML = '<div style="color:#ff6b6b;padding:6px 10px">搜索服务不可用 (' + r.status + ')</div>'; return; }
                 var data = await r.json();
-                if (data.status !== '1' || !data.geocodes || data.geocodes.length === 0) {
-                    container.innerHTML = '<div style="color:#5a6a7a">未找到结果</div>';
+                if (data.status !== '1' || !data.tips || data.tips.length === 0) {
+                    container.innerHTML = '<div style="color:#5a6a7a;padding:6px 10px">未找到结果</div>';
                     return;
                 }
-                container.innerHTML = data.geocodes.map(function(g) {
-                    var label = g.formatted_address || '';
-                    var parts = g.location.split(',');
-                    if (parts.length < 2) return '';
-                    return '<div onclick="flyTo(' + parts[1] + ',' + parts[0] + ')">' + escHtml(label.substring(0, 60)) + '</div>';
-                }).join('');
+                container.innerHTML =
+                    '<div style="color:#5a6a7a;padding:4px 10px;font-size:0.78em;border-bottom:1px solid rgba(255,255,255,0.05)">找到 ' + data.tips.length + ' 个结果</div>' +
+                    data.tips.map(function(t, i) {
+                        if (!t.location) return '';
+                        var parts = t.location.split(',');
+                        if (parts.length < 2) return '';
+                        var zoom = getZoomForType(t.typecode);
+                        var badge = getTypeLabel(t.typecode);
+                        return '<div onclick="flyTo(' + parts[1] + ',' + parts[0] + ',' + zoom + ')">' +
+                            '<div style="display:flex;justify-content:space-between;align-items:center">' +
+                            '<span><strong>' + escHtml(t.name) + '</strong></span>' +
+                            (badge ? '<span class="type-badge">' + badge + '</span>' : '') +
+                            '</div>' +
+                            '<div style="font-size:0.85em;color:#5a6a7a;margin-top:1px">' + escHtml(t.address || t.district || '') + '</div>' +
+                            '</div>';
+                    }).join('');
             } catch(e) {
-                container.innerHTML = '<div style="color:#ff6b6b">搜索失败: ' + e.message + '</div>';
-                container.style.display = 'block';
+                container.innerHTML = '<div style="color:#ff6b6b;padding:6px 10px">搜索失败: ' + e.message + '</div>';
             }
         }
         document.addEventListener('click', function(e) {
             if (!e.target.closest('.search-bar') && !e.target.closest('.search-results'))
                 document.getElementById('searchResults').style.display = 'none';
         });
-        function flyTo(lat, lng) {
-            if (map) { map.setView([lat, lng], 14); }
+        function flyTo(lat, lng, zoom) {
+            map.setView([lat, lng], zoom || 14);
             document.getElementById('searchResults').style.display = 'none';
         }
+
+        function getTypeLabel(t) {
+            if (!t) return '';
+            if (t.startsWith('02')) return '省';
+            if (t.startsWith('03')) return '城市';
+            if (t.startsWith('04')) return '区县';
+            if (t.startsWith('11')) return '景点';
+            if (t.startsWith('05')) return '餐饮';
+            if (t.startsWith('10')) return '住宿';
+            if (t.startsWith('14')) return '科教';
+            if (t.startsWith('15')) return '交通';
+            if (t.startsWith('13')) return '政府';
+            if (t.startsWith('06')) return '购物';
+            return 'POI';
+        }
+        function getZoomForType(t) {
+            if (!t) return 14;
+            if (t.startsWith('02')) return 7;
+            if (t.startsWith('03')) return 9;
+            if (t.startsWith('04')) return 12;
+            return 15;
+        }
+
+        // ---------- 定位当前位置（高德 IP 定位）----------
+        async function locateMe() {
+            if (!map) return;
+            showMessage('正在定位...', 'info');
+            function _str(v) { return (typeof v === 'string' && v.length > 0) ? v : null; }
+            function _placeMarker(lat, lng, label) {
+                if (currentLocationMarker) map.removeLayer(currentLocationMarker);
+                currentLocationMarker = L.circleMarker([lat, lng], {
+                    radius: 8, color: '#00d4ff', fillColor: '#00d4ff', fillOpacity: 0.25, weight: 2
+                }).addTo(map).bindTooltip(label || '当前位置', { permanent: false });
+            }
+            try {
+                var r = await fetch('/geofence/locate', { headers: headers });
+                if (r.ok) {
+                    var data = await r.json();
+                    if (data.status === '1') {
+                        var rect = _str(data.rectangle);
+                        var city = _str(data.city);
+                        var prov = _str(data.province);
+                        if (rect && rect.indexOf(';') > 0) {
+                            var parts = rect.split(';');
+                            if (parts.length === 2) {
+                                var sw = parts[0].split(','), ne = parts[1].split(',');
+                                if (sw.length === 2 && ne.length === 2) {
+                                    map.fitBounds([[parseFloat(sw[1]), parseFloat(sw[0])], [parseFloat(ne[1]), parseFloat(ne[0])]], { padding: [30, 30] });
+                                    var c = map.getCenter();
+                                    _placeMarker(c.lat, c.lng, '当前位置（' + (city || prov || '') + '）');
+                                    showMessage('已定位到 ' + (city || prov || ''), 'info');
+                                    return;
+                                }
+                            }
+                        }
+                        if (city) {
+                            var r2 = await fetch('/geofence/geocode?q=' + encodeURIComponent(city), { headers: headers });
+                            if (r2.ok) {
+                                var d2 = await r2.json();
+                                if (d2.status === '1' && d2.tips && d2.tips.length > 0 && d2.tips[0].location) {
+                                    var pos = d2.tips[0].location.split(',');
+                                    map.setView([parseFloat(pos[1]), parseFloat(pos[0])], 10);
+                                    _placeMarker(parseFloat(pos[1]), parseFloat(pos[0]), '当前位置（' + city + '）');
+                                    showMessage('已定位到 ' + city, 'info');
+                                    return;
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch(e) {}
+            // 回退：浏览器定位
+            showMessage('正在使用浏览器定位...', 'info');
+            map.locate({ setView: true, maxZoom: 16 });
+        }
+        map.on('locationfound', function(e) {
+            if (currentLocationMarker) map.removeLayer(currentLocationMarker);
+            currentLocationMarker = L.circleMarker([e.latitude, e.longitude], {
+                radius: 8, color: '#00d4ff', fillColor: '#00d4ff', fillOpacity: 0.25, weight: 2
+            }).addTo(map).bindTooltip('当前位置（浏览器定位）', { permanent: false });
+            showMessage('已定位（浏览器）', 'info');
+        });
+        map.on('locationerror', function(e) {
+            showMessage('定位失败: ' + e.message, 'error');
+        });
 
         // ---------- 导入坐标 / 清空节点 ----------
         function importCoords() {
@@ -491,6 +589,7 @@
             markers = [];
             if (polylineLayer) map.removeLayer(polylineLayer);
             if (bufferLayer) map.removeLayer(bufferLayer);
+            if (currentLocationMarker) { map.removeLayer(currentLocationMarker); currentLocationMarker = null; }
             polylineLayer = bufferLayer = null;
             document.getElementById('fenceName').value = '';
             document.getElementById('bufferRadius').value = '200';
