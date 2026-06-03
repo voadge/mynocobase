@@ -155,13 +155,13 @@
             return __polylineGeofenceResult;
         }
 
-        // ---------- 旧版圆形围栏（保留兼容）----------
-        var geofenceConfig = {
-            enabled: true,
-            centerLat: 27.706,
-            centerLng: 106.937,
-            radius: 300
-        };
+         // ---------- 旧版圆形围栏（已禁用，使用折线围栏）----------
+         var geofenceConfig = {
+             enabled: false,
+             centerLat: 27.706,
+             centerLng: 106.937,
+             radius: 300
+         };
         var geofenceResult = null;
 
         function checkGeofence(lat, lng) {
@@ -365,7 +365,7 @@
             document.getElementById('attendOverlay').classList.remove('show');
             stopCamera();
             clearInterval(window._attendTimer);
-            fetchAttendance();
+            if (window.parent && window.parent.fetchAttendance) window.parent.fetchAttendance();
         }
 
         var _cameraZoom = 0.8;
@@ -767,13 +767,14 @@
                     if (!fingerOk) missing.push('指纹');
                     btn.textContent = 'GPS异常，需完成：' + missing.join('+');
                 }
-            } else if (gpsOk && !fenceOk) {
-                btn.disabled = true;
-                btn.textContent = '⛔ 不在打卡围栏内（距围栏 ' + geofenceResult.distance + 'm）';
-            } else {
-                btn.disabled = true;
-                btn.textContent = '⛔ GPS异常且不在围栏内';
-            }
+             } else if (gpsOk && !fenceOk) {
+                 btn.disabled = true;
+                 var fenceDist = (pgr && pgr.distance) ? pgr.distance : '?';
+                 btn.textContent = '⛔ 不在打卡围栏内（距围栏 ' + fenceDist + 'm）';
+             } else {
+                 btn.disabled = true;
+                 btn.textContent = '⛔ GPS异常且不在围栏内';
+             }
         }
 
         // Fingerprint with custom confirm dialog
@@ -957,10 +958,24 @@
                 var _token = localStorage.getItem("NOCOBASE_TOKEN") || localStorage.getItem("nocobase_token");
                 var _headers = { 'Content-Type': 'application/json' };
                 if (_token) _headers['Authorization'] = 'Bearer ' + _token;
+                
+                var allowedFields = [
+                    'check_type', 'check_time', 'gps_state', 'latitude', 'longitude', 'gps_accuracy',
+                    'manual_location', 'geofence_inside', 'geofence_distance', 'geofence_id',
+                    'verify_status', 'anomaly_reason', 'device_fingerprint', 'fingerprint_verified_at',
+                    'photo_hash', 'reason', 'start_date', 'end_date', 'workflow_status'
+                ];
+                var filteredBody = {};
+                for (var key in body) {
+                    if (body.hasOwnProperty(key) && allowedFields.indexOf(key) !== -1) {
+                        filteredBody[key] = body[key];
+                    }
+                }
+                
                 var r = await fetch('/api/attendance_records:create', {
                     method: 'POST', credentials: 'include',
                     headers: _headers,
-                    body: JSON.stringify(body)
+                    body: JSON.stringify(filteredBody)
                 });
                 if (r.ok) {
                     if (isLeave) {
@@ -974,7 +989,7 @@
                         btn.style.background = 'linear-gradient(135deg, #00ff88, #00b86b)';
                         setTimeout(closeAttendModal, 1200);
                     }
-                    fetchAttendance();
+                    if (window.parent && window.parent.fetchAttendance) window.parent.fetchAttendance();
                 } else {
                     var errData = await r.json().catch(function(){return {error: '无法解析错误响应'};});
                     var errMsg = (errData && (errData.errors || errData.error || JSON.stringify(errData))) || 'HTTP ' + r.status;
@@ -1014,64 +1029,6 @@
 
 
 
-        // Fetch current day status for display
-        let attendState = null;
-        async function fetchAttendance() {
-            try {
-                var today = new Date();
-                var start = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString();
-                var end = new Date(today.getFullYear(), today.getMonth(), today.getDate()+1).toISOString();
-                var _listToken = localStorage.getItem("NOCOBASE_TOKEN") || localStorage.getItem("nocobase_token");
-                var _listHeaders = {};
-                if (_listToken) _listHeaders['Authorization'] = 'Bearer ' + _listToken;
-                var r = await fetch('/api/attendance_records:list?filter[check_time][$dateBetween]=' +
-                    encodeURIComponent(start) + ',' + encodeURIComponent(end) +
-                    '&sort=-check_time&pageSize=10&appends=createdBy', { credentials:'include', headers:_listHeaders });
-                if (r.ok) {
-                    var data = await r.json();
-                    var recs = data.data || [];
-                    var checkIn = null, checkOut = null, leaveRec = null;
-                    for (var i = 0; i < recs.length; i++) {
-                        var t = recs[i];
-                        if (t.check_type === '上班' && !checkIn) checkIn = t;
-                        if (t.check_type === '下班' && !checkOut) checkOut = t;
-                        if ((t.check_type === '请假' || t.check_type === '出差') && !leaveRec) leaveRec = t;
-                    }
-                    attendState = {
-                        checkIn: !!checkIn, checkOut: !!checkOut,
-                        leaveRec: leaveRec,
-                        leavePending: leaveRec && leaveRec.workflow_status === 'pending',
-                        leaveLevel1: leaveRec && leaveRec.workflow_status === 'level1_approved',
-                        leaveApproved: leaveRec && leaveRec.workflow_status === 'approved',
-                        leaveRejected: leaveRec && leaveRec.workflow_status === 'rejected'
-                    };
-                    var st = document.getElementById('attendStatus');
-                    var btn = document.getElementById('attendBtn');
-                    if (leaveRec && (leaveRec.workflow_status === 'pending' || leaveRec.workflow_status === 'level1_approved')) {
-                        var label = leaveRec.check_type === '请假' ? '请假' : '出差';
-                        st.textContent = '⏳' + label + '待审批'; st.className = 'attend-status pending';
-                        btn.textContent = '⏳' + label + '审批中'; btn.className = 'attend-btn pending';
-                    } else if (leaveRec && leaveRec.workflow_status === 'approved') {
-                        var label2 = leaveRec.check_type === '请假' ? '已请假' : '已出差';
-                        st.textContent = '✅' + label2; st.className = 'attend-status approved';
-                        btn.textContent = label2; btn.className = 'attend-btn checked';
-                    } else if (leaveRec && leaveRec.workflow_status === 'rejected') {
-                        var label3 = leaveRec.check_type === '请假' ? '请假' : '出差';
-                        st.textContent = '❌' + label3 + '被驳回'; st.className = 'attend-status rejected';
-                        btn.textContent = label3 + '被驳回，点击重试'; btn.className = 'attend-btn';
-                    } else if (checkOut) {
-                        st.textContent = '已下班'; st.className = 'attend-status out';
-                        btn.textContent = '已打卡'; btn.className = 'attend-btn checked';
-                    } else if (checkIn) {
-                        st.textContent = '已上班'; st.className = 'attend-status';
-                        btn.textContent = '下班'; btn.className = 'attend-btn';
-                    } else {
-                        st.textContent = '未上班'; st.className = 'attend-status out';
-                        btn.textContent = '上班'; btn.className = 'attend-btn';
-                    }
-                }
-            } catch(e) { console.error('fetchAttendance error:', e); }
-        }
 
-                // 全屏切换
-        var _zoomScale = 1;
+
+                 // 全屏切换

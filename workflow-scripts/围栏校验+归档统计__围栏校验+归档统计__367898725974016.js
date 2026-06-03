@@ -64,18 +64,20 @@ async function main(context) {
     return Math.round(minDist);
   }
 
-  // Bbox 预过滤 + 距离计算
-  let minDist = Infinity;
-  let matchedFence = null;
+   // Bbox 预过滤（含缓冲区半径扩展）+ 距离计算
+   let minDist = Infinity;
+   let matchedFence = null;
 
-  for (const fence of geofences) {
-    if (fence.bbox_min_lat != null && fence.bbox_max_lat != null &&
-        fence.bbox_min_lng != null && fence.bbox_max_lng != null) {
-      if (latitude < fence.bbox_min_lat || latitude > fence.bbox_max_lat ||
-          longitude < fence.bbox_min_lng || longitude > fence.bbox_max_lng) {
-        continue;
-      }
-    }
+   for (const fence of geofences) {
+     if (fence.bbox_min_lat != null && fence.bbox_max_lat != null &&
+         fence.bbox_min_lng != null && fence.bbox_max_lng != null) {
+       const bufDeg = (fence.buffer_radius || 200) / 111320;
+       const bufDegLng = bufDeg / Math.cos(latitude * Math.PI / 180);
+       if (latitude < fence.bbox_min_lat - bufDeg || latitude > fence.bbox_max_lat + bufDeg ||
+           longitude < fence.bbox_min_lng - bufDegLng || longitude > fence.bbox_max_lng + bufDegLng) {
+         continue;
+       }
+     }
     let polyline;
     try { polyline = JSON.parse(fence.polyline_coords); } catch(e) { continue; }
     if (!Array.isArray(polyline) || polyline.length < 2) continue;
