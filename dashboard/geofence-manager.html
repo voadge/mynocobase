@@ -173,6 +173,7 @@
 
             document.getElementById('polylineCoords').value = JSON.stringify(currentPoints);
             document.getElementById('coordCount').textContent = '节点数: ' + currentPoints.length;
+            renderNodeList();
 
             if (currentPoints.length === 0) return;
 
@@ -507,8 +508,10 @@
             document.getElementById('bufferRadius').value = '200';
             document.getElementById('isActive').checked = true;
             document.getElementById('polylineCoords').value = '';
+            document.getElementById('manualCoords').value = '';
             document.getElementById('coordCount').textContent = '节点数: 0';
             document.getElementById('deleteBtn').style.display = 'none';
+            document.getElementById('nodeList').innerHTML = '';
             renderFenceList();
         }
 
