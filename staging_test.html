@@ -4,14 +4,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>贵州遵大数智化平台</title>
-    <link rel="stylesheet" href="/dashboard/assets/core.css?v=16">
-    <link rel="stylesheet" href="/dashboard/assets/drawer.css?v=16">
+    <link rel="stylesheet" href="assets/core.css">
+    <link rel="stylesheet" href="assets/drawer.css">
+    <link rel="stylesheet" href="assets/attend.css">
 </head>
 <body>
     <div class="dashboard">
         <div class="header">
             <div class="logo-container">
-                <img src="/dashboard/assets/logo.png" alt="遵大Logo" class="logo">
+                <img src="assets/logo.png" alt="遵大Logo" class="logo">
             </div>
             <div class="title-container">
                 <h1>贵州遵大数智化平台</h1>
@@ -22,7 +23,7 @@
         <!-- 主舞台：大屏 + 左侧面板 -->
         <div class="main-stage">
             <div class="side-panel">
-                <div class="panel-card clock-panel">
+                <div class="panel-card">
                     <div class="clock-digits">
                         <span id="clockHour">00</span>
                         <span class="colon">:</span>
@@ -35,7 +36,6 @@
                         <span class="cycle-item" id="weekdayDisplay"><span class="label-week"></span></span>
                         <span class="cycle-item" id="weatherDisplay"><span class="label-weather"></span></span>
                         <span class="cycle-item" id="tempDisplay"><span class="label-temp"></span></span>
-                        <span class="cycle-item" id="warnDisplay"><span class="label-warn"></span></span>
                     </div>
                 </div>
                 <div class="panel-card">
@@ -67,15 +67,10 @@
                         <span class="attend-label">⏰ 考勤打卡</span>
                         <span class="attend-status" id="attendStatus">--</span>
                     </div>
-                    <button class="attend-btn" id="attendBtn" onclick="openDrawer('/dashboard/attendance.html?v=3','考勤打卡')">打卡</button>
-                    <div class="attend-quick-types">
-                        <span onclick="openDrawer('/dashboard/attendance.html?v=3','考勤打卡')">📍 打卡</span>
-                        <span onclick="openDrawer('/dashboard/attendance.html?v=3&type=请假','考勤打卡')">📋 请假</span>
-                        <span onclick="openDrawer('/dashboard/attendance.html?v=3&type=出差','考勤打卡')">🚗 出差</span>
-                    </div>
+                    <button class="attend-btn" id="attendBtn" onclick="handleAttendance()">打卡</button>
                 </div>
                 <div class="panel-card toolbox-card">
-                    <a href="javascript:void(0)" onclick="openDrawer('/dashboard/百宝箱.html?v=2','百宝箱')" class="toolbox-link">
+                    <a href="/admin/alruvklcz9v" target="_blank" class="toolbox-link">
                         <span class="toolbox-icon">🧰</span>
                         <span class="toolbox-label">百宝箱</span>
                         <span class="toolbox-arrow">→</span>
@@ -92,12 +87,6 @@
                     <button class="fs-btn" onclick="toggleFullscreen()">⛶ 全屏</button>
                 </div>
                 <iframe id="externFrame" src="" allowfullscreen sandbox="allow-scripts allow-forms allow-same-origin allow-popups"></iframe>
-                <div class="zoom-bar" id="zoomBar">
-                    <button class="zoom-btn" onclick="zoomFrame(0.2)" title="放大">＋</button>
-                    <button class="zoom-btn" onclick="zoomFrame(-0.2)" title="缩小">－</button>
-                    <button class="zoom-btn" onclick="zoomFrame(0,true)" title="重置">↺</button>
-                    <span class="zoom-pct" id="zoomPct">100%</span>
-                </div>
             </div>
         </div>
 
@@ -108,17 +97,18 @@
         </div>
 
         <div class="footer">
-            <p>贵州遵大数智化平台 v2.0.58 | 
-               <a href="/" target="_blank">管理后台</a> | 
+            <p>贵州遵大数智化平台 v2.0.57 | 
+               <a href="/admin/alruvklcz9v" target="_blank">管理后台</a> | <a href="/admin/alruvklcz9v" target="_blank">访问系统</a> | 
                服务器: 110.42.236.231 | 
                运行时间: <span id="uptime"></span>
             </p>
         </div>
     </div>
 
-    <script src="/dashboard/assets/config.js?v=5" defer></script>
-    <script src="/dashboard/assets/core.js?v=21" defer></script>
-    <script src="/dashboard/assets/drawer.js?v=5" defer></script>
+    <script src="assets/config.js" defer></script>
+    <script src="assets/core.js" defer></script>
+    <script src="assets/attend.js" defer></script>
+    <script src="assets/drawer.js" defer></script>
 
 <!-- 抽屉面板 -->
 <div class="drawer-overlay" id="adminDrawer">
@@ -131,7 +121,7 @@
             </div>
         </div>
         <div class="drawer-body">
-            <iframe id="adminFrame" allow="camera; geolocation" sandbox="allow-scripts allow-forms allow-same-origin allow-popups"></iframe>
+            <iframe id="adminFrame" sandbox="allow-scripts allow-forms allow-same-origin allow-popups"></iframe>
         </div>
     </div>
 </div>

@@ -1,0 +1,190 @@
+﻿        .attend-overlay {
+            display: none; position: fixed; inset: 0; z-index: 10000;
+            background: rgba(0,0,0,0.75); backdrop-filter: blur(4px);
+            align-items: center; justify-content: center;
+        }
+        .attend-overlay.show { display: flex; }
+        .attend-drawer {
+            background: linear-gradient(160deg, #111827 0%, #1a2332 100%);
+            border: 1px solid rgba(0,212,255,0.25);
+            border-radius: 16px; width: 92vw; max-width: 420px;
+            max-height: 92vh; display: flex; flex-direction: column;
+            overflow-y: hidden; padding: 20px 20px 16px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+            animation: slideUp 0.3s ease;
+        }
+        @keyframes slideUp { from{transform:translateY(30px);opacity:0} to{transform:translateY(0);opacity:1} }
+        .attend-drawer h3 {
+            text-align: center; color: #00d4ff; font-size: 1.2em;
+            margin-bottom: 16px; letter-spacing: 2px;
+        }
+        .attend-close {
+            position: absolute; top: 10px; right: 14px; font-size: 1.2em;
+            color: #888; cursor: pointer; background: none; border: none;
+            width: 32px; height: 32px; border-radius: 50%; display: flex;
+            align-items: center; justify-content: center; transition: all 0.2s;
+            line-height: 1; z-index: 5;
+        }
+        .attend-close:hover { color: #ff6b6b; }
+        .attend-info-row .value { color: #e0e6ed; font-weight: 500; }
+        .attend-camera-wrap {
+            position: relative; border-radius: 12px; overflow: hidden;
+            background: #000; flex: unset; aspect-ratio: 3/4;
+            margin-bottom: 8px; border: 2px solid rgba(0,212,255,0.15);
+        }
+        .attend-camera-wrap video, .attend-camera-wrap canvas {
+            width: 100%; height: 100%; object-fit: cover;
+        }
+        .attend-camera-wrap canvas { position: absolute; top: 0; left: 0; }
+        .attend-camera-wrap .face-indicator {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+            width: min(46%, 160px); aspect-ratio: 3/4;
+            border: 2px dashed rgba(0,255,136,0.6);
+            border-radius: 50% / 40%; pointer-events: none;
+        }
+        .attend-camera-wrap .face-indicator.verified { border-color: #00ff88; border-style: solid; }
+        .attend-camera-wrap .face-indicator.unverified { border-color: #ff6b6b; }
+        .attend-camera-wrap .face-status {
+            position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%);
+            padding: 4px 12px; border-radius: 10px; font-size: 0.7em;
+            background: rgba(0,0,0,0.6); color: #ffd93d;
+        }
+        .attend-camera-wrap .face-status.verified { color: #00ff88; }
+        .attend-camera-wrap .face-status.unverified { color: #ff6b6b; }
+        .attend-capture-btn {
+            position: absolute; bottom: 12px; right: 12px;
+            width: 54px; height: 54px; border-radius: 50%;
+            border: 3px solid #00d4ff; background: rgba(0,212,255,0.15);
+            color: #00d4ff; font-size: 1.6em; cursor: pointer; line-height: 1;
+            transition: all 0.2s; font-family: inherit; z-index: 2;
+            display: flex; align-items: center; justify-content: center;
+            backdrop-filter: blur(4px);
+        }
+        .attend-capture-btn:hover { background: rgba(0,212,255,0.3); }
+        .attend-capture-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+        .attend-submit {
+            display: block; width: 100%; padding: 12px; border-radius: 10px;
+            border: none; font-size: 1em; font-weight: 600; letter-spacing: 2px;
+            cursor: pointer; transition: all 0.3s; font-family: inherit;
+            background: linear-gradient(135deg, #00d4ff, #7b2cbf); color: #fff;
+        }
+        
+        #attendNormalSection { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+        .attend-finger-row {
+            display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
+            padding: 10px 12px; border-radius: 8px;
+            background: rgba(255,255,255,0.02); font-size: 0.78em;
+        }
+        .attend-finger-row .label { color: #5a6a7a; }
+        .attend-finger-btn {
+            margin-left: auto; padding: 6px 14px; border-radius: 6px;
+            border: 1px solid rgba(123,44,191,0.4); background: rgba(123,44,191,0.1);
+            color: #b06fff; font-size: 0.85em; cursor: pointer; font-family: inherit;
+            transition: all 0.2s; white-space: nowrap;
+        }
+        .attend-finger-btn:hover { background: rgba(123,44,191,0.2); }
+        .attend-finger-btn.verified { border-color: #00ff88; background: rgba(0,255,136,0.1); color: #00ff88; }
+        .attend-finger-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .attend-finger-status { font-size: 0.85em; }
+        .attend-finger-status.verified { color: #00ff88; }
+        .attend-finger-status.unavailable { color: #5a6a7a; }
+        .attend-verify-bar {
+            display: flex; gap: 6px; margin-bottom: 10px; font-size: 0.7em;
+        }
+        .attend-verify-bar .v-item {
+            flex: 1; text-align: center; padding: 4px 0; border-radius: 4px;
+            background: rgba(255,255,255,0.03); color: #5a6a7a;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+        .attend-verify-bar .v-item.ok {
+            background: rgba(0,255,136,0.08); border-color: rgba(0,255,136,0.3); color: #00ff88;
+        }
+        .attend-verify-bar .v-item.fail {
+            background: rgba(255,107,107,0.08); border-color: rgba(255,107,107,0.3); color: #ff6b6b;
+        }
+        .attend-verify-bar .v-item.need {
+            background: rgba(255,217,61,0.08); border-color: rgba(255,217,61,0.3); color: #ffd93d;
+            animation: pulse 1.5s ease infinite;
+        }
+        .attend-verify-bar .v-item.warn {
+            background: rgba(255,165,0,0.1); border-color: rgba(255,165,0,0.35); color: #ffa500;
+        }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+        .camera-retry-btn {
+            display: none; position: absolute; top: 8px; right: 8px;
+            width: 34px; height: 34px; border-radius: 50%; z-index: 2;
+            border: 1px solid rgba(255,107,107,0.4); background: rgba(0,0,0,0.4);
+            color: #ff6b6b; font-size: 1em; cursor: pointer;
+            transition: all 0.2s; font-family: inherit;
+            display: none; align-items: center; justify-content: center;
+            backdrop-filter: blur(4px);
+        }
+        .camera-retry-btn:hover { background: rgba(255,107,107,0.3); }
+
+
+        .attend-submit:disabled { opacity: 0.3; cursor: not-allowed; }
+        .attend-submit:hover:not(:disabled) { filter: brightness(1.15); }
+        .attend-location-status {
+            font-size: 0.65em; text-align: center; margin-top: 4px;
+        }
+        .attend-location-status.getting { color: #ffd93d; }
+        .attend-location-status.got { color: #00ff88; }
+        .attend-location-status.error { color: #ff6b6b; }
+        .attend-manual-location input:focus { outline:none; border-color:#00d4ff; }
+
+        /* 4 鏍囩鍒囨崲 */
+        .attend-type-tabs { display: flex; gap: 6px; margin-bottom: 16px; }
+        .attend-type-tab {
+            flex: 1; padding: 10px 4px; border-radius: 8px; border: 2px solid rgba(255,255,255,0.1);
+            background: rgba(255,255,255,0.03); color: #c0c8d0;
+            font-size: 0.85em; cursor: pointer; text-align: center; transition: all 0.2s;
+            font-family: inherit; line-height: 1.2;
+        }
+        .attend-type-tab:hover { border-color: rgba(0,212,255,0.4); }
+        .attend-type-tab.selected { border-color: #00d4ff; background: rgba(0,212,255,0.12); color: #00d4ff; font-weight: 600; }
+        .attend-type-tab.selected.leave { border-color: #ffd93d; background: rgba(255,217,61,0.12); color: #ffd93d; }
+        .attend-type-tab.selected.trip { border-color: #ff9f43; background: rgba(255,159,67,0.12); color: #ff9f43; }
+
+        /* 璇峰亣/鍑哄樊鍖哄煙 */
+        .attend-leave-section { display: none; margin-bottom: 12px; }
+        .attend-leave-section.visible { display: block; }
+        .attend-leave-section .date-row {
+            display: flex; gap: 8px; margin-bottom: 10px;
+        }
+        .attend-leave-section .date-row .date-field {
+            flex: 1; display: flex; flex-direction: column; gap: 3px;
+        }
+        .attend-leave-section .date-row .date-field label {
+            font-size: 0.7em; color: #5a6a7a; letter-spacing: 1px;
+        }
+        .attend-leave-section .date-row input[type="date"] {
+            width: 100%; padding: 8px 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.15);
+            background: rgba(255,255,255,0.05); color: #e0e6ed; font-size: 0.82em;
+            font-family: inherit; outline: none; box-sizing: border-box;
+        }
+        .attend-leave-section .date-row input[type="date"]:focus { border-color: #00d4ff; }
+        .attend-leave-section .date-row input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.7); cursor: pointer; }
+        .attend-leave-section textarea {
+            width: 100%; min-height: 72px; padding: 10px 12px; border-radius: 8px;
+            border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.04);
+            color: #e0e6ed; font-size: 0.82em; font-family: inherit; resize: vertical;
+            outline: none; box-sizing: border-box;
+        }
+        .attend-leave-section textarea:focus { border-color: #00d4ff; }
+        .attend-leave-section textarea::placeholder { color: #5a6a7a; }
+
+        /* 璇峰亣/鍑哄樊鎻愪氦鍚庣姸鎬?*/
+        .attend-leave-status {
+            text-align: center; padding: 10px; border-radius: 8px; margin-bottom: 10px;
+            font-size: 0.82em; display: none;
+        }
+        .attend-leave-status.pending { display: block; background: rgba(255,217,61,0.1); border: 1px solid rgba(255,217,61,0.3); color: #ffd93d; }
+        .attend-leave-status.approved { display: block; background: rgba(0,255,136,0.1); border: 1px solid rgba(0,255,136,0.3); color: #00ff88; }
+        .attend-leave-status.rejected { display: block; background: rgba(255,107,107,0.1); border: 1px solid rgba(255,107,107,0.3); color: #ff6b6b; }
+
+        /* 鎽勫儚澶村垏鎹?*/
+        .camera-switch-btn {
+            position: absolute; bottom: 12px; left: 12px;
+            width: 40px; height: 40px; border-radius: 50%; z-index: 2;
+            border: 1px solid rgba(0,212,255,0.4); background: rgba(0,0,0,0.4);
+            color: #00d4ff; font-size: 1.2em; cursor: pointer;
