@@ -566,6 +566,9 @@
             background: rgba(255,217,61,0.08); border-color: rgba(255,217,61,0.3); color: #ffd93d;
             animation: pulse 1.5s ease infinite;
         }
+        .attend-verify-bar .v-item.warn {
+            background: rgba(255,165,0,0.1); border-color: rgba(255,165,0,0.35); color: #ffa500;
+        }
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
         .camera-retry-btn {
             display: none; position: absolute; top: 8px; right: 8px;
@@ -1007,19 +1010,159 @@
         }
 
         // 考勤打卡 - 完整版（拍照 + 定位 + 人脸检测 + 请假/出差）
-        let attendType = '上班';
-        let attendPhoto = null;
-        let attendLocation = null;
-        let attendLocationText = '--';
-        let cameraStream = null;
-        let faceDetected = false;
-        let gpsState = 'fail';
-        let _fingerVerified = false;
-        let _deviceFp = null;
-        let _fingerVerifiedAt = null;
-        let _cameraFacingMode = 'user';
-        let _manualLocation = null;
-        let _cameraFallbackMode = false;
+        var attendType = '上班';
+        var attendPhoto = null;
+        var attendLocation = null;
+        var attendLocationText = '--';
+        var cameraStream = null;
+        var faceDetected = false;
+        var gpsState = 'fail';
+        var _fingerVerified = false;
+        var _deviceFp = null;
+        var _fingerVerifiedAt = null;
+        var _cameraFacingMode = 'user';
+        var _manualLocation = null;
+        var _cameraFallbackMode = false;
+
+        // ---- 打卡地理围栏配置（按需修改） ----
+        // ---------- 折线地理围栏（新版，自 geofences 表动态获取）----------
+        var __geofencesCache = null;         // 缓存，[ { id, fence_name, polyline_coords, buffer_radius, bbox_* } ]
+        var __geofencesCacheTime = 0;        // 缓存时间戳
+        var __polylineGeofenceResult = null; // { inside, distance, fenceId, fenceName, bufferRadius, matched }
+
+        // 获取围栏列表（带 session 级缓存）
+        async function fetchGeofences() {
+            var now = Date.now();
+            if (__geofencesCache && (now - __geofencesCacheTime < 300000)) { // 5分钟缓存
+                return __geofencesCache;
+            }
+            try {
+                var _tk = localStorage.getItem("NOCOBASE_TOKEN") || localStorage.getItem("nocobase_token");
+                var _hd = { 'Content-Type': 'application/json' };
+                if (_tk) _hd['Authorization'] = 'Bearer ' + _tk;
+                var r = await fetch('/api/geofences:list?filter[is_active]=true&sort=sort', { headers: _hd });
+                var data = await r.json();
+                __geofencesCache = data.data || [];
+                __geofencesCacheTime = now;
+                return __geofencesCache;
+            } catch(e) {
+                return __geofencesCache || [];
+            }
+        }
+
+        // Haversine 距离（米）
+        function haversineDist(lat1, lon1, lat2, lon2) {
+            var R = 6371000;
+            var toRad = Math.PI / 180;
+            var dLat = (lat2 - lat1) * toRad;
+            var dLon = (lon2 - lon1) * toRad;
+            var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                    Math.cos(lat1 * toRad) * Math.cos(lat2 * toRad) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+            return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        }
+
+        // 点到线段最短距离
+        function pointToSegmentDistance(lat, lon, lat1, lon1, lat2, lon2) {
+            var dAC = haversineDist(lat, lon, lat1, lon1);
+            var dBC = haversineDist(lat, lon, lat2, lon2);
+            var dAB = haversineDist(lat1, lon1, lat2, lon2);
+            if (dAB < 1) return dAC;
+            var cosA = (dAC * dAC + dAB * dAB - dBC * dBC) / (2 * dAC * dAB);
+            var cosB = (dBC * dBC + dAB * dAB - dAC * dAC) / (2 * dBC * dAB);
+            if (cosA <= 0) return dAC;
+            if (cosB <= 0) return dBC;
+            var s = (dAC + dBC + dAB) / 2;
+            var area = Math.sqrt(Math.max(0, s * (s - dAC) * (s - dBC) * (s - dAB)));
+            return area * 2 / dAB;
+        }
+
+        // GPS 点到折线最短距离
+        function distanceToPolyline(lat, lon, polyline) {
+            var minDist = Infinity;
+            for (var i = 0; i < polyline.length - 1; i++) {
+                var dist = pointToSegmentDistance(lat, lon, polyline[i][1], polyline[i][0], polyline[i + 1][1], polyline[i + 1][0]);
+                if (dist < minDist) minDist = dist;
+            }
+            return Math.round(minDist);
+        }
+
+        // 折线围栏检测（含 bbox 预过滤）
+        async function checkPolylineGeofence(lat, lng) {
+            var fences = await fetchGeofences();
+            if (!fences || fences.length === 0) {
+                __polylineGeofenceResult = { inside: true, distance: 0, fenceId: null, fenceName: null, bufferRadius: null, matched: false };
+                return __polylineGeofenceResult;
+            }
+
+            var minDist = Infinity;
+            var matchedFence = null;
+
+            for (var i = 0; i < fences.length; i++) {
+                var fence = fences[i];
+                // Bbox 预过滤（含缓冲区半径扩展）
+                if (fence.bbox_min_lat != null && fence.bbox_max_lat != null &&
+                    fence.bbox_min_lng != null && fence.bbox_max_lng != null) {
+                    var bufDeg = (fence.buffer_radius || 200) / 111320;
+                    var bufDegLng = bufDeg / Math.cos(lat * Math.PI / 180);
+                    if (lat < fence.bbox_min_lat - bufDeg || lat > fence.bbox_max_lat + bufDeg ||
+                        lng < fence.bbox_min_lng - bufDegLng || lng > fence.bbox_max_lng + bufDegLng) {
+                        continue;
+                    }
+                }
+                var polyline;
+                try { polyline = JSON.parse(fence.polyline_coords); } catch(e) { continue; }
+                if (!Array.isArray(polyline) || polyline.length < 2) continue;
+
+                var dist = distanceToPolyline(lat, lng, polyline);
+                if (dist < minDist) { minDist = dist; matchedFence = fence; }
+            }
+
+            var bufferRadius = matchedFence ? matchedFence.buffer_radius : 200;
+            var isInside = matchedFence ? minDist <= bufferRadius : true;
+
+            __polylineGeofenceResult = {
+                inside: isInside,
+                distance: minDist < Infinity ? minDist : null,
+                fenceId: matchedFence ? matchedFence.id : null,
+                fenceName: matchedFence ? matchedFence.fence_name : null,
+                bufferRadius: bufferRadius,
+                matched: matchedFence !== null
+            };
+            return __polylineGeofenceResult;
+        }
+
+        // ---------- 旧版圆形围栏（保留兼容）----------
+        var geofenceConfig = {
+            enabled: true,
+            centerLat: 27.706,
+            centerLng: 106.937,
+            radius: 300
+        };
+        var geofenceResult = null;
+
+        function checkGeofence(lat, lng) {
+            if (!geofenceConfig.enabled) {
+                geofenceResult = { inside: true, distance: 0, centerLat: geofenceConfig.centerLat, centerLng: geofenceConfig.centerLng, radius: geofenceConfig.radius, skipped: true };
+                return geofenceResult;
+            }
+            var R = 6371000;
+            var dLat = (lat - geofenceConfig.centerLat) * Math.PI / 180;
+            var dLng = (lng - geofenceConfig.centerLng) * Math.PI / 180;
+            var a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                    Math.cos(geofenceConfig.centerLat * Math.PI / 180) * Math.cos(lat * Math.PI / 180) *
+                    Math.sin(dLng/2) * Math.sin(dLng/2);
+            var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            var distance = R * c;
+            geofenceResult = {
+                inside: distance <= geofenceConfig.radius,
+                distance: Math.round(distance),
+                centerLat: geofenceConfig.centerLat,
+                centerLng: geofenceConfig.centerLng,
+                radius: geofenceConfig.radius,
+                skipped: false
+            };
+            return geofenceResult;
+        }
 
         function onAttendTypeChange(type, el) {
             attendType = type;
@@ -1065,7 +1208,9 @@
                 } catch(e) {}
             }
             if (result.geolocation === 'denied') {
-                document.getElementById('locationStatus').innerHTML = '⚠ 定位权限已被浏览器拒绝，请在浏览器网站设置中开启定位权限';
+                var locErr = '⚠ 定位权限已被浏览器拒绝，请在浏览器网站设置中开启定位权限';
+                document.getElementById('locationStatus').innerHTML = locErr;
+                document.getElementById('locationStatus').setAttribute('data-base', locErr);
                 document.getElementById('locationStatus').className = 'attend-location-status error';
             }
             if (result.camera === 'denied') {
@@ -1082,8 +1227,14 @@
             var val = document.getElementById('manualLocationInput').value.trim();
             if (!val) return;
             _manualLocation = val;
-            document.getElementById('attendLocation').textContent = '手动: ' + val;
-            document.getElementById('locationStatus').innerHTML = '✓ 位置已手动确认';
+            // 手动位置：无法精确判断围栏，设为忽略围栏
+            if (geofenceConfig.enabled) {
+                geofenceResult = { inside: true, distance: 0, centerLat: geofenceConfig.centerLat, centerLng: geofenceConfig.centerLng, radius: geofenceConfig.radius, skipped: true, manual: true };
+            }
+            document.getElementById('attendLocation').textContent = '手动: ' + val + (geofenceConfig.enabled ? ' | ⚠ 手动位置（未校验围栏）' : '');
+                    var locMsg = '✓ 位置已手动确认';
+                    document.getElementById('locationStatus').innerHTML = locMsg;
+                    document.getElementById('locationStatus').setAttribute('data-base', locMsg);
             document.getElementById('locationStatus').className = 'attend-location-status got';
             gpsState = 'manual';
             document.getElementById('manualLocationSection').style.display = 'none';
@@ -1111,8 +1262,10 @@
             document.getElementById('attendTime').textContent = new Date().toLocaleString('zh-CN');
             document.getElementById('attendSubmit').disabled = true;
             document.getElementById('attendLocation').textContent = '获取中...';
+            var locGetting = '正在获取位置...';
             document.getElementById('locationStatus').className = 'attend-location-status getting';
-            document.getElementById('locationStatus').innerHTML = '正在获取位置...';
+            document.getElementById('locationStatus').innerHTML = locGetting;
+            document.getElementById('locationStatus').setAttribute('data-base', locGetting);
             // Determine attendType from attendState
             if (attendState && attendState.leaveRejected) {
                 attendType = attendState.leaveRec.check_type === '出差' ? '出差' : '请假';
@@ -1293,14 +1446,18 @@
         function getLocation() {
             if (!navigator.geolocation) {
                 document.getElementById('attendLocation').textContent = '不支持';
-                document.getElementById('locationStatus').innerHTML = '⚠ 浏览器不支持定位';
+                var locErr = '⚠ 浏览器不支持定位';
+                document.getElementById('locationStatus').innerHTML = locErr;
+                document.getElementById('locationStatus').setAttribute('data-base', locErr);
                 document.getElementById('locationStatus').className = 'attend-location-status error';
                 gpsState = 'fail';
                 updateSubmitState();
                 return;
             }
             document.getElementById('attendLocation').innerHTML = '获取中... <a href="javascript:void(0)" onclick="getLocation()" style="color:#00d4ff;font-size:0.82em">重试</a>';
-            document.getElementById('locationStatus').innerHTML = '正在获取位置...';
+            var locGetting = '正在获取位置...';
+            document.getElementById('locationStatus').innerHTML = locGetting;
+            document.getElementById('locationStatus').setAttribute('data-base', locGetting);
             document.getElementById('locationStatus').className = 'attend-location-status getting';
             _gpsRetried = false;
             _getLocationOnce(true);
@@ -1308,17 +1465,17 @@
 
         function _showGpsHelp() {
             var loc = document.getElementById('locationStatus');
-            if (_isMobile) {
-                loc.innerHTML = '⚠ 定位失败：浏览器位置权限未允许，请在浏览器设置中开启定位后重试';
-            } else {
-                loc.innerHTML = '⚠ 定位失败，请在浏览器网站设置中允许位置权限后重试';
-            }
+            var locErrMsg = _isMobile ? '⚠ 定位失败：浏览器位置权限未允许' : '⚠ 定位失败，请在浏览器网站设置中允许位置权限后重试';
+            loc.innerHTML = locErrMsg;
+            loc.setAttribute('data-base', locErrMsg);
             loc.className = 'attend-location-status error';
         }
 
         function _getLocationByIP() {
             document.getElementById('attendLocation').innerHTML = 'IP定位中...';
-            document.getElementById('locationStatus').innerHTML = '正在通过IP获取位置...';
+            var locGettingIP = '正在通过IP获取位置...';
+            document.getElementById('locationStatus').innerHTML = locGettingIP;
+            document.getElementById('locationStatus').setAttribute('data-base', locGettingIP);
             document.getElementById('locationStatus').className = 'attend-location-status getting';
             fetch('https://ip-api.com/json/?lang=zh-CN&fields=status,country,regionName,city,lat,lon,query')
                 .then(function(r){ return r.json(); })
@@ -1326,16 +1483,22 @@
                     if (data && data.status === 'success') {
                         attendLocation = {lat: data.lat, lng: data.lon, accuracy: null};
                         gpsState = 'ip';
-                        attendLocationText = 'IP定位: ' + data.regionName + data.city + ' (IP: ' + data.query + ')';
+                        var gf = checkGeofence(data.lat, data.lon);
+                        var gfLabel = gf.inside ? '✅ 围栏内' : '❌ 围栏外';
+                        attendLocationText = 'IP定位: ' + data.regionName + data.city + ' (IP: ' + data.query + ') | ' + gfLabel;
                         document.getElementById('attendLocation').textContent = attendLocationText;
-                        document.getElementById('locationStatus').innerHTML = '✓ IP定位成功（城市级精度）';
+                        var locMsg = '✓ IP定位成功（城市级精度）';
+                        document.getElementById('locationStatus').innerHTML = locMsg;
+                        document.getElementById('locationStatus').setAttribute('data-base', locMsg);
                         document.getElementById('locationStatus').className = 'attend-location-status got';
                         document.getElementById('manualLocationSection').style.display = 'none';
+                        // 折线围栏检测完成后更新状态
+                        checkPolylineGeofence(data.lat, data.lon).then(function(){ updateSubmitState(); }).catch(function(){ updateSubmitState(); });
                     } else {
                         _showGpsHelp();
                         document.getElementById('manualLocationSection').style.display = 'block';
+                        updateSubmitState();
                     }
-                    updateSubmitState();
                 })
                 .catch(function(){
                     _showGpsHelp();
@@ -1359,13 +1522,21 @@
                     else if (acc < 50) accLabel = '（一般）';
                     else accLabel = '（精度低）';
                     attendLocationText = pos.coords.latitude.toFixed(5) + ',' + pos.coords.longitude.toFixed(5) + ' ±' + acc + 'm ' + accLabel;
+                    // 地理围栏检查（圆圈+折线）
+                    var gf = checkGeofence(pos.coords.latitude, pos.coords.longitude);
+                    var gfLabel = gf.inside ? '✅ 围栏内' : '❌ 围栏外';
+                    attendLocationText += ' | ' + gfLabel;
+                    if (!gf.skipped) attendLocationText += ' (' + gf.distance + 'm)';
                     document.getElementById('attendLocation').textContent = attendLocationText;
-                    document.getElementById('locationStatus').innerHTML = '✓ 位置已获取';
+                    var locMsg = '✓ 位置已获取';
+                    document.getElementById('locationStatus').innerHTML = locMsg;
+                    document.getElementById('locationStatus').setAttribute('data-base', locMsg);
                     document.getElementById('locationStatus').className = 'attend-location-status got';
+                    // 折线围栏检测完成后统一更新状态
+                    checkPolylineGeofence(pos.coords.latitude, pos.coords.longitude).then(function(){ updateSubmitState(); }).catch(function(){ updateSubmitState(); });
                     if (attendType === '请假' || attendType === '出差') {
                         // Keep optional status
                     }
-                    updateSubmitState();
                 },
                 function(err){
                     if (highAccuracy && (err.code === 2 || err.code === 3) && !_gpsRetried) {
@@ -1476,6 +1647,7 @@
             var vGps = document.getElementById('vGps');
             var vFace = document.getElementById('vFace');
             var vFinger = document.getElementById('vFinger');
+            var vFence = document.getElementById('vFence');
 
             var isLeave = (attendType === '请假' || attendType === '出差');
             if (isLeave) {
@@ -1489,11 +1661,56 @@
             bar.style.display = 'flex';
             var faceOk = (faceDetected === true);
             var fingerOk = _fingerVerified;
+            var fenceOk = true;
 
             var gpsOk = (gpsState === 'ok' || gpsState === 'manual' || gpsState === 'ip');
             var gpsClass = gpsOk ? 'ok' : 'fail';
             vGps.className = 'v-item ' + gpsClass;
             vGps.textContent = gpsOk ? (gpsState === 'manual' ? '📍 定位（手动）✓' : gpsState === 'ip' ? '📍 IP定位 ✓' : '📍 定位 ✓') : '📍 定位 ✗';
+
+            // 围栏状态（仅使用折线围栏结果），追加到位置信息末尾
+            var pgr = __polylineGeofenceResult;
+            var locEl = document.getElementById('locationStatus');
+            var baseLoc = locEl.getAttribute('data-base') || locEl.innerHTML;
+            if (pgr && pgr.matched) {
+                vFence.style.display = '';
+                var ratio = pgr.distance / pgr.bufferRadius;
+                var fenceLabel, fenceColor;
+                if (pgr.inside && ratio <= 0.5) {
+                    vFence.className = 'v-item ok';
+                    vFence.textContent = '📍 ' + pgr.fenceName + ' ✓ (' + pgr.distance + '/' + pgr.bufferRadius + 'm)';
+                    fenceOk = true;
+                    fenceLabel = '✅ ' + pgr.fenceName + ' (' + pgr.distance + '/' + pgr.bufferRadius + 'm)';
+                    fenceColor = '#00ff88';
+                } else if (pgr.inside && ratio <= 1.0) {
+                    vFence.className = 'v-item warn';
+                    vFence.textContent = '📍 ' + pgr.fenceName + ' ⚠ 距边界' + Math.round(pgr.bufferRadius - pgr.distance) + 'm (' + pgr.distance + '/' + pgr.bufferRadius + 'm)';
+                    fenceOk = true;
+                    fenceLabel = '⚠️ ' + pgr.fenceName + ' 接近边界 (' + pgr.distance + '/' + pgr.bufferRadius + 'm)';
+                    fenceColor = '#ffaa00';
+                } else if (!pgr.inside && ratio <= 2.0) {
+                    vFence.className = 'v-item fail';
+                    vFence.textContent = '📍 ' + pgr.fenceName + ' ✗ ' + pgr.distance + 'm（超缓冲区' + (pgr.distance - pgr.bufferRadius) + 'm）';
+                    fenceOk = false;
+                    fenceLabel = '❌ ' + pgr.fenceName + ' ' + pgr.distance + 'm（超' + (pgr.distance - pgr.bufferRadius) + 'm）';
+                    fenceColor = '#ff6b6b';
+                } else {
+                    vFence.className = 'v-item fail';
+                    vFence.textContent = '📍 ' + pgr.fenceName + ' ❌ 远离围栏 ' + pgr.distance + 'm';
+                    fenceOk = false;
+                    fenceLabel = '❌ ' + pgr.fenceName + ' ' + pgr.distance + 'm（远离）';
+                    fenceColor = '#cc4444';
+                }
+                locEl.innerHTML = baseLoc + ' <span style="color:' + fenceColor + '">| ' + fenceLabel + '</span>';
+            } else if (pgr && !pgr.matched && pgr.fenceId === null) {
+                vFence.style.display = 'none';
+                locEl.innerHTML = baseLoc;
+                fenceOk = true;
+            } else {
+                vFence.style.display = 'none';
+                locEl.innerHTML = baseLoc + ' <span style="color:#5a6a7a">| ⏳ 围栏检测中...</span>';
+                fenceOk = true;
+            }
 
             if (faceDetected === true) { vFace.className = 'v-item ok'; vFace.textContent = '📷 人脸 ✓'; }
             else if (faceDetected === null) { vFace.className = 'v-item ok'; vFace.textContent = '📷 已拍照'; }
@@ -1503,7 +1720,7 @@
             if (fingerOk) { vFinger.className = 'v-item ok'; vFinger.textContent = '🔐 指纹 ✓'; }
             else { vFinger.className = 'v-item need'; vFinger.textContent = '🔐 指纹 ○'; }
 
-            if (gpsOk) {
+            if (gpsOk && fenceOk) {
                 if (faceOk || fingerOk || attendPhoto) {
                     btn.disabled = false;
                     btn.textContent = '确认打卡';
@@ -1511,7 +1728,7 @@
                     btn.disabled = true;
                     btn.textContent = '请完成拍照或指纹验证';
                 }
-            } else {
+            } else if (!gpsOk && fenceOk) {
                 if (faceOk && fingerOk) {
                     btn.disabled = false;
                     btn.textContent = '确认打卡（GPS异常，双因子验证）';
@@ -1522,6 +1739,12 @@
                     if (!fingerOk) missing.push('指纹');
                     btn.textContent = 'GPS异常，需完成：' + missing.join('+');
                 }
+            } else if (gpsOk && !fenceOk) {
+                btn.disabled = true;
+                btn.textContent = '⛔ 不在打卡围栏内（距围栏 ' + geofenceResult.distance + 'm）';
+            } else {
+                btn.disabled = true;
+                btn.textContent = '⛔ GPS异常且不在围栏内';
             }
         }
 
@@ -1624,6 +1847,14 @@
                     gps_state: gpsState
                 };
 
+                // 地理围栏信息
+                var pgr = __polylineGeofenceResult;
+                if (pgr && pgr.matched) {
+                    body.geofence_inside = pgr.inside;
+                    body.geofence_distance = pgr.distance;
+                    body.geofence_id = pgr.fenceId;
+                }
+
                 // Location (always include if available)
                 if (attendLocation) {
                     body.latitude = attendLocation.lat;
@@ -1663,6 +1894,10 @@
                     if (gpsState !== 'ok' && gpsState !== 'ip' && gpsState !== 'manual') reasons.push('GPS定位异常');
                     if (faceDetected === false && attendPhoto) reasons.push('人脸检测失败');
                     if (!_fingerVerified && gpsState !== 'ok' && gpsState !== 'ip' && gpsState !== 'manual') reasons.push('未完成双因子验证');
+                    var pgr = __polylineGeofenceResult;
+                    if (pgr && pgr.matched && !pgr.inside) {
+                        reasons.push('围栏外打卡(距' + pgr.fenceName + ' ' + pgr.distance + '米)');
+                    }
                     body.anomaly_reason = reasons.join('; ') || null;
 
                     if (_deviceFp && _fingerVerified) {
@@ -2029,17 +2264,19 @@
             <!-- 验证状态栏 -->
             <div class="attend-verify-bar" id="verifyBar" style="display:none">
                 <div class="v-item" id="vGps">📍 定位</div>
+                <div class="v-item" id="vFence">📍 围栏</div>
                 <div class="v-item" id="vFace">📷 人脸</div>
                 <div class="v-item" id="vFinger">🔐 指纹</div>
             </div>
             <button class="attend-submit" id="attendSubmit" disabled onclick="submitAttendance()">
                 确认打卡
             </button>
-            <div class="attend-location-status getting" id="locationStatus">正在获取位置...</div>
+            <div class="attend-location-status getting" id="locationStatus" data-base="正在获取位置...">正在获取位置...</div>
             <div class="attend-manual-location" id="manualLocationSection" style="display:none;margin-top:6px">
                 <input type="text" id="manualLocationInput" placeholder="输入位置描述或坐标（如：公司A栋3楼）" style="width:100%;padding:6px 10px;border-radius:6px;border:1px solid #334;background:#1a2332;color:#e0e6ed;font-size:0.85em">
                 <button class="attend-manual-loc-btn" id="manualLocationBtn" onclick="confirmManualLocation()" style="margin-top:4px;padding:4px 12px;border-radius:6px;border:1px solid #00d4ff;background:transparent;color:#00d4ff;font-size:0.82em;cursor:pointer">✓ 确认位置</button>
             </div>
+
             <!-- 指纹确认框（嵌入） -->
             <div class="finger-confirm-overlay" id="fingerConfirmOverlay">
                 <div class="finger-confirm-dialog">

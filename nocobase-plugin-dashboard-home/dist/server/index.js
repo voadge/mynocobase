@@ -10,6 +10,7 @@ const PAGE_MAP = {
   '/api/__tb__': '百宝箱.html',
   '/api/__fp__': '行程发票报销助手.html',
   '/api/__tp__': '智能排版打印助手.html',
+  '/api/__gf__': 'geofence-manager.html',
 };
 
 const STORAGE_DIR = '/app/nocobase/storage/dashboard';

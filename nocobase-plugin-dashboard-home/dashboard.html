@@ -844,6 +844,46 @@
 
         // 考勤打卡（精简：不更新时间显示）
         let attendState = null;
+
+        // ---- 打卡地理围栏配置 ----
+        var geofenceConfig = {
+            enabled: true,
+            centerLat: 27.706,   // 纬度（例如：遵义市）
+            centerLng: 106.937,  // 经度
+            radius: 300          // 半径（米）
+        };
+
+        function checkGeofence(lat, lng) {
+            if (!geofenceConfig.enabled) return { inside: true, distance: 0, skipped: true };
+            var R = 6371000;
+            var dLat = (lat - geofenceConfig.centerLat) * Math.PI / 180;
+            var dLng = (lng - geofenceConfig.centerLng) * Math.PI / 180;
+            var a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                    Math.cos(geofenceConfig.centerLat * Math.PI / 180) * Math.cos(lat * Math.PI / 180) *
+                    Math.sin(dLng/2) * Math.sin(dLng/2);
+            var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            var distance = R * c;
+            return {
+                inside: distance <= geofenceConfig.radius,
+                distance: Math.round(distance),
+                skipped: false
+            };
+        }
+
+        function getGeofenceStatus(callback) {
+            if (!geofenceConfig.enabled) { callback(null, null); return; }
+            if (!navigator.geolocation) { callback(null, '浏览器不支持定位'); return; }
+            navigator.geolocation.getCurrentPosition(
+                function(pos) {
+                    var gf = checkGeofence(pos.coords.latitude, pos.coords.longitude);
+                    callback(gf, null);
+                },
+                function(err) {
+                    callback(null, '定位失败：' + (err.code === 1 ? '权限被拒绝' : err.code === 2 ? '位置不可用' : '超时'));
+                },
+                { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
+            );
+        }
         async function fetchAttendance() {
             try {
                 const today = new Date().toISOString().slice(0,10);
@@ -874,6 +914,27 @@
                 const now = new Date();
                 const today = now.toISOString().slice(0,10);
                 const time = now.toTimeString().slice(0,8);
+
+                // 地理围栏检查（异步获取位置）
+                if (geofenceConfig.enabled) {
+                    var fenceCheck = await new Promise(function(resolve) {
+                        getGeofenceStatus(function(gf, err) {
+                            if (err) { resolve({ ok: false, msg: err }); return; }
+                            if (!gf.inside) {
+                                resolve({ ok: false, msg: '⛔ 不在打卡围栏内（距围栏 ' + gf.distance + 'm）' });
+                            } else {
+                                resolve({ ok: true, msg: '围栏内 (' + gf.distance + 'm)' });
+                            }
+                        });
+                    });
+                    if (!fenceCheck.ok) {
+                        btn.textContent = fenceCheck.msg;
+                        btn.disabled = false;
+                        setTimeout(function() { fetchAttendance(); }, 3000);
+                        return;
+                    }
+                }
+
                 if (!attendState) {
                     const r = await fetch('/api/attendance:create', {
                         method:'POST', credentials:'include',
