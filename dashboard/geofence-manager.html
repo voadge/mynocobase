@@ -171,6 +171,9 @@
             markers.forEach(function(m){ map.removeLayer(m); });
             markers = [];
 
+            document.getElementById('polylineCoords').value = JSON.stringify(currentPoints);
+            document.getElementById('coordCount').textContent = '节点数: ' + currentPoints.length;
+
             if (currentPoints.length === 0) return;
 
             // 显示标记
@@ -400,20 +403,31 @@
             container.innerHTML = '<div style="color:#5a6a7a">搜索中...</div>';
             container.style.display = 'block';
             try {
-                var url = 'https://nominatim.openstreetmap.org/search?format=json&q=' + encodeURIComponent(q) + '&limit=5&accept-language=zh';
-                var r = await fetch(url, { headers: { 'Accept': 'application/json' } });
+                var url = 'https://photon.komoot.io/api/?q=' + encodeURIComponent(q) + '&limit=7&lang=zh';
+                var r = await fetch(url);
+                container.style.display = 'block';
                 if (!r.ok) { container.innerHTML = '<div style="color:#ff6b6b">搜索服务不可用 (' + r.status + ')</div>'; return; }
                 var data = await r.json();
-                if (!data || data.length === 0) {
+                var features = data && data.features;
+                if (!features || features.length === 0) {
                     container.innerHTML = '<div style="color:#5a6a7a">未找到结果</div>';
                     return;
                 }
-                container.innerHTML = data.map(function(p) {
-                    var name = p.display_name.substring(0, 55);
-                    return '<div onclick="flyTo(' + p.lat + ',' + p.lon + ')">' + escHtml(name) + '</div>';
-                }).join('');
+                container.innerHTML = features.map(function(f) {
+                    var p = f.properties || {};
+                    var name = p.name || '';
+                    var parts = [];
+                    if (p.city && p.city !== name) parts.push(p.city);
+                    if (p.state && p.state !== name) parts.push(p.state);
+                    if (p.country && p.country !== name) parts.push(p.country);
+                    var label = name + (parts.length ? ', ' + parts.join(', ') : '');
+                    var coords = f.geometry && f.geometry.coordinates;
+                    if (!coords) return '';
+                    return '<div onclick="flyTo(' + coords[1] + ',' + coords[0] + ')">' + escHtml(label.substring(0, 60)) + '</div>';
+                }).filter(Boolean).join('');
             } catch(e) {
                 container.innerHTML = '<div style="color:#ff6b6b">搜索失败: ' + e.message + '</div>';
+                container.style.display = 'block';
             }
         }
         document.addEventListener('click', function(e) {
@@ -427,8 +441,10 @@
 
         // ---------- 导入坐标 / 清空节点 ----------
         function importCoords() {
-            var raw = document.getElementById('manualCoords').value.trim();
-            if (!raw) return;
+            var ta = document.getElementById('manualCoords');
+            if (!ta) { showMessage('未找到输入框', 'error'); return; }
+            var raw = ta.value.trim();
+            if (!raw) { showMessage('请先在文本框中输入坐标', 'error'); return; }
             var lines = raw.split('\n');
             var newPts = [];
             lines.forEach(function(line) {
@@ -441,10 +457,10 @@
                     if (!isNaN(lng) && !isNaN(lat)) newPts.push([lng, lat]);
                 }
             });
-            if (newPts.length === 0) { showMessage('未解析到有效坐标', 'error'); return; }
+            if (newPts.length === 0) { showMessage('未解析到有效坐标（格式：经度,纬度，每行一个）', 'error'); return; }
             currentPoints = currentPoints.concat(newPts);
             document.getElementById('polylineCoords').value = JSON.stringify(currentPoints);
-            document.getElementById('manualCoords').value = '';
+            ta.value = '';
             redraw();
             showMessage('已导入 ' + newPts.length + ' 个节点', 'info');
         }
