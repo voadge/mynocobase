@@ -2717,7 +2717,14 @@
         setInterval(updateDisplay,1000);
         setInterval(updateUptime,60000);
         setInterval(rotateCycle,3000);
-        setInterval(fetchWeather,600000);
+        function scheduleWeatherRefresh() {
+            var h = new Date().getHours();
+            var interval = h >= 6 && h < 22 ? 1800000 : 7200000;
+            clearInterval(window._weatherTimer);
+            window._weatherTimer = setInterval(fetchWeather, interval);
+        }
+        scheduleWeatherRefresh();
+        setInterval(scheduleWeatherRefresh, 600000);
 
         // 点击时间模块解除预警
         document.querySelector('.clock-panel').addEventListener('click', function(){

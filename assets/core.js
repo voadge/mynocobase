@@ -453,7 +453,14 @@ rotateCycle();
 setInterval(updateDisplay,1000);
 setInterval(updateUptime,60000);
 setInterval(rotateCycle,3000);
-setInterval(fetchWeatherData,600000);
+function scheduleWeatherRefresh() {
+    var h = new Date().getHours();
+    var interval = h >= 6 && h < 22 ? 1800000 : 7200000;
+    clearInterval(window._weatherTimer);
+    window._weatherTimer = setInterval(fetchWeatherData, interval);
+}
+scheduleWeatherRefresh();
+setInterval(scheduleWeatherRefresh, 600000);
 
 // Fetch attendance status for sidebar card
 let attendState = null;
