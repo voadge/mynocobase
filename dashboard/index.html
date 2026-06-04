@@ -2570,7 +2570,7 @@
         }
 
         function fetchWeather() {
-            var DEFAULT_CITY = '贵阳';
+            var DEFAULT_CITY = '遵义';
             var _cityName = '', _stationId = '';
 
             function fetchBackup(city) {
@@ -2614,6 +2614,19 @@
                     .catch(function(){ fetchBackup(targetCity); });
             }
 
+            function fetchByIP() {
+                fetch('https://ip-api.com/json/?lang=zh-CN')
+                    .then(function(r){ return r.json(); })
+                    .then(function(d){
+                        if (d && d.status === 'success' && d.city) {
+                            fetchCMA(d.city);
+                        } else {
+                            fallbackToCache();
+                        }
+                    })
+                    .catch(function(){ fallbackToCache(); });
+            }
+
             function fallbackToCache() {
                 try {
                     var raw = localStorage.getItem('_wxCity');
@@ -2637,7 +2650,7 @@
 
             // GPS 优先定位
             if (navigator.geolocation) {
-                var timer = setTimeout(function(){ fallbackToCache(); }, 6000);
+                var timer = setTimeout(function(){ fetchByIP(); }, 6000);
                 navigator.geolocation.getCurrentPosition(
                     function(pos){
                         clearTimeout(timer);
@@ -2648,13 +2661,13 @@
                                 var city = (d && !d.error && d.city) ? d.city : DEFAULT_CITY;
                                 fetchCMA(city);
                             })
-                            .catch(function(){ fallbackToCache(); });
+                            .catch(function(){ fetchByIP(); });
                     },
-                    function(){ clearTimeout(timer); fallbackToCache(); },
+                    function(){ clearTimeout(timer); fetchByIP(); },
                     { enableHighAccuracy: true, timeout: 6000, maximumAge: 300000 }
                 );
             } else {
-                fallbackToCache();
+                fetchByIP();
             }
         }
 
