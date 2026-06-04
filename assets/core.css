@@ -121,14 +121,14 @@ body {
 
 /* 时间模块 */
 .side-panel .clock-digits {
-    font-size: 1.8em;
+    font-size: 2.0em;
     font-family: 'Consolas', 'Courier New', monospace;
     font-weight: 700;
     color: #00d4ff;
     text-shadow: 0 0 8px rgba(0, 212, 255, 0.6), 0 0 24px rgba(0, 212, 255, 0.2);
     letter-spacing: 3px;
     line-height: 1.3;
-    margin-bottom: 0.9em;
+    margin-bottom: 0.6em;
 }
 
 .clock-digits .colon { display: inline-block; animation: blink 1s step-end infinite; }
@@ -142,7 +142,7 @@ body {
 .side-panel .cycle-item {
     position: absolute; width: 100%; left: 0; top: 0; text-align: center;
     opacity: 0; transform: translateY(10px); transition: all 0.4s ease;
-    font-size: 0.7em; letter-spacing: 2px;
+    font-size: 0.9em; letter-spacing: 2px;
 }
 
 .side-panel .cycle-item.active { opacity: 1; transform: translateY(0); }
@@ -509,9 +509,9 @@ body {
     .toolbox-icon { font-size: 0.9em; }
     .toolbox-label { font-size: 0.65em; }
     .toolbox-arrow { font-size: 0.75em; }
-    .clock-digits { font-size: 1.5em !important; margin-bottom: 0.5em !important; }
+    .clock-digits { font-size: 1.7em !important; margin-bottom: 0.33em !important; }
     .info-cycle { height: 1.3em; }
-    .cycle-item { font-size: 0.85em; }
+    .cycle-item { font-size: 1.05em; }
     .todo-inner .todo-row { gap: 6px; }
     .todo-icon { width: 24px !important; height: 24px !important; font-size: 0.8em !important; }
     .todo-count { font-size: 1.1em !important; }

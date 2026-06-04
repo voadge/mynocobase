@@ -101,14 +101,14 @@
 
         /* 时间模块 */
         .side-panel .clock-digits {
-            font-size: 1.8em;
+            font-size: 2.0em;
             font-family: 'Consolas', 'Courier New', monospace;
             font-weight: 700;
             color: #00d4ff;
             text-shadow: 0 0 8px rgba(0, 212, 255, 0.6), 0 0 24px rgba(0, 212, 255, 0.2);
             letter-spacing: 1px;
             line-height: 1.2;
-            margin-bottom: 0.5em;
+            margin-bottom: 0.33em;
         }
 
         .clock-digits .colon { display: inline-block; animation: blink 1s step-end infinite; }
@@ -122,7 +122,7 @@
         .side-panel .cycle-item {
             position: absolute; width: 100%; left: 0; top: 0; text-align: center;
             opacity: 0; transform: translateY(10px); transition: all 0.4s ease;
-            font-size: 0.9em; letter-spacing: 2px;
+            font-size: 1.1em; letter-spacing: 2px;
         }
 
         .side-panel .cycle-item.active { opacity: 1; transform: translateY(0); }
@@ -515,9 +515,9 @@
             .side-panel .panel-card:nth-child(5) { display: none; }
 
             /* 第 2 行：时间（左）+ 待办（右） */
-            .side-panel .clock-digits { font-size: 1.3em; margin-bottom: 0.3em; white-space: nowrap; }
+            .side-panel .clock-digits { font-size: 1.5em; margin-bottom: 0.2em; white-space: nowrap; }
             .info-cycle { height: 1.2em; }
-            .cycle-item { font-size: 0.6em; }
+            .cycle-item { font-size: 0.8em; }
             .todo-inner .todo-count { font-size: 1.1em; white-space: nowrap; }
             .todo-inner .todo-icon { width: 28px; height: 28px; font-size: 0.9em; }
 
