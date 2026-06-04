@@ -2614,29 +2614,30 @@
                     .catch(function(){ fetchBackup(targetCity); });
             }
 
-            // 检查缓存
-            try {
-                var raw = localStorage.getItem('_wxCity');
-                if (raw) {
-                    var c = JSON.parse(raw);
-                    if (Date.now() - c.t < 60 * 60 * 1000 && c.stationId) {
-                        _cityName = c.name;
-                        _stationId = c.stationId;
-                        fetch('https://weather.cma.cn/api/weather/view?stationid=' + c.stationId)
-                            .then(function(r){ if (!r.ok) throw new Error(); return r.json(); })
-                            .then(function(d){
-                                if (!processWeatherData(d, _cityName)) {
-                                    fetchBackup(_cityName);
-                                }
-                            })
-                            .catch(function(){ fetchBackup(_cityName); });
-                        return;
+            function fallbackToCache() {
+                try {
+                    var raw = localStorage.getItem('_wxCity');
+                    if (raw) {
+                        var c = JSON.parse(raw);
+                        if (Date.now() - c.t < 60 * 60 * 1000 && c.stationId) {
+                            _cityName = c.name;
+                            _stationId = c.stationId;
+                            fetch('https://weather.cma.cn/api/weather/view?stationid=' + c.stationId)
+                                .then(function(r){ if (!r.ok) throw new Error(); return r.json(); })
+                                .then(function(d){
+                                    if (!processWeatherData(d, _cityName)) { fetchBackup(_cityName); }
+                                })
+                                .catch(function(){ fetchBackup(_cityName); });
+                            return;
+                        }
                     }
-                }
-            } catch(e){}
+                } catch(e){}
+                fetchCMA(DEFAULT_CITY);
+            }
 
+            // GPS 优先定位
             if (navigator.geolocation) {
-                var timer = setTimeout(function(){ fetchCMA(DEFAULT_CITY); }, 5000);
+                var timer = setTimeout(function(){ fallbackToCache(); }, 6000);
                 navigator.geolocation.getCurrentPosition(
                     function(pos){
                         clearTimeout(timer);
@@ -2647,13 +2648,13 @@
                                 var city = (d && !d.error && d.city) ? d.city : DEFAULT_CITY;
                                 fetchCMA(city);
                             })
-                            .catch(function(){ fetchCMA(DEFAULT_CITY); });
+                            .catch(function(){ fallbackToCache(); });
                     },
-                    function(){ clearTimeout(timer); fetchCMA(DEFAULT_CITY); },
-                    { enableHighAccuracy: true, timeout: 5000, maximumAge: 300000 }
+                    function(){ clearTimeout(timer); fallbackToCache(); },
+                    { enableHighAccuracy: true, timeout: 6000, maximumAge: 300000 }
                 );
             } else {
-                fetchCMA(DEFAULT_CITY);
+                fallbackToCache();
             }
         }
 
