@@ -102,6 +102,8 @@ body {
     align-items: center;
 }
 
+.clock-panel { justify-content: center; }
+
 .clock-panel.warning-active {
     border-color: rgba(255, 107, 107, 0.6) !important;
     background: linear-gradient(145deg, rgba(255, 107, 107, 0.12), rgba(123, 44, 191, 0.03)) !important;
