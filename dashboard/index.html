@@ -135,6 +135,68 @@
         .cycle-item .label-week  { color: #5a6a7a; }
         .cycle-item .label-weather { color: #00ff88; }
         .cycle-item .label-temp   { color: #ff6b6b; }
+        .cycle-item .label-warn   { color: #ff6b6b; }
+
+        .clock-panel.warning-active {
+            border-color: rgba(255, 107, 107, 0.6) !important;
+            background: linear-gradient(135deg, rgba(255, 107, 107, 0.18), rgba(255, 165, 0, 0.1), rgba(123, 44, 191, 0.06)) !important;
+            animation: warnGradient 3s ease infinite, warnPulse 2s ease-in-out infinite;
+        }
+        .clock-panel.warning-active .clock-digits {
+            color: #ff6b6b;
+            text-shadow: 0 0 12px rgba(255,107,107,0.6), 0 0 30px rgba(255,107,107,0.3);
+        }
+        .clock-panel.warning-active .clock-digits .colon {
+            color: #ff6b6b;
+        }
+        .label-warn {
+            color: #ff6b6b;
+            font-size: 0.72em;
+            font-weight: 600;
+            letter-spacing: 1px;
+            animation: warnFlash 1.5s ease-in-out infinite;
+        }
+
+        @keyframes warnGradient {
+            0% { background-position: 0% 50%; background-size: 200% 200%; }
+            50% { background-position: 100% 50%; background-size: 200% 200%; }
+            100% { background-position: 0% 50%; background-size: 200% 200%; }
+        }
+        @keyframes warnPulse {
+            0%,100% { box-shadow: 0 0 0 0 rgba(255,107,107,0); }
+            50% { box-shadow: 0 0 24px 8px rgba(255,107,107,0.3); }
+        }
+        @keyframes warnFlash {
+            0%,100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .warn-marquee {
+            display: none;
+            width: 100%;
+            margin-top: 4px;
+            overflow: hidden;
+            white-space: nowrap;
+            font-size: 0.7em;
+            color: #ff6b6b;
+            font-weight: 600;
+            letter-spacing: 1px;
+            height: 1.4em;
+            line-height: 1.4em;
+            text-shadow: 0 0 6px rgba(255,107,107,0.4);
+        }
+        .warn-marquee.active {
+            display: block;
+        }
+        .warn-marquee span {
+            display: inline-block;
+            animation: marqueeScroll 12s linear infinite;
+            padding-left: 100%;
+        }
+        @keyframes marqueeScroll {
+            0% { transform: translateX(0); }
+            100% { transform: translateX(-100%); }
+        }
 
         /* 待办模块 */
         .todo-inner {
@@ -838,7 +900,9 @@
                         <span class="cycle-item" id="weekdayDisplay"><span class="label-week"></span></span>
                         <span class="cycle-item" id="weatherDisplay"><span class="label-weather"></span></span>
                         <span class="cycle-item" id="tempDisplay"><span class="label-temp"></span></span>
+                        <span class="cycle-item" id="warnDisplay"><span class="label-warn"></span></span>
                     </div>
+                    <div class="warn-marquee" id="warnMarquee"></div>
                 </div>
                 <div class="panel-card">
                     <div class="todo-inner">
@@ -2452,14 +2516,14 @@
         }
 
         let cycleIndex=0;
-        const cycleIds=['dateDisplay','lunarDisplay','termDisplay','weekdayDisplay','weatherDisplay','tempDisplay'];
+        const cycleIds=['dateDisplay','lunarDisplay','termDisplay','weekdayDisplay','weatherDisplay','tempDisplay','warnDisplay'];
         function rotateCycle() {
             document.querySelectorAll('.cycle-item').forEach(e=>e.classList.remove('active'));
             document.getElementById(cycleIds[cycleIndex]).classList.add('active');
             cycleIndex=(cycleIndex+1)%cycleIds.length;
         }
 
-        let weatherText='获取中…', tempText='--℃';
+        let weatherText='获取中…', tempText='--℃', warnText='';
         function fetchNbVersion() {
             fetch('/dashboard/nb-version.json')
                 .then(function(r){ return r.json(); })
@@ -2470,17 +2534,126 @@
                 .catch(function(){});
         }
 
-        function fetchWeather() {
-            function doFetch(lat,lon){
-                fetch('https://api.open-meteo.com/v1/forecast?latitude='+lat+'&longitude='+lon+'&current_weather=true&timezone=Asia/Shanghai')
-                    .then(r=>r.json())
-                    .then(d=>{ if(d.current_weather){ weatherText=weatherCodes[d.current_weather.weathercode]||'未知'; tempText=d.current_weather.temperature+'℃'; } })
-                    .catch(function(){ weatherText='--'; tempText='--℃'; });
+        function dismissWarning() {
+            warnText = '';
+            document.querySelector('.clock-panel').classList.remove('warning-active');
+            document.querySelector('#warnDisplay .label-warn').textContent = '';
+            document.querySelector('#warnMarquee').classList.remove('active');
+            document.querySelector('#warnMarquee').innerHTML = '';
+        }
+
+        function setWarning(hit, cityName) {
+            if (!hit) { dismissWarning(); return; }
+            const m = (hit.headline || hit.title || '').match(/发布(.+?)信号/);
+            warnText = m ? m[1] : (hit.headline || hit.title || cityName + ' 气象预警');
+            document.querySelector('.clock-panel').classList.add('warning-active');
+            document.querySelector('#warnDisplay .label-warn').textContent = '⚠ ' + warnText;
+            document.querySelector('#warnMarquee').innerHTML = '<span>⚠ ' + warnText + ' ⚠ ' + warnText + '</span>';
+            document.querySelector('#warnMarquee').classList.add('active');
+        }
+
+        function processWeatherData(d, cityName) {
+            if (!d || d.code !== 0 || !d.data) return false;
+            const now = d.data.now;
+            if (now) {
+                weatherText = cityName + ' ' + (now.dayText || now.nightText || '--');
+                tempText = (now.temperature != null ? now.temperature + '℃' : '--℃');
             }
-            if(navigator.geolocation){
-                navigator.geolocation.getCurrentPosition(function(p){doFetch(p.coords.latitude,p.coords.longitude)},function(){doFetch(29.56,106.55)});
+            const alarms = d.data.alarm || [];
+            if (alarms.length > 0) {
+                const hit = alarms.find(function(a){ return (a.title || '').indexOf(cityName) > -1; }) || alarms[0];
+                setWarning(hit, cityName);
             } else {
-                doFetch(29.56,106.55);
+                setWarning(null);
+            }
+            return true;
+        }
+
+        function fetchWeather() {
+            var DEFAULT_CITY = '贵阳';
+            var _cityName = '', _stationId = '';
+
+            function fetchBackup(city) {
+                fetch('https://uapis.cn/api/v1/misc/weather?city=' + encodeURIComponent(city) + '&lang=zh')
+                    .then(function(r){ return r.json(); })
+                    .then(function(d){
+                        if (!d || d.error) { weatherText = city + ' 获取失败'; return; }
+                        _cityName = d.city || city;
+                        weatherText = _cityName + ' ' + (d.weather || '--');
+                        tempText = (d.temperature != null ? d.temperature + '℃' : '--℃');
+                    })
+                    .catch(function(){ weatherText = city + ' 获取失败'; });
+            }
+
+            function fetchCMA(city) {
+                var targetCity = city;
+                fetch('https://weather.cma.cn/api/autocomplete?q=' + encodeURIComponent(city) + '&limit=5')
+                    .then(function(r){ if (!r.ok) throw new Error(); return r.json(); })
+                    .then(function(d){
+                        var list = d.data || [];
+                        var match = list.find(function(item){ return item.indexOf('|' + targetCity + '|') > -1; }) || list[0];
+                        if (!match) { fetchBackup(targetCity); return null; }
+                        var parts = match.split('|');
+                        _stationId = parts[0];
+                        _cityName = parts[1] || targetCity;
+                        return fetch('https://weather.cma.cn/api/weather/view?stationid=' + _stationId);
+                    })
+                    .then(function(r){
+                        if (!r || !r.ok) throw new Error();
+                        return r.json();
+                    })
+                    .then(function(d){
+                        if (!processWeatherData(d, _cityName || targetCity)) {
+                            fetchBackup(targetCity);
+                            return;
+                        }
+                        try {
+                            localStorage.setItem('_wxCity', JSON.stringify({ name: _cityName, stationId: _stationId, t: Date.now() }));
+                        } catch(e){}
+                    })
+                    .catch(function(){ fetchBackup(targetCity); });
+            }
+
+            // 检查缓存
+            try {
+                var raw = localStorage.getItem('_wxCity');
+                if (raw) {
+                    var c = JSON.parse(raw);
+                    if (Date.now() - c.t < 60 * 60 * 1000 && c.stationId) {
+                        _cityName = c.name;
+                        _stationId = c.stationId;
+                        fetch('https://weather.cma.cn/api/weather/view?stationid=' + c.stationId)
+                            .then(function(r){ if (!r.ok) throw new Error(); return r.json(); })
+                            .then(function(d){
+                                if (!processWeatherData(d, _cityName)) {
+                                    fetchBackup(_cityName);
+                                }
+                            })
+                            .catch(function(){ fetchBackup(_cityName); });
+                        return;
+                    }
+                }
+            } catch(e){}
+
+            if (navigator.geolocation) {
+                var timer = setTimeout(function(){ fetchCMA(DEFAULT_CITY); }, 5000);
+                navigator.geolocation.getCurrentPosition(
+                    function(pos){
+                        clearTimeout(timer);
+                        var lat = pos.coords.latitude, lng = pos.coords.longitude;
+                        fetch('https://uapis.cn/api/v1/misc/weather?lat=' + lat + '&lon=' + lng + '&lang=zh')
+                            .then(function(r){ return r.json(); })
+                            .then(function(d){
+                                var city = (d && !d.error && d.city) ? d.city : DEFAULT_CITY;
+                                fetchCMA(city);
+                            })
+                            .catch(function(){ fetchCMA(DEFAULT_CITY); });
+                    },
+                    function(){ clearTimeout(timer); fetchCMA(DEFAULT_CITY); },
+                    { enableHighAccuracy: true, timeout: 5000, maximumAge: 300000 }
+                );
+            } else {
+                fetchCMA(DEFAULT_CITY);
             }
         }
 
@@ -2531,6 +2704,13 @@
         setInterval(updateUptime,60000);
         setInterval(rotateCycle,3000);
         setInterval(fetchWeather,600000);
+
+        // 点击时间模块解除预警
+        document.querySelector('.clock-panel').addEventListener('click', function(){
+            if (document.querySelector('.clock-panel').classList.contains('warning-active')) {
+                dismissWarning();
+            }
+        });
 
         // 后台预加载：初始化 adminFrame 加载 NocoBase SPA
         setTimeout(function() {
