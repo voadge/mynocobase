@@ -12,6 +12,7 @@ const PAGE_MAP = {
   '/api/__fp__': '行程发票报销助手.html',
   '/api/__tp__': '智能排版打印助手.html',
   '/api/__gf__': 'geofence-manager.html',
+  '/api/__pd__': '人员动态.html',
 };
 
 const STORAGE_DIR = '/app/nocobase/storage/dashboard';
@@ -76,6 +77,110 @@ module.exports = class DashboardHomePlugin extends Plugin {
           ctx.status = 502;
           ctx.body = { status: '0', rectangle: null, city: null, province: null, error: e.message };
         }
+      }
+    }, { tag: 'dashboard-home', before: 'dataSource' });
+
+    // Workers API - server-side query bypasses ACL
+    this.app.use(async (ctx, next) => {
+      if (ctx.method !== 'GET' || ctx.path !== '/api/__pd__/workers') {
+        return await next();
+      }
+      if (!await this.isAuthenticated(ctx)) {
+        ctx.status = 401;
+        ctx.body = 'Unauthorized';
+        return;
+      }
+      ctx.withoutDataWrapping = true;
+      ctx.type = 'application/json; charset=utf-8';
+      try {
+        const repo = this.db.getRepository('users');
+        const users = await repo.find({
+          filter: { 'roles.name': 'workers' },
+          appends: ['roles', 'departments'],
+          limit: 200
+        });
+        ctx.body = { data: users };
+      } catch (e) {
+        ctx.status = 500;
+        ctx.body = { data: [], error: e.message };
+      }
+    }, { tag: 'dashboard-home', before: 'dataSource' });
+
+    // Batch collect - server-side location history filling (called by cron)
+    this.app.use(async (ctx, next) => {
+      if (ctx.method !== 'GET' || ctx.path !== '/api/__pd__/batch-collect') {
+        return await next();
+      }
+      if (!await this.isAuthenticated(ctx)) {
+        ctx.status = 401;
+        ctx.body = 'Unauthorized';
+        return;
+      }
+      ctx.withoutDataWrapping = true;
+      ctx.type = 'application/json; charset=utf-8';
+      try {
+        var today = new Date().toISOString().substring(0, 10);
+        var records = await this.db.getRepository('attendance_records').find({
+          filter: { createdAt: { $dateBetween: [today + 'T00:00:00.000Z', today + 'T23:59:59.999Z'] } },
+          appends: ['createdBy'],
+          sort: '-check_time',
+          limit: 2000
+        });
+        var userStatus = {};
+        records.forEach(function(r){
+          var uid = r.createdBy ? (r.createdBy.id || r.createdById) : null;
+          if (!uid) return;
+          if (!userStatus[uid]) userStatus[uid] = { checkIn: null, checkOut: null, latestLat: null, latestLng: null, latestTime: null };
+          var t = r.check_time || r.createdAt;
+          if (r.check_type === '上班' || r.check_type === '签到') {
+            if (!userStatus[uid].checkIn || t > userStatus[uid].checkIn) userStatus[uid].checkIn = t;
+          }
+          if (r.check_type === '下班' || r.check_type === '签退') {
+            if (!userStatus[uid].checkOut || t > userStatus[uid].checkOut) userStatus[uid].checkOut = t;
+          }
+          if (r.latitude && r.longitude) {
+            if (!userStatus[uid].latestTime || t > userStatus[uid].latestTime) {
+              userStatus[uid].latestLat = r.latitude;
+              userStatus[uid].latestLng = r.longitude;
+              userStatus[uid].latestTime = t;
+            }
+          }
+        });
+        var activeUsers = [];
+        Object.keys(userStatus).forEach(function(uid){
+          var s = userStatus[uid];
+          if (s.checkIn && (!s.checkOut || s.checkOut < s.checkIn) && s.latestLat && s.latestLng) {
+            activeUsers.push({ uid: parseInt(uid), lat: s.latestLat, lng: s.latestLng, time: s.latestTime });
+          }
+        });
+        var LocationHistory = this.db.getRepository('location_history');
+        var written = [];
+        for (var i = 0; i < activeUsers.length; i++) {
+          var u = activeUsers[i];
+          var hist = await LocationHistory.find({
+            filter: { createdById: u.uid },
+            sort: '-recorded_at',
+            limit: 1
+          });
+          var last = hist.length > 0 ? hist[0] : null;
+          var skip = last && last.latitude === String(u.lat) && last.longitude === String(u.lng) &&
+                     (Date.now() - new Date(last.recorded_at || last.createdAt).getTime()) < 5 * 60 * 1000;
+          if (skip) continue;
+          await LocationHistory.create({
+            values: {
+              latitude: u.lat,
+              longitude: u.lng,
+              accuracy: null,
+              recorded_at: u.time || new Date().toISOString(),
+              createdById: u.uid
+            }
+          });
+          written.push(u.uid);
+        }
+        ctx.body = { data: { processed: activeUsers.length, written: written.length, userIds: written } };
+      } catch (e) {
+        ctx.status = 500;
+        ctx.body = { data: null, error: e.message };
       }
     }, { tag: 'dashboard-home', before: 'dataSource' });
 

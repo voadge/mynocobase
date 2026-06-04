@@ -1,0 +1,825 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>人员动态</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { height: 100%; overflow: hidden; }
+        body {
+            font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            background: linear-gradient(135deg, #0c1426 0%, #1a2332 50%, #0d1926 100%);
+            color: #e0e6ed;
+        }
+        .app { display: flex; flex-direction: column; height: 100vh; min-height: 100dvh; }
+
+        /* ---- 主体区域 ---- */
+        .main-area { display: flex; flex: 1; min-height: 0; position: relative; z-index: 0; }
+
+        /* ---- 地图 ---- */
+        .map-wrap { flex: 1; position: relative; min-height: 0; }
+        #map { width: 100%; height: 100%; }
+        /* ---- 地图浮动搜索栏（迁移自 geofence-manager） ---- */
+        .map-search-bar {
+            position: absolute; top: 10px; right: 10px; z-index: 1000;
+            display: flex; gap: 3px;
+            background: rgba(20,30,48,0.92);
+            padding: 3px 6px; border-radius: 6px;
+            border: 1px solid #445;
+        }
+        .map-search-bar input {
+            padding: 3px 6px; border-radius: 4px; border: none;
+            background: transparent; color: #e0e6ed;
+            font-size: 0.85em; width: 160px; outline: none;
+        }
+        .map-search-bar input::placeholder { color: #5a6a7a; }
+        .map-search-bar button {
+            padding: 3px 6px; font-size: 0.85em;
+            background: transparent; border: none; color: #00d4ff;
+            cursor: pointer;
+        }
+        .map-search-bar button:hover { color: #7b2cbf; }
+        .locate-btn { font-size: 1.1em; line-height: 1; padding: 3px 8px !important; }
+        .map-search-results {
+            position: absolute; top: 40px; right: 10px; z-index: 1000;
+            background: rgba(20,30,48,0.96);
+            border: 1px solid #445; border-radius: 5px;
+            max-height: 200px; overflow-y: auto; width: 280px;
+            display: none;
+        }
+        .map-search-results div {
+            padding: 6px 10px; cursor: pointer; font-size: 0.82em;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            color: #aab;
+        }
+        .map-search-results div:hover { background: rgba(0,212,255,0.15); color: #e0e6ed; }
+        @media (max-width: 768px) {
+            .map-search-bar input { width: 100px; }
+            .map-search-results { width: 200px; max-height: 160px; }
+        }
+        /* ---- 右侧面板（浮动覆盖） ---- */
+        .right-panel {
+            position: absolute; top: 0; right: 0; bottom: 0; z-index: 1000;
+            width: 240px;
+            display: flex; flex-direction: column;
+            background: rgba(10,14,26,0.85);
+            backdrop-filter: blur(6px);
+            border-left: 1px solid rgba(0,212,255,0.12);
+            transition: transform 0.3s ease, opacity 0.3s ease;
+            transform: translateX(100%); opacity: 0;
+            pointer-events: none;
+        }
+        .right-panel.open {
+            transform: translateX(0); opacity: 1;
+            pointer-events: auto;
+        }
+        .panel-toggle {
+            position: absolute; top: 50%; right: 0; z-index: 1001;
+            transform: translateY(-50%);
+            background: rgba(10,14,26,0.8);
+            border: 1px solid rgba(0,212,255,0.15);
+            border-right: none;
+            color: #00d4ff; font-size: 0.9em;
+            padding: 10px 4px; cursor: pointer;
+            border-radius: 6px 0 0 6px;
+            transition: background 0.2s, right 0.3s ease;
+            writing-mode: vertical-lr;
+            letter-spacing: 2px;
+        }
+        .panel-toggle:hover { background: rgba(0,212,255,0.15); }
+        .panel-toggle.open { right: 240px; }
+        @media (max-width: 768px) {
+            .panel-toggle.open { right: 200px; }
+        }
+        @media (max-width: 480px) {
+            .panel-toggle.open { right: 160px; }
+        }
+        .panel-header {
+            padding: 10px 12px 6px; flex-shrink: 0;
+            border-bottom: 1px solid rgba(0,212,255,0.08);
+        }
+        .panel-header h3 { font-size: 0.85em; color: #00d4ff; margin-bottom: 6px; }
+        .panel-search {
+            width: 100%; padding: 5px 8px; border-radius: 5px;
+            border: 1px solid rgba(0,212,255,0.18);
+            background: rgba(0,0,0,0.3); color: #e0e6ed;
+            font-size: 0.8em; outline: none;
+        }
+        .panel-search::placeholder { color: #5a6a7a; }
+        .panel-list {
+            flex: 1; overflow-y: auto; min-height: 0;
+            padding: 4px 0;
+        }
+        .panel-list::-webkit-scrollbar { width: 4px; }
+        .panel-list::-webkit-scrollbar-thumb { background: rgba(0,212,255,0.2); border-radius: 2px; }
+        .search-results {
+            position: absolute; bottom: 0; left: 0; right: 0; z-index: 10;
+            max-height: 200px; overflow-y: auto;
+            background: rgba(10,14,26,0.96);
+            border-top: 1px solid rgba(0,212,255,0.15);
+            display: none;
+        }
+        .search-results div { padding: 6px 12px; cursor: pointer; font-size: 0.82em; border-bottom: 1px solid rgba(255,255,255,0.04); color: #aab; }
+        .search-results div:hover { background: rgba(0,212,255,0.15); color: #e0e6ed; }
+
+        .dept-group { margin-bottom: 2px; }
+        .dept-title {
+            padding: 5px 12px; font-size: 0.78em; font-weight: 600;
+            color: #5a6a7a; letter-spacing: 0.5px;
+            background: rgba(0,212,255,0.04);
+            border-bottom: 1px solid rgba(0,212,255,0.05);
+            position: sticky; top: 0; z-index: 1;
+            backdrop-filter: blur(4px);
+        }
+        .user-item {
+            display: flex; align-items: center; gap: 8px;
+            padding: 5px 12px 5px 16px;
+            cursor: pointer; transition: background 0.15s;
+            font-size: 0.82em;
+        }
+        .user-item:hover { background: rgba(0,212,255,0.08); }
+        .user-item.active { background: rgba(0,212,255,0.12); border-left: 2px solid #00d4ff; }
+        .user-dot {
+            width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+        }
+        .user-dot.online { background: #00ff88; box-shadow: 0 0 6px rgba(0,255,136,0.5); }
+        .user-dot.offline { background: #5a6a7a; }
+        .user-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .user-badge {
+            font-size: 0.7em; padding: 0 5px; border-radius: 3px;
+            background: rgba(0,212,255,0.1); color: #00d4ff; flex-shrink: 0;
+        }
+        .user-badge.tracking { background: rgba(255,216,61,0.15); color: #ffd93d; }
+        .empty-search {
+            padding: 20px 12px; text-align: center; color: #5a6a7a; font-size: 0.82em;
+        }
+
+        /* ---- 底部数据栏 ---- */
+        .bottom-bar {
+            display: flex; align-items: center;
+            height: 36px;
+            background: rgba(12,20,38,0.95);
+            border-top: 1px solid rgba(0,212,255,0.12);
+            font-size: 0.78em;
+        }
+        .bar-left {
+            display: flex; align-items: center; gap: 14px;
+            padding: 0 14px;
+            flex-shrink: 0;
+            border-right: 1px solid rgba(0,212,255,0.15);
+        }
+        .bar-left .stat-item { white-space: nowrap; }
+        .bar-left .stat-num { color: #00d4ff; font-weight: 700; font-size: 1.1em; }
+        .bar-scroll {
+            display: flex; align-items: center; gap: 12px;
+            padding: 0 14px; overflow-x: auto; flex: 1;
+            -webkit-overflow-scrolling: touch;
+        }
+        .bar-scroll::-webkit-scrollbar { height: 2px; }
+        .bar-scroll::-webkit-scrollbar-thumb { background: rgba(0,212,255,0.2); border-radius: 1px; }
+        .bar-scroll .proj-stat { white-space: nowrap; flex-shrink: 0; }
+        .proj-stat .proj-name { color: #7b88a0; }
+        .proj-stat .proj-num { color: #e0e6ed; font-weight: 600; }
+
+        /* ---- Leaflet 覆盖 ---- */
+        .leaflet-container { background: #0a0f1a; }
+        .leaflet-control-zoom a { background: rgba(20,30,48,0.9) !important; color: #e0e6ed !important; border-color: #445 !important; }
+        .marker-pulse {
+            width: 14px; height: 14px; border-radius: 50%;
+            background: #00ff88; border: 2px solid #fff;
+            box-shadow: 0 0 0 rgba(0,255,136,0.4);
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(0,255,136,0.4); }
+            70% { box-shadow: 0 0 0 10px rgba(0,255,136,0); }
+            100% { box-shadow: 0 0 0 0 rgba(0,255,136,0); }
+        }
+        .marker-offline {
+            width: 12px; height: 12px; border-radius: 50%;
+            background: #5a6a7a; border: 2px solid #3a4a5a;
+        }
+        .leaflet-popup-content-wrapper {
+            background: rgba(12,20,38,0.95) !important;
+            color: #e0e6ed !important;
+            border: 1px solid rgba(0,212,255,0.2);
+            border-radius: 8px !important;
+            font-size: 0.82em;
+        }
+        .leaflet-popup-tip { background: rgba(12,20,38,0.95) !important; border: 1px solid rgba(0,212,255,0.2); }
+        .leaflet-popup-close-button { color: #5a6a7a !important; }
+
+        /* ---- 地图状态栏 ---- */
+        .map-status {
+            position: absolute; top: 8px; left: 50%; transform: translateX(-50%);
+            background: rgba(0,0,0,0.6); color: #e0e6ed;
+            padding: 4px 16px; border-radius: 8px;
+            font-size: 0.82em; z-index: 1000; pointer-events: none;
+            white-space: nowrap;
+            border: 1px solid rgba(0,212,255,0.15);
+        }
+        .map-loading {
+            position: absolute; bottom: 8px; right: 8px;
+            color: #5a6a7a; font-size: 0.7em; z-index: 1000;
+            background: rgba(0,0,0,0.4); padding: 2px 8px; border-radius: 4px;
+        }
+
+        /* ---- 响应式 ---- */
+        @media (max-width: 768px) {
+            .right-panel { width: 200px; }
+            .bottom-bar {
+                height: 22px; font-size: 0.55em;
+            }
+            .bar-left { gap: 4px; padding: 0 6px; }
+            .bar-scroll { gap: 6px; padding: 0 8px; }
+            .app { min-height: 100dvh; }
+        }
+        @media (max-width: 480px) {
+            .right-panel { width: 160px; }
+            .bottom-bar {
+                height: 16px; font-size: 0.45em;
+            }
+            .bar-left { gap: 3px; padding: 0 4px; }
+            .bar-scroll { gap: 4px; padding: 0 4px; }
+        }
+    </style>
+</head>
+<body>
+<div class="app">
+    <div class="main-area">
+        <div class="map-wrap">
+            <div id="map"></div>
+            <div class="map-status" id="mapStatus">人员动态 · 实时位置</div>
+            <div class="map-loading" id="mapLoading">加载中...</div>
+            <div class="map-search-bar">
+                <input type="text" id="mapSearchInput" placeholder="搜索地名/POI..." onkeydown="if(event.key==='Enter') searchPlace()">
+                <button type="button" onclick="searchPlace()">🔍</button>
+                <button type="button" class="locate-btn" onclick="locateMe()" title="定位当前位置">◎</button>
+            </div>
+            <div class="map-search-results" id="mapSearchResults"></div>
+        </div>
+        <button class="panel-toggle" id="panelToggle" onclick="togglePanel()" title="切换人员列表">人员列表 ▶</button>
+        <div class="right-panel" id="rightPanel">
+            <div class="panel-header">
+                <div style="display:flex;align-items:center;gap:6px">
+                    <h3 style="margin:0;flex:1">👥 人员列表</h3>
+                    <button onclick="locateMe()" title="回到当前位置" style="background:transparent;border:none;color:#00d4ff;font-size:1em;cursor:pointer;padding:2px 4px">◎</button>
+                </div>
+                <input class="panel-search" id="searchInput" placeholder="查询项目/人名..." oninput="onSearch()" style="margin-top:6px">
+            </div>
+            <div class="panel-list" id="userList"></div>
+        </div>
+    </div>
+    <div class="bottom-bar" id="bottomBar">
+        <div class="bar-left">
+            <span class="stat-item">今日打卡: <span class="stat-num" id="todayCount">--</span></span>
+            <span class="stat-item">在线: <span class="stat-num" id="onlineCount">--</span></span>
+        </div>
+        <div class="bar-scroll" id="barScroll"></div>
+    </div>
+</div>
+
+<script>
+// ========== 常量 & 状态 ==========
+var token = localStorage.getItem("NOCOBASE_TOKEN") || localStorage.getItem("nocobase_token");
+var headers = { 'Content-Type': 'application/json' };
+if (token) headers['Authorization'] = 'Bearer ' + token;
+var credentials = 'include';
+
+var map, amapLayer;
+var allUsers = [];           // 所有用户（含 roles/departments）
+var allFences = [];          // 围栏列表
+var todayRecords = [];       // 今日打卡记录
+var latestLocations = {};    // userId -> { lat, lng, recorded_at }
+var onlineUsers = {};        // userId -> true/false
+var selectedUserId = null;   // 当前选中查看轨迹的用户
+
+var userMarkers = {};        // userId -> L.circleMarker
+var fenceLayers = [];        // L.polyline + L.geoJSON
+var trajectoryLayer = null;  // 当前轨迹折线
+var trajectoryStartMarker = null;
+var trajectoryEndMarker = null;
+var currentLocationMarker = null; // 自己位置
+
+var pollTimer = null;
+var locateTimer = null;
+
+// ========== 初始化地图 ==========
+function initMap() {
+    map = L.map('map').setView([27.7, 106.9], 10);
+    amapLayer = L.tileLayer('https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}', {
+        subdomains: ['1','2','3','4'], maxZoom: 18,
+        attribution: '&copy; 高德地图',
+    }).addTo(map);
+    map.on('locationfound', function(e) {
+        if (currentLocationMarker) map.removeLayer(currentLocationMarker);
+        currentLocationMarker = L.circleMarker([e.latitude, e.longitude], {
+            radius: 6, color: '#00d4ff', fillColor: '#00d4ff', fillOpacity: 0.3, weight: 2
+        }).addTo(map).bindTooltip('我', { permanent: false });
+    });
+}
+
+// ========== API 通用请求 ==========
+function apiGet(url) {
+    return fetch(url, { headers: headers, credentials: credentials }).then(function(r){
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+    });
+}
+function apiPost(url, body) {
+    return fetch(url, { method: 'POST', headers: headers, credentials: credentials, body: JSON.stringify(body) }).then(function(r){
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+    });
+}
+
+// ========== 加载围栏 ==========
+function loadFences() {
+    apiGet('/api/geofences:list?filter[is_active]=true&sort=sort').then(function(data){
+        allFences = data.data || [];
+        renderFences();
+    }).catch(function(){});
+}
+
+function renderFences() {
+    fenceLayers.forEach(function(l){ map.removeLayer(l); });
+    fenceLayers = [];
+    allFences.forEach(function(fence){
+        if (!fence.polyline_coords) return;
+        try {
+            var coords = JSON.parse(fence.polyline_coords);
+            if (!Array.isArray(coords) || coords.length < 2) return;
+            var latlngs = coords.map(function(p){ return [p[1], p[0]]; });
+            var layer = L.polyline(latlngs, {
+                color: '#00d4ff', weight: 2, opacity: 0.5
+            }).addTo(map);
+            layer.bindTooltip(fence.fence_name, { sticky: true });
+            fenceLayers.push(layer);
+            try {
+                var line = turf.lineString(coords);
+                var buf = turf.buffer(line, fence.buffer_radius || 200, { units: 'meters' });
+                var bufLayer = L.geoJSON(buf, {
+                    color: '#00d4ff', weight: 1, fillColor: '#00d4ff', fillOpacity: 0.08
+                }).addTo(map);
+                fenceLayers.push(bufLayer);
+            } catch(e) {}
+        } catch(e) {}
+    });
+}
+
+// ========== 加载工人用户（通过服务端端点，绕过ACL）==========
+function loadUsers() {
+    apiGet('/api/__pd__/workers').then(function(data){
+        allUsers = data.data || [];
+    }).catch(function(){});
+}
+
+// ========== 加载今日打卡 ==========
+function loadTodayRecords() {
+    var today = new Date();
+    var ds = today.toISOString().substring(0, 10);
+    var url = '/api/attendance_records:list?filter[createdAt][$dateBetween]=' + ds + ',' + ds + '&sort=-check_time&pageSize=200&appends=createdBy';
+    apiGet(url).then(function(data){
+        todayRecords = data.data || [];
+        computeOnlineStatus();
+        renderUserList(document.getElementById('searchInput').value.trim().toLowerCase());
+        renderBottomBar();
+        renderMarkers();
+        document.getElementById('mapLoading').textContent = '已更新 ' + new Date().toLocaleTimeString();
+        var hasUsers = document.getElementById('userList').children.length > 0;
+        if (hasUsers && !panelOpen) togglePanel(true);
+    }).catch(function(){});
+}
+
+function computeOnlineStatus() {
+    onlineUsers = {};
+    latestLocations = {};
+    var today = new Date().toISOString().substring(0, 10);
+    var userLatest = {};
+    todayRecords.forEach(function(r){
+        var uid = r.createdBy ? (r.createdBy.id || r.createdById) : null;
+        if (!uid) return;
+        if (!userLatest[uid]) userLatest[uid] = { checkIn: null, checkOut: null, latestTime: null, lat: null, lng: null };
+        var t = r.check_time || r.createdAt;
+        if (r.check_type === '上班' || r.check_type === '签到') {
+            if (!userLatest[uid].checkIn || t > userLatest[uid].checkIn) userLatest[uid].checkIn = t;
+        }
+        if (r.check_type === '下班' || r.check_type === '签退') {
+            if (!userLatest[uid].checkOut || t > userLatest[uid].checkOut) userLatest[uid].checkOut = t;
+        }
+        if (r.latitude && r.longitude) {
+            if (!userLatest[uid].latestTime || t > userLatest[uid].latestTime) {
+                userLatest[uid].latestTime = t;
+                userLatest[uid].lat = r.latitude;
+                userLatest[uid].lng = r.longitude;
+            }
+        }
+    });
+    for (var uid in userLatest) {
+        var u = userLatest[uid];
+        onlineUsers[uid] = !!(u.checkIn && (!u.checkOut || u.checkOut < u.checkIn));
+        if (u.lat && u.lng) {
+            latestLocations[uid] = { lat: u.lat, lng: u.lng, time: u.latestTime };
+        }
+    }
+}
+
+// ========== 加载最新位置（from location_history）==========
+function loadLatestLocations() {
+    var today = new Date().toISOString().substring(0, 10);
+    apiGet('/api/location_history:list?filter[recorded_at][$dateBetween]=' + today + ',' + today + '&sort=-recorded_at&pageSize=200').then(function(data){
+        var records = data.data || [];
+        var seen = {};
+        records.forEach(function(r){
+            var uid = r.createdById;
+            if (!uid || seen[uid]) return;
+            seen[uid] = true;
+            if (r.latitude && r.longitude) {
+                latestLocations[uid] = { lat: r.latitude, lng: r.longitude, time: r.recorded_at || r.createdAt };
+            }
+        });
+        renderMarkers();
+        if (selectedUserId) updateSelectedUser(selectedUserId);
+    }).catch(function(){});
+}
+
+// ========== 渲染标记 ==========
+function renderMarkers() {
+    for (var uid in userMarkers) {
+        map.removeLayer(userMarkers[uid]);
+    }
+    userMarkers = {};
+    allUsers.forEach(function(u){
+        var uid = u.id;
+        var loc = latestLocations[uid];
+        if (!loc || !loc.lat || !loc.lng) return;
+        var isOnline = onlineUsers[uid];
+        var latlng = [loc.lat, loc.lng];
+        var marker;
+        if (isOnline) {
+            var icon = L.divIcon({
+                className: '', html: '<div class="marker-pulse"></div>',
+                iconSize: [14, 14], iconAnchor: [7, 7]
+            });
+            marker = L.marker(latlng, { icon: icon }).addTo(map);
+        } else {
+            var icon = L.divIcon({
+                className: '', html: '<div class="marker-offline"></div>',
+                iconSize: [12, 12], iconAnchor: [6, 6]
+            });
+            marker = L.marker(latlng, { icon: icon }).addTo(map);
+        }
+        marker.bindPopup(
+            '<b>' + escHtml(u.nickname || u.username) + '</b><br>' +
+            (isOnline ? '🟢 在线' : '⚪ 离线') +
+            (loc.time ? '<br><small>' + new Date(loc.time).toLocaleString() + '</small>' : '')
+        );
+        marker.on('click', function(uid, latlng){
+            return function(){ selectUser(uid, latlng); };
+        }(uid, latlng));
+        userMarkers[uid] = marker;
+    });
+}
+
+// ========== 渲染右侧用户列表 ==========
+function renderUserList(query) {
+    var container = document.getElementById('userList');
+    var deptMap = {};
+    // 按部门分组
+    allUsers.forEach(function(u){
+        var depts = u.departments || [];
+        if (depts.length === 0) {
+            if (!deptMap['__none']) deptMap['__none'] = { title: '未分配', users: [] };
+            deptMap['__none'].users.push(u);
+        } else {
+            depts.forEach(function(d){
+                var key = d.id || d.title;
+                if (!deptMap[key]) deptMap[key] = { title: d.title || ('部门#' + d.id), users: [] };
+                deptMap[key].users.push(u);
+            });
+        }
+    });
+    var html = '';
+    var hasAny = false;
+    var deptKeys = Object.keys(deptMap).sort(function(a,b){
+        return (deptMap[a].title || '').localeCompare(deptMap[b].title || '');
+    });
+    deptKeys.forEach(function(key){
+        var group = deptMap[key];
+        var matchedUsers = group.users;
+        var deptMatch = false;
+        if (query) {
+            deptMatch = (group.title || '').toLowerCase().indexOf(query) !== -1;
+            if (!deptMatch) {
+                matchedUsers = group.users.filter(function(u){
+                    return (u.nickname || u.username || '').toLowerCase().indexOf(query) !== -1;
+                });
+            }
+        }
+        if (matchedUsers.length === 0) return;
+        hasAny = true;
+        html += '<div class="dept-group">';
+        html += '<div class="dept-title">' + escHtml(group.title || '未分配') + '</div>';
+        matchedUsers.forEach(function(u){
+            var uid = u.id;
+            var isOnline = onlineUsers[uid];
+            var loc = latestLocations[uid];
+            var isSelected = (selectedUserId === uid);
+            html += '<div class="user-item' + (isSelected ? ' active' : '') + '" onclick="selectUser(' + uid + ')" data-uid="' + uid + '">';
+            html += '<span class="user-dot ' + (isOnline ? 'online' : 'offline') + '"></span>';
+            html += '<span class="user-name">' + escHtml(u.nickname || u.username) + '</span>';
+            if (!loc) html += '<span class="user-badge">无位置</span>';
+            else if (isOnline) html += '<span class="user-badge">在线</span>';
+            if (isSelected) html += '<span class="user-badge tracking">追踪中</span>';
+            html += '</div>';
+        });
+        html += '</div>';
+    });
+    if (!hasAny) {
+        html = '<div class="empty-search' + (query ? '' : '') + '">' + (query ? '无匹配人员' : '暂无工人数据') + '</div>';
+    }
+    container.innerHTML = html;
+}
+
+function onSearch() {
+    var q = document.getElementById('searchInput').value.trim().toLowerCase();
+    renderUserList(q);
+}
+
+// ========== 选择人员 ==========
+function selectUser(uid, latlng) {
+    if (!uid) return;
+    selectedUserId = uid;
+    renderUserList(document.getElementById('searchInput').value.trim().toLowerCase());
+    var loc = latlng || latestLocations[uid];
+    if (loc) {
+        map.setView([loc.lat, loc.lng], 14, { animate: true });
+    }
+    // 加载轨迹
+    loadTrajectory(uid);
+}
+
+function updateSelectedUser(uid) {
+    if (selectedUserId !== uid) return;
+    var loc = latestLocations[uid];
+    if (loc) {
+        map.setView([loc.lat, loc.lng], 14, { animate: true });
+    }
+    loadTrajectory(uid);
+}
+
+// ========== 加载轨迹 ==========
+function loadTrajectory(uid) {
+    if (trajectoryLayer) { map.removeLayer(trajectoryLayer); trajectoryLayer = null; }
+    if (trajectoryStartMarker) { map.removeLayer(trajectoryStartMarker); trajectoryStartMarker = null; }
+    if (trajectoryEndMarker) { map.removeLayer(trajectoryEndMarker); trajectoryEndMarker = null; }
+    apiGet('/api/location_history:list?filter[createdById]=' + uid + '&sort=recorded_at&pageSize=200').then(function(data){
+        var records = data.data || [];
+        if (records.length < 2) return;
+        var points = [];
+        records.forEach(function(r){
+            if (r.latitude && r.longitude) {
+                points.push([parseFloat(r.latitude), parseFloat(r.longitude)]);
+            }
+        });
+        if (points.length < 2) return;
+        trajectoryLayer = L.polyline(points, {
+            color: '#ffd93d', weight: 3, opacity: 0.7, dashArray: '8,6'
+        }).addTo(map);
+        trajectoryStartMarker = L.circleMarker(points[0], {
+            radius: 5, color: '#00ff88', fillColor: '#00ff88', fillOpacity: 0.8, weight: 2
+        }).addTo(map).bindTooltip('起点', { permanent: false });
+        trajectoryEndMarker = L.circleMarker(points[points.length - 1], {
+            radius: 5, color: '#ff6b6b', fillColor: '#ff6b6b', fillOpacity: 0.8, weight: 2
+        }).addTo(map).bindTooltip('终点', { permanent: false });
+        map.fitBounds(trajectoryLayer.getBounds().pad(0.2));
+    }).catch(function(){});
+}
+
+// ========== 底部统计栏 ==========
+function renderBottomBar() {
+    var totalCheckin = 0;
+    var onlineCount = 0;
+    var deptStats = {};
+    var checkedUsers = {};
+    todayRecords.forEach(function(r){
+        var uid = r.createdBy ? (r.createdBy.id || r.createdById) : null;
+        if (!uid || checkedUsers[uid]) return;
+        if (r.check_type === '上班' || r.check_type === '签到') {
+            checkedUsers[uid] = true;
+            totalCheckin++;
+        }
+    });
+    for (var uid in onlineUsers) {
+        if (onlineUsers[uid]) onlineCount++;
+    }
+    document.getElementById('todayCount').textContent = totalCheckin;
+    document.getElementById('onlineCount').textContent = onlineCount;
+
+    // 按部门统计
+    allUsers.forEach(function(u){
+        if (!checkedUsers[u.id] && !onlineUsers[u.id]) return;
+        var depts = u.departments || [];
+        var dTitle = (depts.length > 0) ? depts[0].title : '未分配';
+        if (!deptStats[dTitle]) deptStats[dTitle] = { total: 0, online: 0 };
+        if (checkedUsers[u.id]) deptStats[dTitle].total++;
+        if (onlineUsers[u.id]) deptStats[dTitle].online++;
+    });
+    var barHtml = '';
+    var deptNames = Object.keys(deptStats).sort();
+    deptNames.forEach(function(name){
+        var s = deptStats[name];
+        barHtml += '<span class="proj-stat"><span class="proj-name">' + escHtml(name) + ':</span> <span class="proj-num">' + s.online + '/' + s.total + '</span></span>';
+    });
+    if (!barHtml) barHtml = '<span class="proj-stat" style="color:#5a6a7a">暂无数据</span>';
+    document.getElementById('barScroll').innerHTML = barHtml;
+}
+
+// ========== 定时位置采集 ==========
+function startLocationSchedule() {
+    var userId = null;
+    // 获取当前用户ID
+    apiGet('/api/users:check').then(function(data){
+        userId = data.data ? data.data.id : null;
+        if (!userId) return;
+        scheduleNext(userId);
+    }).catch(function(){});
+
+    function scheduleNext(uid) {
+        var now = new Date();
+        var h = now.getHours();
+        var ms = 0;
+        if (h >= 6 && h < 20) {
+            if (h < 12) ms = 10 * 60 * 1000;
+            else ms = 30 * 60 * 1000;
+            // 检查是否在上班窗口内
+            checkWorkWindow(uid, function(inWindow){
+                if (inWindow) {
+                    collectAndReport(uid);
+                    setTimeout(function(){ scheduleNext(uid); }, ms);
+                } else {
+                    setTimeout(function(){ scheduleNext(uid); }, 5 * 60 * 1000);
+                }
+            });
+        } else {
+            // 20:00-06:00 静默，等到06:00
+            var next6am = new Date(now);
+            next6am.setDate(next6am.getDate() + (h >= 20 ? 1 : 0));
+            next6am.setHours(6, 0, 0, 0);
+            ms = next6am.getTime() - now.getTime();
+            setTimeout(function(){ scheduleNext(uid); }, ms);
+        }
+    }
+}
+
+function checkWorkWindow(uid, callback) {
+    var today = new Date().toISOString().substring(0, 10);
+    apiGet('/api/attendance_records:list?filter[createdBy.id]=' + uid + '&filter[createdAt][$dateBetween]=' + today + ',' + today + '&sort=-check_time&pageSize=10').then(function(data){
+        var records = data.data || [];
+        var hasCheckIn = false, hasCheckOut = false;
+        records.forEach(function(r){
+            if (r.check_type === '上班' || r.check_type === '签到') hasCheckIn = true;
+            if (r.check_type === '下班' || r.check_type === '签退') hasCheckOut = true;
+        });
+        callback(hasCheckIn && !hasCheckOut);
+    }).catch(function(){ callback(false); });
+}
+
+function collectAndReport(uid) {
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(function(pos){
+        var lat = pos.coords.latitude;
+        var lng = pos.coords.longitude;
+        var acc = Math.round(pos.coords.accuracy) || null;
+        apiPost('/api/location_history:create', {
+            latitude: lat,
+            longitude: lng,
+            accuracy: acc,
+            recorded_at: new Date().toISOString()
+        }).catch(function(err){ console.warn('collectAndReport location_history write failed:', err); });
+    }, function(){}, { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 });
+}
+
+// ========== 数据轮询 ==========
+function startPolling() {
+    loadFences();
+    loadUsers();
+    loadTodayRecords();
+    loadLatestLocations();
+    pollTimer = setInterval(function(){
+        loadTodayRecords();
+        loadLatestLocations();
+    }, 10000);
+    setInterval(function(){
+        loadFences();
+    }, 30000);
+}
+
+// ========== 工具 ==========
+function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ========== 浮动面板切换 ==========
+var panelOpen = false;
+function togglePanel(force) {
+    panelOpen = force !== undefined ? force : !panelOpen;
+    document.getElementById('rightPanel').classList.toggle('open', panelOpen);
+    document.getElementById('panelToggle').textContent = panelOpen ? '人员列表 ◀' : '人员列表 ▶';
+}
+
+// ========== 定位当前位置（高德 IP 定位 + 浏览器定位，迁移自 geofence-manager）==========
+var _locMarker = null;
+function _placeMarker(lat, lng, label) {
+    if (_locMarker) { map.removeLayer(_locMarker); }
+    _locMarker = L.circleMarker([lat, lng], {
+        radius: 7, color: '#00d4ff', fillColor: '#00d4ff', fillOpacity: 0.25, weight: 2
+    }).addTo(map).bindTooltip(label || '当前位置', { permanent: false });
+    map.setView([lat, lng], 16);
+}
+async function locateMe() {
+    try {
+        var r = await fetch('/api/__pd__/locate', { headers: headers });
+        if (r.ok) {
+            var d = await r.json();
+            if (d && d.rectangle) {
+                var parts = d.rectangle.split(';');
+                var c1 = parts[0].split(','), c2 = parts[1].split(',');
+                var clat = (parseFloat(c1[1]) + parseFloat(c2[1])) / 2;
+                var clng = (parseFloat(c1[0]) + parseFloat(c2[0])) / 2;
+                var city = d.city || '';
+                _placeMarker(clat, clng, '当前位置（' + (city || 'IP定位') + '）');
+                return;
+            }
+        }
+    } catch(e) {}
+    // 浏览器定位
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(function(pos){
+        _placeMarker(pos.coords.latitude, pos.coords.longitude, '当前位置（浏览器定位）');
+    }, function(){}, { enableHighAccuracy: true, timeout: 10000 });
+}
+
+// ========== 地名搜索（高德 inputtips，迁移自 geofence-manager）==========
+async function searchPlace() {
+    var q = document.getElementById('mapSearchInput').value.trim();
+    if (!q) return;
+    var container = document.getElementById('mapSearchResults');
+    container.style.display = 'block';
+    container.innerHTML = '<div style="color:#5a6a7a;padding:8px">搜索中...</div>';
+    try {
+        var resp = await fetch('/api/__pd__/geocode?q=' + encodeURIComponent(q), { headers: headers });
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        var d = await resp.json();
+        container.innerHTML = '';
+        if (d && d.tips && d.tips.length > 0) {
+            d.tips.forEach(function(tip){
+                var loc = tip.location;
+                var name = tip.name || '';
+                var addr = tip.address || '';
+                var district = tip.district || '';
+                if (!loc) return;
+                var parts = loc.split(',');
+                var zoom = 15;
+                var div = document.createElement('div');
+                div.textContent = name + (addr ? ' - ' + addr : '') + (district ? ' [' + district + ']' : '');
+                div.onclick = function(){
+                    flyTo(parseFloat(parts[1]), parseFloat(parts[0]), zoom);
+                    container.style.display = 'none';
+                };
+                container.appendChild(div);
+            });
+        } else {
+            container.innerHTML = '<div style="color:#5a6a7a;padding:8px">未找到结果</div>';
+        }
+    } catch(e) {
+        container.innerHTML = '<div style="color:#ff6b6b;padding:8px">搜索失败</div>';
+    }
+}
+function flyTo(lat, lng, zoom) {
+    map.setView([lat, lng], zoom || 15);
+}
+// 点击外部关闭搜索结果
+document.addEventListener('click', function(e) {
+    var bar = document.querySelector('.map-search-bar');
+    var sr = document.getElementById('mapSearchResults');
+    if (bar && bar.contains(e.target)) return;
+    if (sr && !sr.contains(e.target)) {
+        sr.style.display = 'none';
+    }
+});
+
+// ========== 启动 ==========
+document.addEventListener('DOMContentLoaded', function(){
+    document.getElementById('mapLoading').textContent = '初始化...';
+    initMap();
+    startPolling();
+    startLocationSchedule();
+});
+</script>
+</body>
+</html>

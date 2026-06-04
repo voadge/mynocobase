@@ -978,6 +978,8 @@
                     body: JSON.stringify(filteredBody)
                 });
                 if (r.ok) {
+                    var _attResultData = null;
+                    try { var _j = await r.clone().json(); _attResultData = (_j && _j.data) ? _j.data : _j; } catch(e){}
                     if (isLeave) {
                         btn.textContent = '✅ 已提交，等待审批';
                         btn.style.background = 'linear-gradient(135deg, #ffd93d, #f39c12)';
@@ -988,6 +990,23 @@
                         btn.textContent = '✓ 打卡成功！';
                         btn.style.background = 'linear-gradient(135deg, #00ff88, #00b86b)';
                         setTimeout(closeAttendModal, 1200);
+                        // 记录位置历史（fire-and-forget）
+                        if (body.latitude && body.longitude) {
+                            var _attUid = _attResultData ? _attResultData.createdById : null;
+                            var _lhBody = {
+                                latitude: body.latitude,
+                                longitude: body.longitude,
+                                accuracy: body.gps_accuracy || null,
+                                recorded_at: now.toISOString()
+                            };
+                            if (_attUid) _lhBody.createdById = _attUid;
+                            fetch('/api/location_history:create', {
+                                method: 'POST',
+                                headers: _headers,
+                                credentials: 'include',
+                                body: JSON.stringify(_lhBody)
+                            }).catch(function(err){ console.warn('location_history write failed:', err); });
+                        }
                     }
                     if (window.parent && window.parent.fetchAttendance) window.parent.fetchAttendance();
                 } else {

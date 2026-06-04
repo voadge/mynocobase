@@ -1,0 +1,19 @@
+{
+  "appId": "com.voadge.pd.attend",
+  "appName": "人员动态",
+  "bundledWebRuntime": false,
+  "webDir": "www",
+  "server": {
+    "hostname": "voadge.top:668",
+    "androidScheme": "https",
+    "allowNavigation": ["voadge.top:668"]
+  },
+  "plugins": {
+    "Geolocation": {
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION"
+      ]
+    }
+  }
+}

@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>人员动态</title>
+<style>
+  body { margin:0; background:#0c1426; color:#e0e6ed; font-family: sans-serif; display:flex; justify-content:center; align-items:center; height:100vh; flex-direction:column; gap:16px; }
+  a { color:#00d4ff; text-decoration:none; font-size:18px; }
+  .note { font-size:13px; color:#5a6a7a; }
+  h2 { color:#c0c8d4; font-weight:400; }
+</style>
+</head>
+<body>
+  <h2>⏳ 初始化中...</h2>
+  <p><a href="dashboard/人员动态.html">人员动态</a></p>
+  <p><a href="../attendance.html">考勤打卡</a></p>
+  <p class="note">Capacitor 壳 — v1.0.0</p>
+
+  <script>
+    // Capacitor 就绪后自动跳转到人员动态
+    document.addEventListener('deviceready', function() {
+      window.location.href = 'dashboard/人员动态.html';
+    }, false);
+    // 浏览器预览时不走 deviceready
+    setTimeout(function() {
+      if (!window.deviceReadyFired) {
+        window.location.href = 'dashboard/人员动态.html';
+      }
+    }, 1500);
+  </script>
+</body>
+</html>

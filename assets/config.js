@@ -4,7 +4,8 @@
 const EXTERN_URLS = [
     { label: '智慧云屏', url: 'https://road.xiangsu.work/bvr/zydlxc/#/homePage' },
     { label: '巡查管理', url: 'https://road.xiangsu.work/bvr/zydlxc/#/' },
-    { label: '数据大屏 2', url: 'https://example.com' }
+    { label: '人员动态', url: '/peopledynamic' },
+    { label: '数据大屏 4', url: '' }
 ];
 
 const RP = { base: 'https://road.xiangsu.work/bvr/zydlxc', user: 'zydlxc', pass: '123456' };
