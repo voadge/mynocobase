@@ -123,15 +123,12 @@
 <!-- 抽屉面板 -->
 <div class="drawer-overlay" id="adminDrawer">
     <div class="drawer-panel" id="drawerPanel">
-        <div class="drawer-header">
-            <span class="drawer-title" id="drawerTitle"></span>
-            <div class="drawer-actions">
-                <button class="drawer-btn" onclick="openDrawerNewTab()" title="新标签打开">↗</button>
-                <button class="drawer-close" onclick="closeDrawer()">✕</button>
-            </div>
-        </div>
         <div class="drawer-body">
             <iframe id="adminFrame" allow="camera; geolocation" sandbox="allow-scripts allow-forms allow-same-origin allow-popups"></iframe>
+            <div class="drawer-floating-actions">
+                <button class="drawer-floating-btn" onclick="openDrawerNewTab()" title="新标签打开">↗</button>
+                <button class="drawer-floating-btn" onclick="closeDrawer()">✕</button>
+            </div>
         </div>
     </div>
 </div>

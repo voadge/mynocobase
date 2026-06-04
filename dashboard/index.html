@@ -515,17 +515,24 @@
             animation: drawerSlideIn 0.28s ease;
         }
         @keyframes drawerSlideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
-        .drawer-header {
-            display: flex; align-items: center; justify-content: space-between;
-            padding: 10px 20px; background: #001529; color: #fff; flex-shrink: 0;
+        .drawer-floating-actions {
+            position: absolute; top: 8px; left: 50%; z-index: 10;
+            transform: translateX(calc(-50% + 400px)); display: flex; gap: 10px;
         }
-        .drawer-title { font-size: 1em; font-weight: 600; }
-        .drawer-actions { display: flex; gap: 8px; }
-        .drawer-btn, .drawer-close {
-            background: rgba(255,255,255,0.1); border: none; color: #fff;
-            padding: 4px 12px; border-radius: 4px; cursor: pointer; font-size: 0.85em;
+        .drawer-floating-btn {
+            width: 30px; height: 30px; border-radius: 50%;
+            background: transparent; border: 1px solid rgba(255,255,255,0.25);
+            color: rgba(255,255,255,0.7); font-size: 14px; cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            transition: all 0.15s;
         }
-        .drawer-btn:hover, .drawer-close:hover { background: rgba(255,255,255,0.2); }
+        .drawer-floating-btn:hover {
+            color: #fff; border-color: rgba(255,255,255,0.5);
+            background: rgba(255,255,255,0.08);
+        }
+        @media (max-width: 768px) {
+            .drawer-floating-actions { left: auto; right: 50px; transform: none; }
+        }
         .drawer-loader {
             display: none; flex-direction: column; align-items: center; justify-content: center;
             padding: 60px 0; gap: 16px;
@@ -1003,19 +1010,16 @@
 <!-- 抽屉面板：工作区链接在 iframe 中打开 -->
 <div class="drawer-overlay" id="adminDrawer">
     <div class="drawer-panel" id="drawerPanel">
-        <div class="drawer-header">
-            <span class="drawer-title" id="drawerTitle"></span>
-            <div class="drawer-actions">
-                <button class="drawer-btn" onclick="openDrawerNewTab()" title="新标签打开">↗</button>
-                <button class="drawer-close" onclick="closeDrawer()">✕</button>
-            </div>
-        </div>
         <div class="drawer-loader" id="drawerLoader">
             <div class="loader-spinner"></div>
             <div class="loader-text">加载中...</div>
         </div>
         <div class="drawer-body">
             <iframe id="adminFrame" allow="camera; geolocation" sandbox="allow-scripts allow-forms allow-same-origin allow-popups"></iframe>
+            <div class="drawer-floating-actions">
+                <button class="drawer-floating-btn" onclick="openDrawerNewTab()" title="新标签打开">↗</button>
+                <button class="drawer-floating-btn" onclick="closeDrawer()">✕</button>
+            </div>
         </div>
     </div>
 </div>
@@ -1211,7 +1215,6 @@
 
         function openDrawer(url, title) {
             clearTimeout(_drawerLoadTimer);
-            document.getElementById('drawerTitle').textContent = title;
             document.getElementById('adminDrawer').classList.add('show');
             _drawerOpen = true;
 

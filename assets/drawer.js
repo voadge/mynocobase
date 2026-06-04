@@ -3,7 +3,6 @@ var _drawerOpen = false;
 
 function openDrawer(url, title) {
     document.getElementById('adminFrame').src = url;
-    document.getElementById('drawerTitle').textContent = title;
     document.getElementById('adminDrawer').classList.add('show');
     _drawerOpen = true;
 }
@@ -27,12 +26,4 @@ document.getElementById('adminDrawer').addEventListener('click', function(e) {
     if (e.target === this) closeDrawer();
 });
 
-document.getElementById('adminFrame').addEventListener('load', function() {
-    try {
-        var doc = this.contentDocument || this.contentWindow.document;
-        if (!doc) return;
-        var style = doc.createElement('style');
-        style.textContent = '.ant-layout-header, .ant-layout-sider-trigger, .nocobase-header, .nocobase-layout-header { display: none !important; }';
-        doc.head.appendChild(style);
-    } catch(e) {}
-});
+

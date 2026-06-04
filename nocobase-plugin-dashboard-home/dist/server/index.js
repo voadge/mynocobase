@@ -101,7 +101,7 @@ module.exports = class DashboardHomePlugin extends Plugin {
           ctx.body = 'Page file not found';
         }
       } else {
-        ctx.redirect('/signin?redirect=' + ctx.path);
+        ctx.redirect('/signin');
       }
     }, { tag: 'dashboard-home', before: 'dataSource' });
   }
