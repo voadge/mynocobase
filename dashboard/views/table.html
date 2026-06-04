@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>数据视图</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; color: #333; }
+.header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: #fff; border-bottom: 1px solid #e8e8e8; position: sticky; top: 0; z-index: 10; }
+.header h2 { font-size: 1em; font-weight: 600; color: #1a1a2e; }
+.header .count { font-size: 0.78em; color: #888; }
+.toolbar { display: flex; gap: 8px; padding: 8px 16px; background: #fff; border-bottom: 1px solid #e8e8e8; flex-wrap: wrap; }
+.toolbar input { flex: 1; min-width: 120px; padding: 6px 10px; border: 1px solid #d9d9d9; border-radius: 4px; font-size: 0.82em; outline: none; }
+.toolbar input:focus { border-color: #1890ff; }
+.toolbar button { padding: 6px 14px; border: 1px solid #d9d9d9; border-radius: 4px; background: #fff; cursor: pointer; font-size: 0.82em; }
+.toolbar button:hover { border-color: #1890ff; color: #1890ff; }
+.toolbar button.primary { background: #1890ff; color: #fff; border-color: #1890ff; }
+.toolbar button.primary:hover { background: #40a9ff; }
+.loading { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 80px 20px; gap: 16px; }
+.spinner { width: 32px; height: 32px; border: 3px solid #e8e8e8; border-top-color: #1890ff; border-radius: 50%; animation: spin 0.7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading .msg { color: #888; font-size: 0.85em; }
+.error { padding: 40px 20px; text-align: center; color: #ff4d4f; }
+.error .hint { font-size: 0.82em; color: #888; margin-top: 8px; }
+.error .fallback { margin-top: 16px; }
+.error .fallback a { color: #1890ff; font-size: 0.85em; text-decoration: none; }
+.error .fallback a:hover { text-decoration: underline; }
+.table-wrap { overflow-x: auto; padding: 0; }
+table { width: 100%; border-collapse: collapse; font-size: 0.82em; }
+th { background: #fafafa; padding: 10px 12px; text-align: left; font-weight: 600; border-bottom: 2px solid #e8e8e8; white-space: nowrap; color: #555; position: sticky; top: 96px; z-index: 5; }
+td { padding: 8px 12px; border-bottom: 1px solid #f0f0f0; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+tr:hover td { background: #f5f9ff; }
+.empty { padding: 60px 20px; text-align: center; color: #999; font-size: 0.85em; }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.78em; background: #e6f7ff; color: #1890ff; }
+</style>
+</head>
+<body>
+<div class="header">
+  <h2 id="pageTitle">数据加载中...</h2>
+  <span class="count" id="totalCount"></span>
+</div>
+<div class="toolbar">
+  <input id="searchInput" placeholder="搜索..." oninput="filterTable(this.value)">
+  <button onclick="loadData()" class="primary">刷新</button>
+  <button onclick="exportCSV()">导出 CSV</button>
+</div>
+<div class="loading" id="loadingState">
+  <div class="spinner"></div>
+  <div class="msg">正在加载数据...</div>
+</div>
+<div class="error" id="errorState" style="display:none">
+  <div id="errorMsg">加载失败</div>
+  <div class="hint">轻量视图加载失败，可尝试在 NocoBase 后台打开</div>
+  <div class="fallback"><a id="fallbackLink" href="#" target="_blank">↗ 在 NocoBase 后台打开</a></div>
+</div>
+<div class="table-wrap" id="tableWrap" style="display:none">
+  <table>
+    <thead id="tableHead"></thead>
+    <tbody id="tableBody"></tbody>
+  </table>
+</div>
+<div class="empty" id="emptyState" style="display:none">暂无数据</div>
+
+<script>
+var _allData = [];
+var _fields = [];
+
+function getToken() {
+  try {
+    return localStorage.getItem('NOCOBASE_TOKEN') || localStorage.getItem('nocobase_token') || '';
+  } catch(e) { return ''; }
+}
+
+function getParams() {
+  var q = location.search.substr(1).split('&');
+  var p = {};
+  q.forEach(function(s) { var kv = s.split('='); p[decodeURIComponent(kv[0])] = decodeURIComponent(kv[1] || ''); });
+  return p;
+}
+
+var params = getParams();
+var collectionName = params.collection || '';
+var pageSize = parseInt(params.pageSize) || 50;
+var currentTitle = params.title || collectionName;
+
+if (collectionName) {
+  document.title = currentTitle + ' - 数据视图';
+  document.getElementById('pageTitle').textContent = currentTitle;
+  loadData();
+} else {
+  document.getElementById('pageTitle').textContent = '参数错误';
+  showError('缺少 collection 参数');
+}
+
+function showLoading(msg) {
+  document.getElementById('loadingState').style.display = 'flex';
+  document.getElementById('errorState').style.display = 'none';
+  document.getElementById('tableWrap').style.display = 'none';
+  document.getElementById('emptyState').style.display = 'none';
+  document.querySelector('.loading .msg').textContent = msg || '正在加载数据...';
+}
+
+function showError(msg) {
+  document.getElementById('loadingState').style.display = 'none';
+  document.getElementById('errorState').style.display = 'block';
+  document.getElementById('errorMsg').textContent = msg;
+  document.getElementById('tableWrap').style.display = 'none';
+  document.getElementById('emptyState').style.display = 'none';
+}
+
+function showTable() {
+  document.getElementById('loadingState').style.display = 'none';
+  document.getElementById('errorState').style.display = 'none';
+  document.getElementById('tableWrap').style.display = 'block';
+  document.getElementById('emptyState').style.display = 'none';
+}
+
+function showEmpty() {
+  document.getElementById('loadingState').style.display = 'none';
+  document.getElementById('errorState').style.display = 'none';
+  document.getElementById('tableWrap').style.display = 'none';
+  document.getElementById('emptyState').style.display = 'block';
+}
+
+function getApiUrl() {
+  var token = getToken();
+  if (token) {
+    return '/api/' + collectionName + ':list?pageSize=' + pageSize + '&sort=-createdAt';
+  }
+  return '/api/' + collectionName + ':list?pageSize=' + pageSize;
+}
+
+function loadData() {
+  showLoading('正在加载数据...');
+  var token = getToken();
+  var headers = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = 'Bearer ' + token;
+
+  fetch(getApiUrl(), { headers: headers, credentials: 'include' })
+    .then(function(r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status + ': ' + r.statusText);
+      return r.json();
+    })
+    .then(function(data) {
+      var rows = data.data || [];
+      var meta = data.meta || {};
+      _allData = rows;
+      document.getElementById('totalCount').textContent = '共 ' + (meta.total || rows.length) + ' 条';
+
+      if (!rows.length) { showEmpty(); return; }
+
+      // 从第一条数据推断字段
+      var first = rows[0];
+      _fields = Object.keys(first).filter(function(k) {
+        return !k.startsWith('created') && !k.startsWith('updated') && k !== 'id' && typeof first[k] !== 'object';
+      });
+
+      // 设置后台入口链接
+      var fallback = document.getElementById('fallbackLink');
+      var adminUrl = '/admin/' + collectionName;
+      if (fallback) fallback.href = adminUrl;
+
+      renderTable(rows);
+      showTable();
+    })
+    .catch(function(err) {
+      showError('加载失败: ' + err.message);
+      // 设置后台入口链接
+      var fallback = document.getElementById('fallbackLink');
+      var adminUrl = '/admin/' + collectionName;
+      if (fallback) fallback.href = adminUrl;
+    });
+}
+
+function renderTable(rows) {
+  var thead = document.getElementById('tableHead');
+  var tbody = document.getElementById('tableBody');
+  thead.innerHTML = '';
+  tbody.innerHTML = '';
+
+  // 表头
+  var tr = document.createElement('tr');
+  _fields.forEach(function(f) {
+    var th = document.createElement('th');
+    th.textContent = f;
+    tr.appendChild(th);
+  });
+  thead.appendChild(tr);
+
+  // 数据行
+  rows.forEach(function(row) {
+    var tr = document.createElement('tr');
+    _fields.forEach(function(f) {
+      var td = document.createElement('td');
+      var val = row[f];
+      if (val === null || val === undefined) val = '';
+      td.textContent = String(val);
+      td.title = String(val);
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+}
+
+function filterTable(val) {
+  var q = val.toLowerCase().trim();
+  var rows = _allData;
+  if (!q) { renderTable(rows); document.getElementById('totalCount').textContent = '共 ' + rows.length + ' 条'; return; }
+  var filtered = rows.filter(function(r) {
+    return _fields.some(function(f) {
+      return String(r[f] || '').toLowerCase().indexOf(q) !== -1;
+    });
+  });
+  renderTable(filtered);
+  document.getElementById('totalCount').textContent = '筛选: ' + filtered.length + ' / ' + rows.length + ' 条';
+}
+
+function exportCSV() {
+  if (!_allData.length) return;
+  var lines = [_fields.join(',')];
+  _allData.forEach(function(row) {
+    lines.push(_fields.map(function(f) {
+      var v = String(row[f] || '').replace(/"/g, '""');
+      return '"' + v + '"';
+    }).join(','));
+  });
+  var blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = collectionName + '.csv';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+</script>
+</body>
+</html>
