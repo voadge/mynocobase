@@ -136,7 +136,7 @@ body {
 @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0.15; } }
 
 .side-panel .info-cycle {
-    height: 1.5em; overflow: hidden; position: relative; width: 100%; margin-top: auto;
+    height: 1.5em; overflow: hidden; position: relative; width: 100%;
 }
 
 .side-panel .cycle-item {
