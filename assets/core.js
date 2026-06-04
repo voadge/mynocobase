@@ -242,9 +242,15 @@ function getLunarDate(date) {
 }
 
 let cycleIndex=0;
-const cycleIds=['dateDisplay','lunarDisplay','termDisplay','weekdayDisplay','weatherDisplay','tempDisplay','warnDisplay'];
+let cycleIds=['dateDisplay','lunarDisplay','termDisplay','weekdayDisplay','weatherDisplay','tempDisplay','warnDisplay'];
+function rebuildCycleIds() {
+    var all=['dateDisplay','lunarDisplay','termDisplay','weekdayDisplay','weatherDisplay','tempDisplay','warnDisplay'];
+    cycleIds=all.filter(function(id){ return document.getElementById(id).style.display !== 'none'; });
+    if (cycleIndex>=cycleIds.length) cycleIndex=0;
+}
 function rotateCycle() {
     document.querySelectorAll('.cycle-item').forEach(e=>e.classList.remove('active'));
+    if (cycleIds.length===0) return;
     document.getElementById(cycleIds[cycleIndex]).classList.add('active');
     cycleIndex=(cycleIndex+1)%cycleIds.length;
 }
@@ -429,7 +435,15 @@ function updateDisplay() {
     const lu=getLunarDate(n);
     document.querySelector('#lunarDisplay .label-lunar').textContent=`农历${lu.month}月${lu.day}`;
     const t=getSolarTerm(n.getMonth()+1,n.getDate());
-    document.querySelector('#termDisplay .label-term').textContent=t||'无节气';
+    var termEl=document.getElementById('termDisplay');
+    if (t) {
+        termEl.querySelector('.label-term').textContent=t;
+        termEl.style.display='';
+    } else {
+        termEl.querySelector('.label-term').textContent='';
+        termEl.style.display='none';
+    }
+    rebuildCycleIds();
     document.querySelector('#weekdayDisplay .label-week').textContent=weekdays[n.getDay()];
     document.querySelector('#weatherDisplay .label-weather').textContent=weatherText;
     document.querySelector('#tempDisplay .label-temp').textContent=tempText;
