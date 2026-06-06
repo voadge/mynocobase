@@ -28,9 +28,9 @@ module.exports = class DashboardHomePlugin extends Plugin {
       ctx.body = ctx.status === 200 ? 'ok' : 'Unauthorized';
     });
 
-    // Geocode + IP locate proxy (via Amap, server-side to respect IP whitelist)
+    // Geocode + IP locate + reverse geocode proxy (via Amap, server-side to respect IP whitelist)
     this.app.use(async (ctx, next) => {
-      if (ctx.method !== 'GET' || !(ctx.path.endsWith('/geocode') || ctx.path.endsWith('/locate'))) {
+      if (ctx.method !== 'GET' || !(ctx.path.endsWith('/geocode') || ctx.path.endsWith('/locate') || ctx.path.endsWith('/regeo'))) {
         return await next();
       }
       if (!await this.isAuthenticated(ctx)) {
@@ -59,6 +59,25 @@ module.exports = class DashboardHomePlugin extends Plugin {
         } catch(e) {
           ctx.status = 502;
           ctx.body = { status: '0', tips: [], error: e.message };
+        }
+      } else if (ctx.path.endsWith('/regeo')) {
+        var location = ctx.query.location;
+        if (!location) { ctx.body = { status: '0', regeocode: null }; return; }
+        try {
+          var url = 'https://restapi.amap.com/v3/geocode/regeo?key=' + amapKey + '&location=' + encodeURIComponent(location) + '&output=json&radius=1000&extensions=base';
+          var data = await new Promise(function(resolve, reject) {
+            https.get(url, function(res) {
+              var body = '';
+              res.on('data', function(c) { body += c; });
+              res.on('end', function() {
+                try { resolve(JSON.parse(body)); } catch(e) { reject(e); }
+              });
+            }).on('error', reject);
+          });
+          ctx.body = data;
+        } catch(e) {
+          ctx.status = 502;
+          ctx.body = { status: '0', regeocode: null, error: e.message };
         }
       } else {
         try {

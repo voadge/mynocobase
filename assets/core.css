@@ -313,24 +313,6 @@ body {
     width: 100%; height: 100%; border: none; display: block;
 }
 
-/* 缩放控制条（仅全屏可见） */
-.zoom-bar {
-    display: none; position: absolute; top: 10px; right: 60px; z-index: 20;
-    background: rgba(0,0,0,0.65); border-radius: 8px; padding: 4px 6px;
-    gap: 3px; align-items: center; backdrop-filter: blur(4px);
-    border: 1px solid rgba(255,255,255,0.15);
-}
-.zoom-btn {
-    width: 28px; height: 28px; border-radius: 5px; border: 1px solid rgba(255,255,255,0.2);
-    background: rgba(255,255,255,0.08); color: #e0e6ed; font-size: 0.85em;
-    cursor: pointer; display: flex; align-items: center; justify-content: center;
-    font-family: inherit; line-height: 1; transition: all 0.2s;
-}
-.zoom-btn:hover { background: rgba(0,212,255,0.2); border-color: rgba(0,212,255,0.5); }
-.zoom-pct { color: #aab; font-size: 0.75em; min-width: 36px; text-align: center; font-family: monospace; }
-.stage-frame-wrap:fullscreen .zoom-bar,
-.stage-frame-wrap:-webkit-full-screen .zoom-bar,
-.stage-frame-wrap:-moz-full-screen .zoom-bar { display: flex; }
 .stage-frame-wrap:fullscreen,
 .stage-frame-wrap:-webkit-full-screen,
 .stage-frame-wrap:-moz-full-screen {

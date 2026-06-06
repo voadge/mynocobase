@@ -959,12 +959,6 @@
                     <button class="fs-btn" onclick="toggleFullscreen()">⛶ 全屏</button>
                 </div>
                 <iframe id="externFrame" src="" allowfullscreen sandbox="allow-scripts allow-forms allow-same-origin allow-popups"></iframe>
-                <div class="zoom-bar" id="zoomBar">
-                    <button class="zoom-btn" onclick="zoomFrame(0.2)" title="放大">＋</button>
-                    <button class="zoom-btn" onclick="zoomFrame(-0.2)" title="缩小">－</button>
-                    <button class="zoom-btn" onclick="zoomFrame(0,true)" title="重置">↺</button>
-                    <span class="zoom-pct" id="zoomPct">100%</span>
-                </div>
             </div>
         </div>
 
@@ -1006,6 +1000,16 @@
 </div>
 
 <script>
+        // ============================================================
+        //  Capacitor / App 检测 — 用于所有原生功能分支
+        // ============================================================
+        var _isCapacitor = typeof Capacitor !== 'undefined' && Capacitor.isNative;
+        var _isHarmony = typeof window.appBridge !== 'undefined';
+        var _isApp = _isCapacitor || _isHarmony;
+        var _urlParams = new URLSearchParams(window.location.search);
+        if (_urlParams.get('app') === '1') {
+            document.getElementById('workSection').style.display = 'none';
+        }
         // ============================================================
         //  数据大屏接入源 — 增删改直接编辑此数组即可
         // ============================================================
@@ -1561,6 +1565,10 @@
         }
 
         async function preCheckPermissions() {
+            // HarmonyOS: WebView navigator.permissions 不反映 HAP 已授权状态，跳过
+            if (_isHarmony) {
+                return {camera: 'granted', geolocation: 'granted'};
+            }
             var result = {camera: 'prompt', geolocation: 'prompt'};
             if (navigator.permissions) {
                 try {
@@ -1718,6 +1726,18 @@
         ];
 
         function startCamera() {
+            // HarmonyOS: 使用原生 bridge 拍照，不走 WebRTC
+            if (_isHarmony && window.appBridge.takePhoto) {
+                _cameraFallbackMode = true;
+                document.getElementById('faceStatus').textContent = '📷 点击下方按钮调用系统相机';
+                document.getElementById('faceStatus').className = 'face-status';
+                document.getElementById('captureBtn').disabled = false;
+                document.getElementById('captureBtn').textContent = '📷 拍照';
+                document.getElementById('cameraSwitchBtn').disabled = true;
+                var v = document.getElementById('attendVideo');
+                if (v) v.style.display = 'none';
+                return;
+            }
             _cameraZoom = 0.8;
             var v = document.getElementById('attendVideo');
             if (v) v.style.transform = 'scale(1)';
@@ -1881,32 +1901,55 @@
                 });
         }
 
+        function _onLocationSuccess(pos) {
+            var rawLat = pos.coords.latitude, rawLng = pos.coords.longitude;
+            var gcj = wgs84ToGcj02(rawLat, rawLng);
+            attendLocation = {
+                lat: gcj[0],
+                lng: gcj[1],
+                accuracy: pos.coords.accuracy
+            };
+            gpsState = 'ok';
+            var acc = Math.round(pos.coords.accuracy);
+            var accLabel = '';
+            if (acc < 5) accLabel = '（高精度）';
+            else if (acc < 50) accLabel = '（一般）';
+            else accLabel = '（精度低）';
+            document.getElementById('attendLocation').textContent = gcj[0].toFixed(5) + ',' + gcj[1].toFixed(5) + ' ±' + acc + 'm ' + accLabel;
+            var locMsg = '✓ 位置已获取';
+            document.getElementById('locationStatus').innerHTML = locMsg;
+            document.getElementById('locationStatus').setAttribute('data-base', locMsg);
+            document.getElementById('locationStatus').className = 'attend-location-status got';
+            checkPolylineGeofence(gcj[0], gcj[1]).then(function(){ updateSubmitState(); }).catch(function(){ updateSubmitState(); });
+        }
+
         function _getLocationOnce(highAccuracy) {
-            navigator.geolocation.getCurrentPosition(
-                function(pos){
-                    var rawLat = pos.coords.latitude, rawLng = pos.coords.longitude;
-                    var gcj = wgs84ToGcj02(rawLat, rawLng);
-                    attendLocation = {
-                        lat: gcj[0],
-                        lng: gcj[1],
-                        accuracy: pos.coords.accuracy
-                    };
-                    gpsState = 'ok';
-                    var acc = Math.round(pos.coords.accuracy);
-                    var accLabel = '';
-                    if (acc < 5) accLabel = '（高精度）';
-                    else if (acc < 50) accLabel = '（一般）';
-                    else accLabel = '（精度低）';
-                    document.getElementById('attendLocation').textContent = gcj[0].toFixed(5) + ',' + gcj[1].toFixed(5) + ' ±' + acc + 'm ' + accLabel;
-                    var locMsg = '✓ 位置已获取';
-                    document.getElementById('locationStatus').innerHTML = locMsg;
-                    document.getElementById('locationStatus').setAttribute('data-base', locMsg);
-                    document.getElementById('locationStatus').className = 'attend-location-status got';
-                    checkPolylineGeofence(gcj[0], gcj[1]).then(function(){ updateSubmitState(); }).catch(function(){ updateSubmitState(); });
-                    if (attendType === '请假' || attendType === '出差') {
-                        // Keep optional status
+            // Capacitor native geolocation
+            if (_isCapacitor && Capacitor.Plugins && Capacitor.Plugins.Geolocation) {
+                Capacitor.Plugins.Geolocation.getCurrentPosition({ enableHighAccuracy: highAccuracy, timeout: 15000 })
+                    .then(function(pos){ _onLocationSuccess(pos); })
+                    .catch(function(err){
+                        attendLocation = null; gpsState = 'fail';
+                        document.getElementById('attendLocation').innerHTML = (err.message || '获取失败') + ' <a href="javascript:void(0)" onclick="getLocation()" style="color:#00d4ff;font-size:0.82em">重试</a>';
+                        _getLocationByIP();
+                    });
+                return;
+            }
+            // HarmonyOS native bridge
+            if (_isHarmony && window.appBridge.getLocation) {
+                window.appBridge.getLocation(
+                    function(lat, lng, acc){ _onLocationSuccess({ coords: { latitude: lat, longitude: lng, accuracy: acc } }); },
+                    function(err){
+                        attendLocation = null; gpsState = 'fail';
+                        document.getElementById('attendLocation').innerHTML = (err || '获取失败') + ' <a href="javascript:void(0)" onclick="getLocation()" style="color:#00d4ff;font-size:0.82em">重试</a>';
+                        _getLocationByIP();
                     }
-                },
+                );
+                return;
+            }
+            // Browser geolocation
+            navigator.geolocation.getCurrentPosition(
+                _onLocationSuccess,
                 function(err){
                     if (highAccuracy && (err.code === 2 || err.code === 3) && !_gpsRetried) {
                         _gpsRetried = true;
@@ -1928,6 +1971,33 @@
         }
 
         function capturePhoto() {
+            // HarmonyOS: 调用原生相机拍照
+            if (_isHarmony && window.appBridge.takePhoto) {
+                window.appBridge.takePhoto(function(dataUrl) {
+                    if (!dataUrl) {
+                        document.getElementById('faceStatus').textContent = '⚠ 拍照取消或失败';
+                        document.getElementById('faceStatus').className = 'face-status unverified';
+                        return;
+                    }
+                    attendPhoto = dataUrl;
+                    document.getElementById('captureBtn').textContent = '✓';
+                    var c = document.getElementById('attendCanvas');
+                    var img = new Image();
+                    img.onload = function() {
+                        c.width = img.width;
+                        c.height = img.height;
+                        var ctx = c.getContext('2d');
+                        ctx.drawImage(img, 0, 0);
+                        detectFace(c);
+                    };
+                    img.onerror = function() {
+                        document.getElementById('faceStatus').textContent = '⚠ 照片处理失败';
+                        document.getElementById('faceStatus').className = 'face-status unverified';
+                    };
+                    img.src = dataUrl;
+                });
+                return;
+            }
             var v = document.getElementById('attendVideo');
             var c = document.getElementById('attendCanvas');
             if (!v || !v.videoWidth) {
@@ -2147,9 +2217,10 @@
                 _deviceFp = 'dev_' + Math.abs(fpHash).toString(36);
             }
 
-            // Check localStorage for quick re-verify
+            // Check localStorage for quick re-verify (1-week expiry)
             var stored = localStorage.getItem('_attendDeviceId');
-            if (stored === _deviceFp) {
+            var storedTime = localStorage.getItem('_attendDeviceId_time');
+            if (stored === _deviceFp && storedTime && (Date.now() - parseInt(storedTime) < 7 * 24 * 60 * 60 * 1000)) {
                 _fingerVerified = true;
                 _fingerVerifiedAt = Date.now();
                 s.textContent = '✓ 本机已验证（快速）';
@@ -2158,6 +2229,44 @@
                 b.className = 'attend-finger-btn verified';
                 updateSubmitState();
                 return;
+            }
+
+            // Capacitor native biometric
+            if (_isCapacitor && Capacitor.Plugins && Capacitor.Plugins.BiometricAuth) {
+                try {
+                    var avail = await Capacitor.Plugins.BiometricAuth.checkBiometry();
+                    if (avail && avail.isAvailable) {
+                        await Capacitor.Plugins.BiometricAuth.authenticate({ reason: '验证指纹以完成打卡' });
+                        _fingerVerified = true;
+                        _fingerVerifiedAt = Date.now();
+                        s.textContent = '✓ 本机已验证（生物识别）';
+                        s.className = 'attend-finger-status verified';
+                        b.textContent = '✓ 已验证';
+                        b.className = 'attend-finger-btn verified';
+                        localStorage.setItem('_attendDeviceId', _deviceFp);
+                        localStorage.setItem('_attendDeviceId_time', String(Date.now()));
+                        updateSubmitState();
+                        return;
+                    }
+                } catch(e) {}
+            }
+            // HarmonyOS native biometric
+            if (_isHarmony && window.appBridge.biometricAuth) {
+                try {
+                    var hResult = await window.appBridge.biometricAuth();
+                    if (hResult) {
+                        _fingerVerified = true;
+                        _fingerVerifiedAt = Date.now();
+                        s.textContent = '✓ 本机已验证（生物识别）';
+                        s.className = 'attend-finger-status verified';
+                        b.textContent = '✓ 已验证';
+                        b.className = 'attend-finger-btn verified';
+                        localStorage.setItem('_attendDeviceId', _deviceFp);
+                        localStorage.setItem('_attendDeviceId_time', String(Date.now()));
+                        updateSubmitState();
+                        return;
+                    }
+                } catch(e) {}
             }
 
             // Show custom confirm dialog
@@ -2178,6 +2287,7 @@
                 b.textContent = '✓ 已验证';
                 b.className = 'attend-finger-btn verified';
                 localStorage.setItem('_attendDeviceId', _deviceFp);
+                localStorage.setItem('_attendDeviceId_time', String(Date.now()));
             } else {
                 s.textContent = '验证已取消';
                 s.className = 'attend-finger-status unavailable';
@@ -2404,42 +2514,23 @@
             } catch(e) { console.error('fetchAttendance error:', e); }
         }
 
-                // 全屏切换
-        var _zoomScale = 1;
-        function zoomFrame(delta, reset) {
-            if (reset) _zoomScale = 1;
-            else _zoomScale = Math.max(0.3, Math.min(3, _zoomScale + delta));
-            var f = document.getElementById('externFrame');
-            f.style.transform = 'scale(' + _zoomScale + ')';
-            f.style.transformOrigin = 'center center';
-            document.getElementById('zoomPct').textContent = Math.round(_zoomScale * 100) + '%';
-        }
+        // 全屏切换
         function toggleFullscreen() {
             var wrap = document.querySelector('.stage-frame-wrap');
             if (!document.fullscreenElement && !document.webkitFullscreenElement) {
                 (wrap.requestFullscreen || wrap.webkitRequestFullscreen).call(wrap);
             } else {
                 (document.exitFullscreen || document.webkitExitFullscreen).call(document);
-                // Reset zoom on exit
-                _zoomScale = 1;
-                document.getElementById('externFrame').style.transform = '';
-                document.getElementById('zoomPct').textContent = '100%';
             }
         }
-        // Listen for fullscreen change to show/hide zoom bar
         document.addEventListener('fullscreenchange', function(){
-            var fs = !!document.fullscreenElement;
-            document.getElementById('zoomBar').style.display = fs ? 'flex' : 'none';
             var shim = document.getElementById('wheelShim');
-            if (shim) shim.style.pointerEvents = fs ? 'none' : 'auto';
+            if (shim) shim.style.pointerEvents = !!document.fullscreenElement ? 'none' : 'auto';
         });
         document.addEventListener('webkitfullscreenchange', function(){
-            var fs = !!document.webkitFullscreenElement;
-            document.getElementById('zoomBar').style.display = fs ? 'flex' : 'none';
             var shim = document.getElementById('wheelShim');
-            if (shim) shim.style.pointerEvents = fs ? 'none' : 'auto';
+            if (shim) shim.style.pointerEvents = !!document.webkitFullscreenElement ? 'none' : 'auto';
         });
-
         // 透明遮罩截获滚轮，阻止iframe缩放，改为页面滚动
         (function(){
             var wrap = document.querySelector('.stage-frame-wrap');
@@ -2551,7 +2642,8 @@
             if (!d || d.code !== 0 || !d.data) return false;
             const now = d.data.now;
             if (now) {
-                weatherText = cityName + ' ' + (now.dayText || now.nightText || '--');
+                var display = _weatherDisplayLoc || cityName;
+                weatherText = display + ' ' + (now.dayText || now.nightText || '--');
                 tempText = (now.temperature != null ? now.temperature + '℃' : '--℃');
             }
             const alarms = d.data.alarm || [];
@@ -2567,6 +2659,7 @@
         function fetchWeather() {
             var DEFAULT_CITY = '遵义';
             var _cityName = '', _stationId = '';
+            var _weatherDisplayLoc = '';
 
             function fetchBackup(city) {
                 fetch('https://uapis.cn/api/v1/misc/weather?city=' + encodeURIComponent(city) + '&lang=zh')
@@ -2574,7 +2667,8 @@
                     .then(function(d){
                         if (!d || d.error) { weatherText = city + ' 获取失败'; return; }
                         _cityName = d.city || city;
-                        weatherText = _cityName + ' ' + (d.weather || '--');
+                        var display = _weatherDisplayLoc || _cityName;
+                        weatherText = display + ' ' + (d.weather || '--');
                         tempText = (d.temperature != null ? d.temperature + '℃' : '--℃');
                     })
                     .catch(function(){ weatherText = city + ' 获取失败'; });
@@ -2643,13 +2737,26 @@
                 fetchCMA(DEFAULT_CITY);
             }
 
-            // GPS 优先定位
-            if (navigator.geolocation) {
-                var timer = setTimeout(function(){ fetchByIP(); }, 6000);
-                navigator.geolocation.getCurrentPosition(
-                    function(pos){
-                        clearTimeout(timer);
-                        var lat = pos.coords.latitude, lng = pos.coords.longitude;
+            // GPS 优先定位 — 先逆地理编码（高德），显示到镇街级，次为县区级
+            var _fetchWeatherByCoords = function(lat, lng) {
+                _weatherDisplayLoc = '';
+                fetch('/api/__dh__/regeo?location=' + lng + ',' + lat)
+                    .then(function(r){
+                        if (!r.ok) throw new Error();
+                        return r.json();
+                    })
+                    .then(function(d){
+                        if (d.status === '1' && d.regeocode) {
+                            var addr = d.regeocode.addressComponent;
+                            _weatherDisplayLoc = addr.township || addr.street || addr.district || '';
+                            var city = addr.city || DEFAULT_CITY;
+                            fetchCMA(city);
+                        } else {
+                            throw new Error();
+                        }
+                    })
+                    .catch(function(){
+                        // fallback: uapis 定位到城市
                         fetch('https://uapis.cn/api/v1/misc/weather?lat=' + lat + '&lon=' + lng + '&lang=zh')
                             .then(function(r){ return r.json(); })
                             .then(function(d){
@@ -2657,6 +2764,23 @@
                                 fetchCMA(city);
                             })
                             .catch(function(){ fetchByIP(); });
+                    });
+            };
+            if (_isCapacitor && Capacitor.Plugins && Capacitor.Plugins.Geolocation) {
+                Capacitor.Plugins.Geolocation.getCurrentPosition({ enableHighAccuracy: true, timeout: 6000 })
+                    .then(function(pos){ _fetchWeatherByCoords(pos.coords.latitude, pos.coords.longitude); })
+                    .catch(function(){ fetchByIP(); });
+            } else if (_isHarmony && window.appBridge.getLocation) {
+                window.appBridge.getLocation(
+                    function(lat, lng){ _fetchWeatherByCoords(lat, lng); },
+                    function(){ fetchByIP(); }
+                );
+            } else if (navigator.geolocation) {
+                var timer = setTimeout(function(){ fetchByIP(); }, 6000);
+                navigator.geolocation.getCurrentPosition(
+                    function(pos){
+                        clearTimeout(timer);
+                        _fetchWeatherByCoords(pos.coords.latitude, pos.coords.longitude);
                     },
                     function(){ clearTimeout(timer); fetchByIP(); },
                     { enableHighAccuracy: true, timeout: 6000, maximumAge: 300000 }

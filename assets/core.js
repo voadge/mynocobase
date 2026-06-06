@@ -135,24 +135,12 @@ async function fetchAnnouncements() {
 }
 
 // 全屏切换
-var _zoomScale = 1;
-function zoomFrame(delta, reset) {
-    if (reset) _zoomScale = 1;
-    else _zoomScale = Math.max(0.3, Math.min(3, _zoomScale + delta));
-    var f = document.getElementById('externFrame');
-    f.style.transform = 'scale(' + _zoomScale + ')';
-    f.style.transformOrigin = 'center center';
-    document.getElementById('zoomPct').textContent = Math.round(_zoomScale * 100) + '%';
-}
 function toggleFullscreen() {
     var wrap = document.querySelector('.stage-frame-wrap');
     if (!document.fullscreenElement && !document.webkitFullscreenElement) {
         (wrap.requestFullscreen || wrap.webkitRequestFullscreen).call(wrap);
     } else {
         (document.exitFullscreen || document.webkitExitFullscreen).call(document);
-        _zoomScale = 1;
-        document.getElementById('externFrame').style.transform = '';
-        document.getElementById('zoomPct').textContent = '100%';
     }
 }
 
@@ -179,16 +167,12 @@ function toggleFullscreen() {
         shim._timer = setTimeout(function(){ shim.style.pointerEvents = 'auto'; }, 300);
     });
     document.addEventListener('fullscreenchange', function(){
-        var fs = !!document.fullscreenElement;
-        document.getElementById('zoomBar').style.display = fs ? 'flex' : 'none';
         var s = document.getElementById('wheelShim');
-        if (s) s.style.pointerEvents = fs ? 'none' : 'auto';
+        if (s) s.style.pointerEvents = !!document.fullscreenElement ? 'none' : 'auto';
     });
     document.addEventListener('webkitfullscreenchange', function(){
-        var fs = !!document.webkitFullscreenElement;
-        document.getElementById('zoomBar').style.display = fs ? 'flex' : 'none';
         var s = document.getElementById('wheelShim');
-        if (s) s.style.pointerEvents = fs ? 'none' : 'auto';
+        if (s) s.style.pointerEvents = !!document.webkitFullscreenElement ? 'none' : 'auto';
     });
 })();
 
@@ -260,6 +244,7 @@ let _cityName = '';
 let _stationId = '';
 let _provinceCode = '';
 let _weatherSource = '';
+let _weatherDisplayLoc = '';
 
 function _loadCachedCity() {
     try {
@@ -284,7 +269,8 @@ function fetchWeatherData() {
             if (!d || d.error) { weatherText = city + ' 获取失败'; return; }
             _cityName = d.city || city;
             _weatherSource = 'uapis';
-            weatherText = _cityName + ' ' + (d.weather || '--');
+            const display = _weatherDisplayLoc || _cityName;
+            weatherText = display + ' ' + (d.weather || '--');
             tempText = (d.temperature != null ? d.temperature + '℃' : '--℃');
             _saveCity(_cityName, '', '', 'uapis');
         }).catch(() => {
@@ -317,7 +303,8 @@ function fetchWeatherData() {
                 const now = d.data.now;
                 if (now) {
                     _weatherSource = 'cma';
-                    weatherText = _cityName + ' ' + (now.dayText || now.nightText || '--');
+                    const display = _weatherDisplayLoc || _cityName;
+                    weatherText = display + ' ' + (now.dayText || now.nightText || '--');
                     tempText = (now.temperature != null ? now.temperature + '℃' : '--℃');
                 }
                 // 处理预警
@@ -356,7 +343,8 @@ function fetchWeatherData() {
                 const now = d.data.now;
                 if (now) {
                     _weatherSource = 'cma';
-                    weatherText = _cityName + ' ' + (now.dayText || now.nightText || '--');
+                    const display = _weatherDisplayLoc || _cityName;
+                    weatherText = display + ' ' + (now.dayText || now.nightText || '--');
                     tempText = (now.temperature != null ? now.temperature + '℃' : '--℃');
                 }
                 const alarms = d.data.alarm || [];
@@ -379,13 +367,26 @@ function fetchWeatherData() {
         return;
     }
 
-    if (navigator.geolocation) {
-        const timer = setTimeout(() => { fetchCMA(DEFAULT_CITY); }, 5000);
-        navigator.geolocation.getCurrentPosition(
-            (pos) => {
-                clearTimeout(timer);
-                const { latitude: lat, longitude: lng } = pos.coords;
-                // 先用经纬度反查城市名（uapis.cn支持经纬度查询）
+    const _fetchCityByCoords = (lat, lng) => {
+        _weatherDisplayLoc = '';
+        // 高德逆地理编码定位 — 先精确到镇街级，次为县区级
+        fetch(`/api/__dh__/regeo?location=${lng},${lat}`)
+            .then(r => {
+                if (!r.ok) throw new Error('regeo http ' + r.status);
+                return r.json();
+            })
+            .then(d => {
+                if (d.status === '1' && d.regeocode) {
+                    const addr = d.regeocode.addressComponent;
+                    _weatherDisplayLoc = addr.township || addr.street || addr.district || '';
+                    const city = addr.city || DEFAULT_CITY;
+                    fetchCMA(city);
+                } else {
+                    throw new Error('regeo failed');
+                }
+            })
+            .catch(() => {
+                // fallback: uapis 定位到城市
                 fetch(`https://uapis.cn/api/v1/misc/weather?lat=${lat}&lon=${lng}&lang=zh`)
                     .then(r => r.json())
                     .then(d => {
@@ -393,6 +394,25 @@ function fetchWeatherData() {
                         fetchCMA(city);
                     })
                     .catch(() => { fetchCMA(DEFAULT_CITY); });
+            });
+    };
+    const _isCapacitor = typeof Capacitor !== 'undefined' && Capacitor.isNative;
+    const _isHarmony = typeof window.appBridge !== 'undefined';
+    if (_isCapacitor && Capacitor.Plugins && Capacitor.Plugins.Geolocation) {
+        Capacitor.Plugins.Geolocation.getCurrentPosition({ enableHighAccuracy: true, timeout: 5000 })
+            .then(pos => _fetchCityByCoords(pos.coords.latitude, pos.coords.longitude))
+            .catch(() => { fetchCMA(DEFAULT_CITY); });
+    } else if (_isHarmony && window.appBridge.getLocation) {
+        window.appBridge.getLocation(
+            (lat, lng) => _fetchCityByCoords(lat, lng),
+            () => { fetchCMA(DEFAULT_CITY); }
+        );
+    } else if (navigator.geolocation) {
+        const timer = setTimeout(() => { fetchCMA(DEFAULT_CITY); }, 5000);
+        navigator.geolocation.getCurrentPosition(
+            (pos) => {
+                clearTimeout(timer);
+                _fetchCityByCoords(pos.coords.latitude, pos.coords.longitude);
             },
             () => { clearTimeout(timer); fetchCMA(DEFAULT_CITY); },
             { enableHighAccuracy: true, timeout: 5000, maximumAge: 300000 }

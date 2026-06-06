@@ -284,6 +284,9 @@
 </div>
 
 <script>
+// ========== Capacitor / App 检测 ==========
+var _isCapacitor = typeof Capacitor !== 'undefined' && Capacitor.isNative;
+var _isHarmony = typeof window.appBridge !== 'undefined';
 // ========== 常量 & 状态 ==========
 var token = localStorage.getItem("NOCOBASE_TOKEN") || localStorage.getItem("nocobase_token");
 var headers = { 'Content-Type': 'application/json' };
@@ -689,18 +692,34 @@ function checkWorkWindow(uid, callback) {
     }).catch(function(){ callback(false); });
 }
 
+function _reportLocation(lat, lng, acc) {
+    apiPost('/api/location_history:create', {
+        latitude: lat,
+        longitude: lng,
+        accuracy: acc,
+        recorded_at: new Date().toISOString()
+    }).catch(function(err){ console.warn('collectAndReport location_history write failed:', err); });
+}
 function collectAndReport(uid) {
+    // Capacitor native geolocation
+    if (_isCapacitor && Capacitor.Plugins && Capacitor.Plugins.Geolocation) {
+        Capacitor.Plugins.Geolocation.getCurrentPosition({ enableHighAccuracy: true, timeout: 10000 })
+            .then(function(pos){ _reportLocation(pos.coords.latitude, pos.coords.longitude, Math.round(pos.coords.accuracy) || null); })
+            .catch(function(){});
+        return;
+    }
+    // HarmonyOS native bridge
+    if (_isHarmony && window.appBridge.getLocation) {
+        window.appBridge.getLocation(
+            function(lat, lng){ _reportLocation(lat, lng, null); },
+            function(){}
+        );
+        return;
+    }
+    // Browser geolocation
     if (!navigator.geolocation) return;
     navigator.geolocation.getCurrentPosition(function(pos){
-        var lat = pos.coords.latitude;
-        var lng = pos.coords.longitude;
-        var acc = Math.round(pos.coords.accuracy) || null;
-        apiPost('/api/location_history:create', {
-            latitude: lat,
-            longitude: lng,
-            accuracy: acc,
-            recorded_at: new Date().toISOString()
-        }).catch(function(err){ console.warn('collectAndReport location_history write failed:', err); });
+        _reportLocation(pos.coords.latitude, pos.coords.longitude, Math.round(pos.coords.accuracy) || null);
     }, function(){}, { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 });
 }
 
@@ -742,6 +761,22 @@ function _placeMarker(lat, lng, label) {
     map.setView([lat, lng], 16);
 }
 async function locateMe() {
+    // Capacitor native geolocation
+    if (_isCapacitor && Capacitor.Plugins && Capacitor.Plugins.Geolocation) {
+        try {
+            var capPos = await Capacitor.Plugins.Geolocation.getCurrentPosition({ enableHighAccuracy: true, timeout: 10000 });
+            _placeMarker(capPos.coords.latitude, capPos.coords.longitude, '当前位置（GPS）');
+            return;
+        } catch(e) {}
+    }
+    // HarmonyOS native bridge
+    if (_isHarmony && window.appBridge.getLocation) {
+        window.appBridge.getLocation(
+            function(lat, lng){ _placeMarker(lat, lng, '当前位置（GPS）'); },
+            function(){}
+        );
+        return;
+    }
     try {
         var r = await fetch('/api/__pd__/locate', { headers: headers });
         if (r.ok) {
