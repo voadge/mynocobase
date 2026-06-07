@@ -138,6 +138,7 @@
         .cycle-item .label-weather { color: #00ff88; }
         .cycle-item .label-temp   { color: #ff6b6b; }
         .cycle-item .label-warn   { color: #ff6b6b; }
+        .cycle-item .label-location { color: #4fc3f7; font-size: 0.85em; }
 
         .clock-panel.warning-active {
             border-color: rgba(255, 107, 107, 0.6) !important;
@@ -888,6 +889,7 @@
                         <span class="cycle-item" id="weekdayDisplay"><span class="label-week"></span></span>
                         <span class="cycle-item" id="weatherDisplay"><span class="label-weather"></span></span>
                         <span class="cycle-item" id="tempDisplay"><span class="label-temp"></span></span>
+                        <span class="cycle-item" id="locationDisplay"><span class="label-location"></span></span>
                         <span class="cycle-item" id="warnDisplay"><span class="label-warn"></span></span>
                     </div>
                     <div class="warn-marquee" id="warnMarquee"></div>
@@ -2596,9 +2598,9 @@
         }
 
         let cycleIndex=0;
-        let cycleIds=['dateDisplay','lunarDisplay','termDisplay','weekdayDisplay','weatherDisplay','tempDisplay','warnDisplay'];
+        let cycleIds=['dateDisplay','lunarDisplay','termDisplay','weekdayDisplay','weatherDisplay','tempDisplay','locationDisplay','warnDisplay'];
         function rebuildCycleIds() {
-            var all=['dateDisplay','lunarDisplay','termDisplay','weekdayDisplay','weatherDisplay','tempDisplay','warnDisplay'];
+            var all=['dateDisplay','lunarDisplay','termDisplay','weekdayDisplay','weatherDisplay','tempDisplay','locationDisplay','warnDisplay'];
             cycleIds=all.filter(function(id){ return document.getElementById(id).style.display !== 'none'; });
             if (cycleIndex>=cycleIds.length) cycleIndex=0;
         }
@@ -2609,7 +2611,7 @@
             cycleIndex=(cycleIndex+1)%cycleIds.length;
         }
 
-        let weatherText='获取中…', tempText='--℃', warnText='';
+        let weatherText='获取中…', tempText='--℃', warnText='', locationText='定位中…';
         function fetchNbVersion() {
             fetch('/dashboard/nb-version.json')
                 .then(function(r){ return r.json(); })
@@ -2638,134 +2640,88 @@
             document.querySelector('#warnMarquee').classList.add('active');
         }
 
-        function processWeatherData(d, cityName) {
-            if (!d || d.code !== 0 || !d.data) return false;
-            const now = d.data.now;
-            if (now) {
-                var display = _weatherDisplayLoc || cityName;
-                weatherText = display + ' ' + (now.dayText || now.nightText || '--');
-                tempText = (now.temperature != null ? now.temperature + '℃' : '--℃');
-            }
-            const alarms = d.data.alarm || [];
-            if (alarms.length > 0) {
-                const hit = alarms.find(function(a){ return (a.title || '').indexOf(cityName) > -1; }) || alarms[0];
-                setWarning(hit, cityName);
-            } else {
-                setWarning(null);
-            }
-            return true;
-        }
+        // GPS 缓存：首次定位后不再重复获取，每 1 小时重定位一次
+        var _cachedLat = null, _cachedLng = null, _cachedCity = '';
+        var _lastGpsTime = 0;
+        var GPS_CACHE_MS = 3600000;
 
         function fetchWeather() {
             var DEFAULT_CITY = '遵义';
-            var _cityName = '', _stationId = '';
-            var _weatherDisplayLoc = '';
 
-            function fetchBackup(city) {
-                fetch('https://uapis.cn/api/v1/misc/weather?city=' + encodeURIComponent(city) + '&lang=zh')
-                    .then(function(r){ return r.json(); })
-                    .then(function(d){
-                        if (!d || d.error) { weatherText = city + ' 获取失败'; return; }
-                        _cityName = d.city || city;
-                        var display = _weatherDisplayLoc || _cityName;
-                        weatherText = display + ' ' + (d.weather || '--');
-                        tempText = (d.temperature != null ? d.temperature + '℃' : '--℃');
-                    })
-                    .catch(function(){ weatherText = city + ' 获取失败'; });
-            }
-
-            function fetchCMA(city) {
-                var targetCity = city;
-                fetch('https://weather.cma.cn/api/autocomplete?q=' + encodeURIComponent(city) + '&limit=5')
+            function fetchQwWeather(city, lat, lng) {
+                setWarning(null);
+                var url = lat && lng
+                    ? '/api/__pd__/weather-qw?lat=' + lat + '&lng=' + lng
+                    : '/api/__pd__/weather-qw?city=' + encodeURIComponent(city);
+                fetch(url)
                     .then(function(r){ if (!r.ok) throw new Error(); return r.json(); })
                     .then(function(d){
-                        var list = d.data || [];
-                        var match = list.find(function(item){ return item.indexOf('|' + targetCity + '|') > -1; }) || list[0];
-                        if (!match) { fetchBackup(targetCity); return null; }
-                        var parts = match.split('|');
-                        _stationId = parts[0];
-                        _cityName = parts[1] || targetCity;
-                        return fetch('https://weather.cma.cn/api/weather/view?stationid=' + _stationId);
-                    })
-                    .then(function(r){
-                        if (!r || !r.ok) throw new Error();
-                        return r.json();
-                    })
-                    .then(function(d){
-                        if (!processWeatherData(d, _cityName || targetCity)) {
-                            fetchBackup(targetCity);
-                            return;
+                        if (d.code !== 0 || !d.data) { weatherText = '获取失败'; return; }
+                        if (!locationText || locationText === '定位中…') {
+                            locationText = _weatherDisplayLoc || d.data.city || city || '';
                         }
-                        try {
-                            localStorage.setItem('_wxCity', JSON.stringify({ name: _cityName, stationId: _stationId, t: Date.now() }));
-                        } catch(e){}
+                        weatherText = d.data.weather || '--';
+                        tempText = d.data.temperature ? d.data.temperature + '℃' : '--℃';
                     })
-                    .catch(function(){ fetchBackup(targetCity); });
+                    .catch(function(){ weatherText = '获取失败'; });
             }
 
-            function fetchByIP() {
-                fetch('https://ip-api.com/json/?lang=zh-CN')
-                    .then(function(r){ return r.json(); })
-                    .then(function(d){
-                        if (d && d.status === 'success' && d.city) {
-                            fetchCMA(d.city);
-                        } else {
-                            fallbackToCache();
-                        }
-                    })
-                    .catch(function(){ fallbackToCache(); });
+            // 有缓存且未过期 → 跳过 GPS，只用缓存坐标查天气
+            if (_cachedLat && _cachedLng && Date.now() - _lastGpsTime < GPS_CACHE_MS) {
+                fetchQwWeather(_cachedCity || DEFAULT_CITY, _cachedLat, _cachedLng);
+                return;
             }
 
-            function fallbackToCache() {
-                try {
-                    var raw = localStorage.getItem('_wxCity');
-                    if (raw) {
-                        var c = JSON.parse(raw);
-                        if (Date.now() - c.t < 60 * 60 * 1000 && c.stationId) {
-                            _cityName = c.name;
-                            _stationId = c.stationId;
-                            fetch('https://weather.cma.cn/api/weather/view?stationid=' + c.stationId)
-                                .then(function(r){ if (!r.ok) throw new Error(); return r.json(); })
-                                .then(function(d){
-                                    if (!processWeatherData(d, _cityName)) { fetchBackup(_cityName); }
-                                })
-                                .catch(function(){ fetchBackup(_cityName); });
-                            return;
-                        }
-                    }
-                } catch(e){}
-                fetchCMA(DEFAULT_CITY);
-            }
+            // 无缓存或过期 → 全量定位
+            var _weatherDisplayLoc = '';
 
-            // GPS 优先定位 — 先逆地理编码（高德），显示到镇街级，次为县区级
             var _fetchWeatherByCoords = function(lat, lng) {
                 _weatherDisplayLoc = '';
-                fetch('/api/__dh__/regeo?location=' + lng + ',' + lat)
-                    .then(function(r){
-                        if (!r.ok) throw new Error();
-                        return r.json();
-                    })
+                locationText = '定位中…';
+                var tryAmap = function() {
+                    fetch('/peopledynamic/reverse-geocode?lat=' + lat + '&lng=' + lng)
+                        .then(function(r){ if (!r.ok) throw new Error(); return r.json(); })
+                        .then(function(d){
+                            if (d.status === '1' && d.address) {
+                                var addr = d.address;
+                                var dist = addr.district || '';
+                                _weatherDisplayLoc = dist;
+                                locationText = dist;
+                                _cachedLat = lat; _cachedLng = lng; _cachedCity = addr.city || DEFAULT_CITY; _lastGpsTime = Date.now();
+                                fetchQwWeather(_cachedCity, lat, lng);
+                            } else { throw new Error(); }
+                        })
+                        .catch(function(){ fetchByIP(); });
+                };
+                fetch('/api/__pd__/reverse-geocode-qw?lat=' + lat + '&lng=' + lng)
+                    .then(function(r){ if (!r.ok) throw new Error(); return r.json(); })
                     .then(function(d){
-                        if (d.status === '1' && d.regeocode) {
-                            var addr = d.regeocode.addressComponent;
-                            _weatherDisplayLoc = addr.township || addr.street || addr.district || '';
-                            var city = addr.city || DEFAULT_CITY;
-                            fetchCMA(city);
-                        } else {
-                            throw new Error();
-                        }
+                        if (d.status === '1' && d.address && d.address.name) {
+                            var addr = d.address;
+                            var name = addr.name || '';
+                            var district = addr.district || '';
+                            _weatherDisplayLoc = name;
+                            locationText = name + (district && name !== district ? ' · ' + district : '');
+                            _cachedLat = lat; _cachedLng = lng; _cachedCity = addr.city || DEFAULT_CITY; _lastGpsTime = Date.now();
+                            fetchQwWeather(_cachedCity, lat, lng);
+                        } else { throw new Error(); }
                     })
-                    .catch(function(){
-                        // fallback: uapis 定位到城市
-                        fetch('https://uapis.cn/api/v1/misc/weather?lat=' + lat + '&lon=' + lng + '&lang=zh')
-                            .then(function(r){ return r.json(); })
-                            .then(function(d){
-                                var city = (d && !d.error && d.city) ? d.city : DEFAULT_CITY;
-                                fetchCMA(city);
-                            })
-                            .catch(function(){ fetchByIP(); });
-                    });
+                    .catch(function(){ tryAmap(); });
             };
+
+            function fetchByIP() {
+                fetch('/peopledynamic/locate')
+                    .then(function(r){ return r.json(); })
+                    .then(function(d){
+                        var raw = d && d.city;
+                        var city = (Array.isArray(raw) ? raw[0] : raw) || DEFAULT_CITY;
+                        locationText = city;
+                        _cachedCity = city; _lastGpsTime = Date.now();
+                        fetchQwWeather(city);
+                    })
+                    .catch(function(){ fetchQwWeather(DEFAULT_CITY); });
+            }
+
             if (_isCapacitor && Capacitor.Plugins && Capacitor.Plugins.Geolocation) {
                 Capacitor.Plugins.Geolocation.getCurrentPosition({ enableHighAccuracy: true, timeout: 6000 })
                     .then(function(pos){ _fetchWeatherByCoords(pos.coords.latitude, pos.coords.longitude); })
@@ -2778,10 +2734,7 @@
             } else if (navigator.geolocation) {
                 var timer = setTimeout(function(){ fetchByIP(); }, 6000);
                 navigator.geolocation.getCurrentPosition(
-                    function(pos){
-                        clearTimeout(timer);
-                        _fetchWeatherByCoords(pos.coords.latitude, pos.coords.longitude);
-                    },
+                    function(pos){ clearTimeout(timer); _fetchWeatherByCoords(pos.coords.latitude, pos.coords.longitude); },
                     function(){ clearTimeout(timer); fetchByIP(); },
                     { enableHighAccuracy: true, timeout: 6000, maximumAge: 300000 }
                 );
@@ -2812,6 +2765,7 @@
             document.querySelector('#weekdayDisplay .label-week').textContent=weekdays[n.getDay()];
             document.querySelector('#weatherDisplay .label-weather').textContent=weatherText;
             document.querySelector('#tempDisplay .label-temp').textContent=tempText;
+            document.querySelector('#locationDisplay .label-location').textContent=locationText;
         }
 
         function updateUptime() {

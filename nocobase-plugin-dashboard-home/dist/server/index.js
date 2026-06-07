@@ -3,8 +3,32 @@
 const { Plugin } = require('@nocobase/server');
 const http = require('http');
 const https = require('https');
+const zlib = require('zlib');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
+
+const AMAP_KEY = '31e73c1d12b2848e7bd964774782a954';
+
+// QWeather JWT config
+const QW_KEY_ID = 'KAGXVT4Y78';
+const QW_PROJECT_ID = '3MTGWKPJXJ';
+const QW_WEATHER_HOST = 'ke7p448t6h.re.qweatherapi.com';
+const QW_GEO_HOST = 'ke7p448t6h.re.qweatherapi.com';
+const QW_PRIVATE_KEY = `-----BEGIN PRIVATE KEY-----
+MC4CAQAwBQYDK2VwBCIEIHwCpGLzy/EZjEdh4WJlKI081vmFXEUhCMFkGqs2dEj6
+-----END PRIVATE KEY-----`;
+
+function qwJwt() {
+  var h = Buffer.from(JSON.stringify({ alg: 'EdDSA', kid: QW_KEY_ID })).toString('base64url');
+  var iat = Math.floor(Date.now() / 1000) - 30;
+  var exp = iat + 900;
+  var p = Buffer.from(JSON.stringify({ sub: QW_PROJECT_ID, iat: iat, exp: exp })).toString('base64url');
+  var d = h + '.' + p;
+  var k = crypto.createPrivateKey(QW_PRIVATE_KEY);
+  var s = crypto.sign(null, Buffer.from(d), k).toString('base64url');
+  return d + '.' + s;
+}
 
 const PAGE_MAP = {
   '/api/__dh__': 'index.html',
@@ -28,15 +52,10 @@ module.exports = class DashboardHomePlugin extends Plugin {
       ctx.body = ctx.status === 200 ? 'ok' : 'Unauthorized';
     });
 
-    // Geocode + IP locate + reverse geocode proxy (via Amap, server-side to respect IP whitelist)
+    // Geocode + IP locate proxy (via Amap, server-side to respect IP whitelist)
     this.app.use(async (ctx, next) => {
-      if (ctx.method !== 'GET' || !(ctx.path.endsWith('/geocode') || ctx.path.endsWith('/locate') || ctx.path.endsWith('/regeo'))) {
+      if (ctx.method !== 'GET' || !(ctx.path.endsWith('/geocode') || ctx.path.endsWith('/locate'))) {
         return await next();
-      }
-      if (!await this.isAuthenticated(ctx)) {
-        ctx.status = 401;
-        ctx.body = 'Unauthorized';
-        return;
       }
       ctx.withoutDataWrapping = true;
       ctx.type = 'application/json; charset=utf-8';
@@ -59,25 +78,6 @@ module.exports = class DashboardHomePlugin extends Plugin {
         } catch(e) {
           ctx.status = 502;
           ctx.body = { status: '0', tips: [], error: e.message };
-        }
-      } else if (ctx.path.endsWith('/regeo')) {
-        var location = ctx.query.location;
-        if (!location) { ctx.body = { status: '0', regeocode: null }; return; }
-        try {
-          var url = 'https://restapi.amap.com/v3/geocode/regeo?key=' + amapKey + '&location=' + encodeURIComponent(location) + '&output=json&radius=1000&extensions=base';
-          var data = await new Promise(function(resolve, reject) {
-            https.get(url, function(res) {
-              var body = '';
-              res.on('data', function(c) { body += c; });
-              res.on('end', function() {
-                try { resolve(JSON.parse(body)); } catch(e) { reject(e); }
-              });
-            }).on('error', reject);
-          });
-          ctx.body = data;
-        } catch(e) {
-          ctx.status = 502;
-          ctx.body = { status: '0', regeocode: null, error: e.message };
         }
       } else {
         try {
@@ -200,6 +200,291 @@ module.exports = class DashboardHomePlugin extends Plugin {
       } catch (e) {
         ctx.status = 500;
         ctx.body = { data: null, error: e.message };
+      }
+    }, { tag: 'dashboard-home', before: 'dataSource' });
+
+    // Dashboard snapshot - aggregated data for people dynamic page
+    this.app.use(async (ctx, next) => {
+      if (ctx.method !== 'GET' || ctx.path !== '/api/__pd__/dashboard-snapshot') {
+        return await next();
+      }
+      if (!await this.isAuthenticated(ctx)) {
+        ctx.status = 401;
+        ctx.body = 'Unauthorized';
+        return;
+      }
+      ctx.withoutDataWrapping = true;
+      ctx.type = 'application/json; charset=utf-8';
+      try {
+        const today = new Date().toISOString().substring(0, 10);
+        const db = this.db;
+        const [workers, fences, records, latestLocs] = await Promise.all([
+          db.getRepository('users').find({
+            filter: { roles: { name: { $in: ['workers', 'worker'] } } },
+            appends: ['departments', 'roles'],
+            sort: 'nickname'
+          }),
+          db.getRepository('geofences').find({
+            filter: { is_active: true },
+            sort: 'sort'
+          }),
+          db.getRepository('attendance_records').find({
+            filter: { createdAt: { $dateBetween: [today, today] } },
+            sort: '-check_time',
+            pageSize: 500,
+            appends: ['createdBy']
+          }),
+          db.getRepository('location_history').find({
+            filter: { recorded_at: { $dateBetween: [today, today] } },
+            sort: '-recorded_at',
+            pageSize: 500
+          })
+        ]);
+        const onlineMap = {};
+        const latestMap = {};
+        const checkedInSet = new Set();
+        for (const r of records) {
+          const uid = r.createdBy && r.createdBy.id || r.createdById;
+          if (!uid) continue;
+          if (!onlineMap[uid]) onlineMap[uid] = { checkIn: null, checkOut: null };
+          if (['上班', '签到'].includes(r.check_type)) {
+            if (!onlineMap[uid].checkIn || r.check_time > onlineMap[uid].checkIn) {
+              onlineMap[uid].checkIn = r.check_time;
+              checkedInSet.add(uid);
+            }
+          }
+          if (['下班', '签退'].includes(r.check_type)) {
+            if (!onlineMap[uid].checkOut || r.check_time > onlineMap[uid].checkOut) {
+              onlineMap[uid].checkOut = r.check_time;
+            }
+          }
+        }
+        const onlineStatus = {};
+        for (const uid in onlineMap) {
+          const u = onlineMap[uid];
+          onlineStatus[uid] = !!(u.checkIn && (!u.checkOut || u.checkOut < u.checkIn));
+        }
+        for (const r of latestLocs) {
+          const uid = r.createdById;
+          if (!uid || latestMap[uid]) continue;
+          latestMap[uid] = {
+            lat: parseFloat(r.latitude), lng: parseFloat(r.longitude),
+            accuracy: r.accuracy, source: r.source, trigger: r.trigger,
+            township: r.township, street: r.street, district: r.district,
+            recorded_at: r.recorded_at || r.createdAt
+          };
+        }
+        const deptStats = {};
+        for (const u of workers) {
+          const deptName = u.departments && u.departments[0] && u.departments[0].title || '未分组';
+          if (!deptStats[deptName]) deptStats[deptName] = { total: 0, online: 0, checkedIn: 0 };
+          deptStats[deptName].total++;
+          if (onlineStatus[u.id]) deptStats[deptName].online++;
+          if (checkedInSet.has(u.id)) deptStats[deptName].checkedIn++;
+        }
+        ctx.body = {
+          workers, fences, records,
+          latestLocations: latestMap,
+          online: onlineStatus,
+          stats: {
+            totalCheckedIn: checkedInSet.size,
+            onlineCount: Object.values(onlineStatus).filter(Boolean).length,
+            deptStats
+          },
+          serverTime: new Date().toISOString(),
+          pollInterval: { snapshot: 10000, fence: 30000 }
+        };
+      } catch (e) {
+        ctx.status = 500;
+        ctx.body = { error: e.message };
+      }
+    }, { tag: 'dashboard-home', before: 'dataSource' });
+
+    // Search API - AMAP inputtips proxy (no auth check, page-level auth already done by nginx)
+    this.app.use(async (ctx, next) => {
+      if (ctx.method !== 'GET' || ctx.path !== '/api/__pd__/search') {
+        return await next();
+      }
+      ctx.withoutDataWrapping = true;
+      ctx.type = 'application/json; charset=utf-8';
+      var amapKey = '31e73c1d12b2848e7bd964774782a954';
+      var q = ctx.query.q;
+      if (!q) { ctx.body = { status: '0', tips: [] }; return; }
+      try {
+        var data = await new Promise(function(resolve, reject) {
+          https.get('https://restapi.amap.com/v3/assistant/inputtips?key=' + amapKey + '&keywords=' + encodeURIComponent(q) + '&output=json&offset=20', function(res) {
+            var body = '';
+            res.on('data', function(c) { body += c; });
+            res.on('end', function() {
+              try { resolve(JSON.parse(body)); } catch(e) { reject(e); }
+            });
+          }).on('error', reject);
+        });
+        ctx.body = data;
+      } catch(e) {
+        ctx.status = 502;
+        ctx.body = { status: '0', tips: [], error: e.message };
+      }
+    }, { tag: 'dashboard-home', before: 'dataSource' });
+
+    // Reverse geocode - convert lat/lng to address via AMAP regeo
+    this.app.use(async (ctx, next) => {
+      if (ctx.method !== 'GET' || ctx.path !== '/api/__pd__/reverse-geocode') {
+        return await next();
+      }
+      ctx.withoutDataWrapping = true;
+      ctx.type = 'application/json; charset=utf-8';
+      var lat = ctx.query.lat;
+      var lng = ctx.query.lng;
+      if (!lat || !lng) { ctx.body = { status: '0', address: null }; return; }
+      try {
+        var data = await new Promise(function(resolve, reject) {
+          https.get('https://restapi.amap.com/v3/geocode/regeo?key=' + AMAP_KEY + '&location=' + encodeURIComponent(lng + ',' + lat) + '&output=json&radius=1000', function(res) {
+            var body = '';
+            res.on('data', function(c) { body += c; });
+            res.on('end', function() {
+              try { resolve(JSON.parse(body)); } catch(e) { reject(e); }
+            });
+          }).on('error', reject);
+        });
+        if (data.status === '1' && data.regeocode) {
+          var ac = data.regeocode.addressComponent || {};
+          var street = ac.streetNumber && ac.streetNumber.street || ac.street || '';
+          var township = ac.township || '';
+          var district = ac.district || '';
+          var city = ac.city || '';
+          var province = ac.province || '';
+          ctx.body = {
+            status: '1',
+            adcode: ac.adcode || '',
+            address: {
+              province: province,
+              city: city,
+              district: district,
+              township: township,
+              street: street,
+              formatted: data.regeocode.formatted_address || ''
+            }
+          };
+        } else {
+          ctx.body = { status: '0', address: null, amap: data };
+        }
+      } catch(e) {
+        ctx.status = 502;
+        ctx.body = { status: '0', address: null, error: e.message };
+      }
+    }, { tag: 'dashboard-home', before: 'dataSource' });
+
+    // QWeather proxy - JWT auth, primary weather source
+    function qwFetch(url) {
+      return new Promise(function(resolve, reject) {
+        var jwt = qwJwt();
+        var opts = new URL(url);
+        https.get({
+          hostname: opts.hostname, path: opts.pathname + opts.search,
+          headers: { 'Authorization': 'Bearer ' + jwt, 'User-Agent': 'Mozilla/5.0' }
+        }, function(res) {
+            var chunks = [];
+            res.on('data', function(c) { chunks.push(c); });
+            res.on('end', function() {
+                var buf = Buffer.concat(chunks);
+                try {
+                    if (res.headers['content-encoding'] === 'gzip') {
+                        buf = zlib.gunzipSync(buf);
+                    }
+                    resolve(JSON.parse(buf.toString()));
+                } catch(e) { reject(e); }
+            });
+        }).on('error', reject);
+      });
+    }
+    this.app.use(async (ctx, next) => {
+      if (ctx.method !== 'GET' || ctx.path !== '/api/__pd__/weather-qw') {
+        return await next();
+      }
+      ctx.withoutDataWrapping = true;
+      ctx.type = 'application/json; charset=utf-8';
+      var lat = ctx.query.lat;
+      var lng = ctx.query.lng;
+      var city = ctx.query.city || '';
+      city = city.replace(/市$/, '').replace(/地区$/, '');
+      try {
+        // If lat/lng provided, use directly (QWeather supports lon,lat format)
+        // If only city name, look up via GeoAPI first
+        var loc = '';
+        var locCity = '';
+        if (lat && lng) {
+          loc = lng + ',' + lat;
+          // Try GeoAPI to get city name from coords
+          try {
+            var geo = await qwFetch('https://' + QW_GEO_HOST + '/geo/v2/city/lookup?location=' + encodeURIComponent(loc) + '&range=cn');
+            if (geo && geo.code === '200' && geo.location && geo.location[0]) {
+              locCity = geo.location[0].name || '';
+              if (!locCity) locCity = geo.location[0].adm1 || '';
+            }
+          } catch(e) {}
+        } else if (city) {
+          try {
+            var geo = await qwFetch('https://' + QW_GEO_HOST + '/geo/v2/city/lookup?location=' + encodeURIComponent(city) + '&range=cn');
+            if (geo && geo.code === '200' && geo.location && geo.location[0]) {
+              loc = geo.location[0].id || city;
+              locCity = geo.location[0].name || city;
+            } else {
+              loc = city;
+              locCity = city;
+            }
+          } catch(e) { loc = city; locCity = city; }
+        }
+        if (!loc && !city) { ctx.body = { code: -1, msg: '缺少参数' }; return; }
+        var w = await qwFetch('https://' + QW_WEATHER_HOST + '/v7/weather/now?location=' + encodeURIComponent(loc || city));
+        if (w && w.code === '200') {
+          var n = w.now || {};
+          ctx.body = { code: 0, data: {
+            city: locCity || '',
+            weather: n.text || n.weather || '',
+            temperature: n.temp || n.temperature || '',
+            windDirection: n.windDir || '',
+            windPower: n.windScale || '',
+            humidity: n.humidity || '',
+            icon: n.icon || '',
+            time: w.updateTime || ''
+          }};
+        } else {
+          ctx.body = { code: -1, msg: 'QWeather: ' + (w && w.code || 'unknown error') };
+        }
+      } catch(e) {
+        ctx.body = { code: -1, msg: e.message };
+      }
+    }, { tag: 'dashboard-home', before: 'dataSource' });
+
+    // QWeather reverse geocode - lat/lng to location name (GeoAPI)
+    this.app.use(async (ctx, next) => {
+      if (ctx.method !== 'GET' || ctx.path !== '/api/__pd__/reverse-geocode-qw') {
+        return await next();
+      }
+      ctx.withoutDataWrapping = true;
+      ctx.type = 'application/json; charset=utf-8';
+      var lat = ctx.query.lat;
+      var lng = ctx.query.lng;
+      if (!lat || !lng) { ctx.body = { status: '0', address: null }; return; }
+      try {
+        var geo = await qwFetch('https://' + QW_GEO_HOST + '/geo/v2/city/lookup?location=' + encodeURIComponent(lng + ',' + lat) + '&range=cn');
+        if (geo && geo.code === '200' && geo.location && geo.location[0]) {
+          var loc = geo.location[0];
+          ctx.body = {
+            status: '1',
+            address: {
+              city: loc.adm2 || loc.name || '',
+              district: loc.adm3 || loc.adm1 || '',
+              name: loc.name || '',
+              type: loc.type || ''
+            }
+          };
+        } else {
+          ctx.body = { status: '0', address: null, qw: geo };
+        }
+      } catch(e) {
+        ctx.body = { status: '0', address: null, error: e.message };
       }
     }, { tag: 'dashboard-home', before: 'dataSource' });
 

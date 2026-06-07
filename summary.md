@@ -31,7 +31,7 @@
 - ✅ 搜索定位智能缩放（省→zoom 7，市→zoom 9，区县→zoom 12，POI→zoom 15）
 
 ### In Progress
-- (none)
+- 和风天气 QWeather 控制台 500 无法访问，API Host 待确认后才能验证天气
 
 ### Blocked
 - (none)
@@ -52,6 +52,10 @@
 - **搜索 API 历程**：Nominatim（阻断）→ photon.komoot.io（阻断）→ 插件直连 Amap InputTips ✓
 - **定位历程**：浏览器 geolocation（安徽）→ Amap IP API（数据中心返回 `[]`）→ 回退浏览器 geolocation
 - **坐标修正历程**：原始 GPS（围栏外）→ WGS-84→GCJ-02 转换（围栏内 ✓）
+- **天气源历程**：AMAP weather（SERVICE_NOT_AVAILABLE）→ CMA（HTML 不可解析）→ uapis.cn（字段为空）→ weather.com.cn（获取失败）→ **QWeather JWT**
+- **定位链**：`QWeather GeoAPI(镇街级) → AMAP regeo(县区级) → AMAP IP(城市级) → 遵义`
+- **大屏天气循环**：时钟/日期/农历/节气 → 定位&天气&温度（三行循环显示）
+- **JWT 密钥**：Ed25519，凭据 ID=`KAGXVT4Y78`，项目 ID=`3MTGWKPJXJ`
 
 ## Relevant Files
 - `dashboard/geofence-manager.html` - 围栏管理（Leaflet + 高德瓦片 + 高德 InputTips 搜索 + 坐标导入 + 节点编辑）
