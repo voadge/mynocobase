@@ -100,6 +100,7 @@ services:
       - ./ssl:/etc/nginx/ssl:ro
       - ./acme-challenge:/var/www/acme:ro
       - ./dashboard:/usr/share/nginx/html/dashboard:ro
+      - ./dashboard-dev:/usr/share/nginx/html/dashboard-dev:ro
     ports:
       - "80:80"
       - "668:443"

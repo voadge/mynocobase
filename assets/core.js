@@ -369,32 +369,38 @@ function fetchWeatherData() {
 
     const _fetchCityByCoords = (lat, lng) => {
         _weatherDisplayLoc = '';
-        // 高德逆地理编码定位 — 先精确到镇街级，次为县区级
-        fetch(`/api/__dh__/regeo?location=${lng},${lat}`)
-            .then(r => {
-                if (!r.ok) throw new Error('regeo http ' + r.status);
-                return r.json();
-            })
-            .then(d => {
-                if (d.status === '1' && d.regeocode) {
-                    const addr = d.regeocode.addressComponent;
-                    _weatherDisplayLoc = addr.township || addr.street || addr.district || '';
-                    const city = addr.city || DEFAULT_CITY;
-                    fetchCMA(city);
-                } else {
-                    throw new Error('regeo failed');
-                }
-            })
-            .catch(() => {
-                // fallback: uapis 定位到城市
-                fetch(`https://uapis.cn/api/v1/misc/weather?lat=${lat}&lon=${lng}&lang=zh`)
-                    .then(r => r.json())
-                    .then(d => {
-                        const city = (d && !d.error && d.city) ? d.city : DEFAULT_CITY;
+        if (typeof LocationService !== 'undefined' && LocationService.reverseGeocode) {
+            LocationService.reverseGeocode(lat, lng).then(addr => {
+                _weatherDisplayLoc = addr.township || addr.street || addr.district || '';
+                const city = addr.city || DEFAULT_CITY;
+                fetchCMA(city);
+            }).catch(() => { fetchCMA(DEFAULT_CITY); });
+        } else {
+            fetch(`/api/__dh__/regeo?location=${lng},${lat}`)
+                .then(r => {
+                    if (!r.ok) throw new Error('regeo http ' + r.status);
+                    return r.json();
+                })
+                .then(d => {
+                    if (d.status === '1' && d.regeocode) {
+                        const addr = d.regeocode.addressComponent;
+                        _weatherDisplayLoc = addr.township || addr.street || addr.district || '';
+                        const city = addr.city || DEFAULT_CITY;
                         fetchCMA(city);
-                    })
-                    .catch(() => { fetchCMA(DEFAULT_CITY); });
-            });
+                    } else {
+                        throw new Error('regeo failed');
+                    }
+                })
+                .catch(() => {
+                    fetch(`https://uapis.cn/api/v1/misc/weather?lat=${lat}&lon=${lon}&lang=zh`)
+                        .then(r => r.json())
+                        .then(d => {
+                            const city = (d && !d.error && d.city) ? d.city : DEFAULT_CITY;
+                            fetchCMA(city);
+                        })
+                        .catch(() => { fetchCMA(DEFAULT_CITY); });
+                });
+        }
     };
     const _isCapacitor = typeof Capacitor !== 'undefined' && Capacitor.isNative;
     const _isHarmony = typeof window.appBridge !== 'undefined';

@@ -17,7 +17,11 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOjEsInJvbGVOYW1lIjoicm9vdCIsImlhdCI6MTc4MDEyNjM0NiwiZXhwIjoxNzg3OTAyMzQ2fQ.EJyj_wuSZ2LO2TxHwRrngMpHWiWYJlHmz9Sr81-tEg4"
+$token = $env:NOCOBASE_TOKEN
+if (-not $token) {
+    Write-Error "请设置环境变量 NOCOBASE_TOKEN`n示例: `$env:NOCOBASE_TOKEN='your-token-here'"
+    exit 1
+}
 
 $mcpMethod = switch ($Action) {
     "list"   { "resource_list" }

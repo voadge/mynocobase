@@ -1,0 +1,24 @@
+{
+  "string": [
+    {
+      "name": "entry_name",
+      "value": "Dashboard"
+    },
+    {
+      "name": "permission_location_reason",
+      "value": "Used to get your location for attendance check-in"
+    },
+    {
+      "name": "permission_location_background_reason",
+      "value": "Used to report location in background for attendance"
+    },
+    {
+      "name": "permission_camera_reason",
+      "value": "Used to take photos for attendance"
+    },
+    {
+      "name": "permission_biometric_reason",
+      "value": "Used to verify your identity for attendance"
+    }
+  ]
+}

@@ -44,6 +44,7 @@ node_modules/
 *.tmp
 tmp-*
 temp-*
+tmp_*
 *.server-backup
 *.old
 *.patched

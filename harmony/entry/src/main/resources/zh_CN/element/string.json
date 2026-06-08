@@ -1,0 +1,24 @@
+{
+  "string": [
+    {
+      "name": "entry_name",
+      "value": "工作面板"
+    },
+    {
+      "name": "permission_location_reason",
+      "value": "用于获取位置信息以完成考勤打卡"
+    },
+    {
+      "name": "permission_location_background_reason",
+      "value": "用于后台上报位置信息以完成考勤"
+    },
+    {
+      "name": "permission_camera_reason",
+      "value": "用于拍照完成考勤"
+    },
+    {
+      "name": "permission_biometric_reason",
+      "value": "用于验证身份以完成考勤"
+    }
+  ]
+}

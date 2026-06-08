@@ -215,9 +215,21 @@
 
         // ---------- 点击地图添加节点 ----------
         map.on('click', function(e) {
+            if (e.originalEvent && e.originalEvent.button === 2) return; // 右键跳过
             currentPoints.push([parseFloat(e.latlng.lng.toFixed(6)), parseFloat(e.latlng.lat.toFixed(6))]);
             document.getElementById('polylineCoords').value = JSON.stringify(currentPoints);
             redraw();
+        });
+        // 右键删除最近节点
+        map.on('contextmenu', function(e) {
+            if (currentPoints.length === 0) return;
+            // 找最近的节点删除
+            var minIdx = -1, minDist = Infinity;
+            currentPoints.forEach(function(p, i) {
+                var d = map.distance(e.latlng, L.latLng(p[1], p[0]));
+                if (d < minDist) { minDist = d; minIdx = i; }
+            });
+            if (minIdx >= 0 && minDist < 50) deleteNode(minIdx);
         });
 
         // ---------- 鼠标移动提示 ----------
@@ -435,6 +447,9 @@
         document.addEventListener('click', function(e) {
             if (!e.target.closest('.search-bar') && !e.target.closest('.search-results'))
                 document.getElementById('searchResults').style.display = 'none';
+        });
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') document.getElementById('searchResults').style.display = 'none';
         });
         function flyTo(lat, lng, zoom) {
             map.setView([lat, lng], zoom || 14);

@@ -1,0 +1,43 @@
+{
+	"record":	[{
+			"type":	"string",
+			"name":	"app_name",
+			"id":	"0x01000000"
+		}, {
+			"type":	"media",
+			"name":	"app_icon",
+			"id":	"0x01000001"
+		}, {
+			"type":	"string",
+			"name":	"entry_name",
+			"id":	"0x01000002"
+		}, {
+			"type":	"string",
+			"name":	"permission_biometric_reason",
+			"id":	"0x01000003"
+		}, {
+			"type":	"string",
+			"name":	"permission_camera_reason",
+			"id":	"0x01000004"
+		}, {
+			"type":	"string",
+			"name":	"permission_location_background_reason",
+			"id":	"0x01000005"
+		}, {
+			"type":	"string",
+			"name":	"permission_location_reason",
+			"id":	"0x01000006"
+		}, {
+			"type":	"color",
+			"name":	"start_window_bg",
+			"id":	"0x01000007"
+		}, {
+			"type":	"media",
+			"name":	"icon",
+			"id":	"0x01000008"
+		}, {
+			"type":	"profile",
+			"name":	"main_pages",
+			"id":	"0x01000009"
+		}]
+}
