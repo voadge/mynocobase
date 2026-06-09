@@ -90,16 +90,6 @@ module.exports = class DashboardHomePlugin extends Plugin {
       await next();
     }, { before: 'dataSource' });
 
-    // Auth-check endpoint for nginx auth_request
-    this.app.use(async (ctx, next) => {
-      var p = ctx.state.reqPath || ctx.path.replace(/^\/api/, '');
-      if (ctx.method !== 'GET' || p !== '/plugin-dashboard-home/auth-check') {
-        return await next();
-      }
-      ctx.status = await this.isAuthenticated(ctx) ? 200 : 401;
-      ctx.body = ctx.status === 200 ? 'ok' : 'Unauthorized';
-    });
-
     // Geocode + IP locate proxy (via Amap, server-side to respect IP whitelist)
     this.app.use(async (ctx, next) => {
       if (ctx.method !== 'GET' || !(ctx.state.reqPath.endsWith('/geocode') || ctx.state.reqPath.endsWith('/locate') || ctx.state.reqPath.endsWith('/regeo'))) {
@@ -890,6 +880,21 @@ module.exports = class DashboardHomePlugin extends Plugin {
       }
     });
 
+    // Auth-check endpoint for nginx auth_request — reads nb_token cookie
+    this.app.use(async (ctx, next) => {
+      if (ctx.method !== 'GET' || ctx.state.reqPath !== '/__auth_check__') {
+        return await next();
+      }
+      ctx.withoutDataWrapping = true;
+      if (await this.isAuthenticated(ctx)) {
+        ctx.status = 200;
+        ctx.body = 'OK';
+      } else {
+        ctx.status = 401;
+        ctx.body = 'Unauthorized';
+      }
+    }, { tag: 'dashboard-home', before: 'dataSource' });
+
     // Page serving middleware
     this.app.use(async (ctx, next) => {
       if (ctx.method !== 'GET' || !PAGE_MAP[ctx.state.reqPath]) {
@@ -961,9 +966,10 @@ module.exports = class DashboardHomePlugin extends Plugin {
           var userData = data && data.data ? data.data : data;
           if (userData && userData.id) {
             ctx.state.currentUser = userData;
+            return true;
           }
         } catch(e) {}
-        return true;
+        return false;
       }
     } catch(e) {}
 

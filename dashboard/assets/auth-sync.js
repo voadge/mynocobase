@@ -16,16 +16,10 @@
   var COOKIE_OPTS = 'path=/;max-age=86400;SameSite=Lax;Secure';
   var AUTH_PATH = '/api/auth:signIn';
 
-  // ---- 从 response body 提取 token 并设置 cookie ----
-  function extractAndSetToken(body) {
-    try {
-      var d = JSON.parse(body);
-      var t = d && d.data && d.data.token;
-      if (t) {
-        document.cookie = TOKEN_COOKIE + '=' + t + ';' + COOKIE_OPTS;
-        window.location.replace('/');
-      }
-    } catch(e) {}
+  function setTokenAndRedirect(t) {
+    if (!t) return;
+    document.cookie = TOKEN_COOKIE + '=' + t + ';' + COOKIE_OPTS;
+    window.location.replace('/');
   }
 
   // ---- 拦截 fetch ----
@@ -34,23 +28,32 @@
     return origFetch.apply(this, arguments).then(function(r) {
       if (r.url && r.url.indexOf(AUTH_PATH) !== -1) {
         r.clone().json().then(function(d) {
-          var t = d && d.data && d.data.token;
-          if (t) {
-            document.cookie = TOKEN_COOKIE + '=' + t + ';' + COOKIE_OPTS;
-            window.location.replace('/');
-          }
+          setTokenAndRedirect(d && d.data && d.data.token);
         }).catch(function() {});
-        return new Promise(function() {}); // 阻止原始响应
       }
       return r;
     });
   };
 
-  // ---- 拦截 XMLHttpRequest ----
+  // ---- 拦截 XMLHttpRequest (支持 addEventListener 和 onload) ----
   var origOpen = XMLHttpRequest.prototype.open;
   XMLHttpRequest.prototype.open = function(m, u) {
     this._authUrl = u;
     return origOpen.apply(this, arguments);
+  };
+  var origAddEventListener = XMLHttpRequest.prototype.addEventListener;
+  XMLHttpRequest.prototype.addEventListener = function(type, listener, options) {
+    if (type === 'load' && this._authUrl && this._authUrl.indexOf(AUTH_PATH) > -1) {
+      var self = this;
+      var wrapped = function() {
+        try {
+          var d = JSON.parse(self.responseText);
+          setTokenAndRedirect(d && d.data && d.data.token);
+        } catch(e) {}
+      };
+      return origAddEventListener.call(this, type, wrapped, options);
+    }
+    return origAddEventListener.apply(this, arguments);
   };
   var origSend = XMLHttpRequest.prototype.send;
   XMLHttpRequest.prototype.send = function() {
@@ -60,12 +63,8 @@
       if (xhr._authUrl && xhr._authUrl.indexOf(AUTH_PATH) > -1) {
         try {
           var d = JSON.parse(xhr.responseText);
-          var t = d && d.data && d.data.token;
-          if (t) {
-            document.cookie = TOKEN_COOKIE + '=' + t + ';' + COOKIE_OPTS;
-            window.location.replace('/');
-            return;
-          }
+          setTokenAndRedirect(d && d.data && d.data.token);
+          return;
         } catch(e) {}
       }
       if (origOnload) origOnload.apply(xhr, arguments);
