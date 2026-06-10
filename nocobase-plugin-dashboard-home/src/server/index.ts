@@ -313,12 +313,12 @@ var c=document.getElementById('c'),d=document.getElementById('d'),n=document.get
 function readParentField(name){
   try{
     var doc=parent.document;
-    var el=doc.querySelector('[data-collection-field="'+name+'"] input, [data-key="'+name+'"] input, [name="'+name+'"]');
+    var el=doc.querySelector('[data-collection-field="'+name+'"] input, [data-key="'+name+'"] input, [name="'+name+'"], #'+name);
     if(el&&el.value) return el.value;
     var labels=doc.querySelectorAll('.ant-form-item-label label');
     for(var i=0;i<labels.length;i++){
       var txt=labels[i].textContent;
-      if(txt.indexOf('项目编号')>=0||txt.indexOf('项目缩写')>=0||txt.indexOf('project_name_NO')>=0){
+      if(txt.indexOf('项目')>=0||txt.indexOf('缩写')>=0||txt.indexOf('编号')>=0){
         var inp=labels[i].closest('.ant-form-item').querySelector('input');
         if(inp&&inp.value) return inp.value;
       }
@@ -329,10 +329,12 @@ function readParentField(name){
 function readParentDate(){
   try{
     var doc=parent.document;
+    var el=doc.querySelector('[data-collection-field="log_date"] input, [data-key="log_date"] input, [name="log_date"], #log_date');
+    if(el&&el.value) return el.value;
     var labels=doc.querySelectorAll('.ant-form-item-label label');
     for(var i=0;i<labels.length;i++){
       var txt=labels[i].textContent;
-      if(txt.indexOf('录入日期')>=0||txt.indexOf('日志日期')>=0||txt.indexOf('日期')>=0){
+      if(txt.indexOf('日期')>=0||txt.indexOf('录入')>=0){
         var inp=labels[i].closest('.ant-form-item').querySelector('input');
         if(inp&&inp.value) return inp.value;
       }
@@ -342,6 +344,8 @@ function readParentDate(){
 }
 var code=readParentField('project_name_NO');
 var dt=readParentDate();
+if(!code)try{var pv=parent.window.nocobase?.app?.dataSources?.get('construction_daily_log')?.form?.values;if(pv&&pv.project_name_NO)code=pv.project_name_NO}catch(e){}
+if(!dt)try{var pv=parent.window.nocobase?.app?.dataSources?.get('construction_daily_log')?.form?.values;if(pv&&pv.log_date){var v=pv.log_date;if(typeof v==='object'&&v.getTime){var y=v.getFullYear(),m=String(v.getMonth()+1).padStart(2,'0'),d=String(v.getDate()).padStart(2,'0');dt=y+'-'+m+'-'+d}else dt=String(v).substring(0,10)}}catch(e){}
 if(code){c.value=code;c.style.background='#f0f5ff';c.style.borderColor='#91d5ff'}else{c.placeholder='手动输入项目编号'}
 if(dt){var m=dt.match(/(\\d{4})[\\-\\/](\\d{1,2})[\\-\\/](\\d{1,2})/);if(m)d.value=m[1]+'-'+String(Number(m[2])).padStart(2,'0')+'-'+String(Number(m[3])).padStart(2,'0')}
 else d.value=new Date().toISOString().split('T')[0];
