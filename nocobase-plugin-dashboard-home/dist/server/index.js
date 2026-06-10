@@ -295,7 +295,7 @@ module.exports = class DashboardHomePlugin extends server_1.Plugin {
             }
             ctx.withoutDataWrapping = true;
             ctx.type = 'text/html; charset=utf-8';
-            ctx.body = `<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+            ctx.body = `<html><head><meta charset="utf-8">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background:transparent;padding:12px}
@@ -304,26 +304,23 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Ar
 .row input{flex:1;min-width:100px;padding:6px 10px;border:1px solid #d9d9d9;border-radius:6px;font-size:14px}
 .row input:focus{outline:none;border-color:#1890ff;box-shadow:0 0 0 2px rgba(24,144,255,.2)}
 .info{font-size:13px;color:#8c8c8c;margin-bottom:10px}
-.info .cnt{color:#52c41a;font-weight:500}
-.info .done{color:#52c41a;display:none}
-.btn{width:100%;padding:10px 0;font-size:15px;font-weight:600;color:#fff;background:#1890ff;border:none;border-radius:8px;cursor:pointer;transition:.2s}
+.cnt{color:#52c41a;font-weight:500}
+.done{color:#52c41a;display:none}
+.btn{width:100%;padding:10px 0;font-size:15px;font-weight:600;color:#fff;background:#1890ff;border:none;border-radius:8px;cursor:pointer}
 .btn:hover{background:#096dd9}
 .btn:disabled{background:#bfbfbf;cursor:not-allowed}
 </style></head><body>
-<div class="row"><label>项目编号</label><input id="c" placeholder="自动读取中..."/></div>
+<div class="row"><label>项目编号</label><input id="c" placeholder="输入项目缩写"/></div>
 <div class="row"><label>日期</label><input id="d" type="date"/></div>
 <div class="info">已填报：<span class="cnt" id="n">0</span> 份 <span class="done" id="ok">&#x2713; 已汇总</span></div>
 <button class="btn" id="b">&#x26A1; 汇总日志</button>
 <script>
 (function(){
 var c=document.getElementById('c'),d=document.getElementById('d'),n=document.getElementById('n'),ok=document.getElementById('ok'),b=document.getElementById('b');
-function fd(v){if(!v)return'';if(typeof v==='object'&&v.getTime)return v.getFullYear()+'-'+String(v.getMonth()+1).padStart(2,'0')+'-'+String(v.getDate()).padStart(2,'0');var s=String(v).replace(/[T\\s].*/,'').replace(/-/g,'');if(s.length===8)return s.substring(0,4)+'-'+s.substring(4,6)+'-'+s.substring(6,8);return String(v).substring(0,10);}
 d.value=new Date().toISOString().split('T')[0];
-function tf(v,s){if(!v||typeof v!=='object')return false;var r=false;if(v.project_name_NO){c.value=v.project_name_NO;r=true}if(v.log_date){var f=fd(v.log_date);if(f){d.value=f;r=true}}if(r)console.log('[agg] from',s);return r}
-var t=0,iv=setInterval(function(){t++;var a=window.nocobase?.app;if(!a)return;var ds=a.dataSources?.get('construction_daily_log');if(tf(ds?.form?.values,'form')){clearInterval(iv);rf();return}if(tf(ds?.currentRecord,'record')){clearInterval(iv);rf();return}var al=a.dataSources?.values?.();if(al)for(var k in al){if(tf(al[k]?.form?.values,k+'.form')){clearInterval(iv);rf();return}if(tf(al[k]?.currentRecord,k+'.record')){clearInterval(iv);rf();return}}if(t>40){clearInterval(iv);c.placeholder='手动输入项目编号'}},500);
 async function rf(){var code=c.value.trim(),dt=d.value;if(!code||!dt){n.textContent='0';ok.style.display='none';return}try{var r=await fetch('/api/__pd__/daily-summary-status?projectNameNo='+encodeURIComponent(code)+'&date='+dt.replace(/-/g,''),{credentials:'same-origin'});var j=await r.json();if(j.code===0){n.textContent=j.data.entryCount||0;ok.style.display=j.data.aggregated?'inline':'none'}}catch(e){}}
 c.addEventListener('change',rf);d.addEventListener('change',rf);
-b.addEventListener('click',async function(){var code=c.value.trim(),dt=d.value;if(!code||!dt){alert('请填写项目编号和日期');return}var ymd=parseInt(dt.replace(/-/g,''));b.disabled=true;b.textContent='汇总中...';try{var r=await fetch('/api/__pd__/aggregate-log',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({projectNameNo:code,date:ymd})});var j=await r.json();if(j.code===0&&j.data?.updated)alert('汇总完成，新增 '+j.data.newEntryCount+' 份');else if(j.code===0)alert(j.data?.message||'没有新内容需要汇总');else alert('汇总失败：'+(j.msg||'未知错误'));rf()}catch(e){alert('汇总失败: '+e.message)}finally{b.disabled=false;b.textContent='&#x26A1; 汇总日志'}});
+b.addEventListener('click',async function(){var code=c.value.trim(),dt=d.value;if(!code||!dt){alert('请填写项目编号和日期');return}var ymd=parseInt(dt.replace(/-/g,''));b.disabled=true;b.textContent='汇总中...';try{var r=await fetch('/api/__pd__/aggregate-log',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({projectNameNo:code,date:ymd})});var j=await r.json();if(j.code===0&&j.data?.updated)alert('汇总完成，新增 '+j.data.newEntryCount+' 份');else if(j.code===0)alert(j.data?.message||'没有新内容需要汇总');else alert('汇总失败：'+(j.msg||'未知错误'));rf()}catch(e){alert('汇总失败: '+e.message)}finally{b.disabled=false;b.textContent='\u26A1 汇总日志'}});
 })();
 </script></body></html>`;
         }, { tag: 'dashboard-home', before: 'dataSource' });
