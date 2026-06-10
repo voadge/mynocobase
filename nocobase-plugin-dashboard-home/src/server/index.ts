@@ -179,9 +179,6 @@ module.exports = class DashboardHomePlugin extends Plugin {
       });
 
       entriesCol.model.addHook('beforeCreate', async (record: any, options: any) => {
-        if (!record.get('entry_date')) {
-          record.set('entry_date', parseInt(String(Date.now() / 1000)));
-        }
         if (!record.get('entry_no')) {
           const now = new Date();
           const datePart = now.getFullYear().toString() + String(now.getMonth() + 1).padStart(2, '0') + String(now.getDate()).padStart(2, '0');
