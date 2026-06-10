@@ -48,7 +48,7 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    command: ["redis-server", "--appendonly", "yes", "--requirepass-file", "/run/secrets/redis_password"]
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "nocobase123"]
     volumes:
       - redis-data:/data
     networks:
@@ -73,10 +73,13 @@ services:
     image: nocobase/nocobase:beta-full
     restart: unless-stopped
     env_file: ./env/app.env
+    entrypoint: ["/bin/sh", "/opt/noco-base/entrypoint-wrapper.sh"]
     volumes:
       - ./storage:/app/nocobase/storage
       - ./dashboard:/app/nocobase/storage/dashboard:ro
       - ./plugin-dashboard-home:/app/nocobase/node_modules/@nocobase/plugin-dashboard-home:ro
+      - ./entrypoint-wrapper.sh:/opt/noco-base/entrypoint-wrapper.sh:ro
+      - ./patch-departments.js:/tmp/patch-departments.js:ro
     networks:
       - nocobase
     depends_on:
