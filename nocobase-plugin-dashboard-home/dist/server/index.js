@@ -326,21 +326,30 @@ function readParentField(name){
     var labels=doc.querySelectorAll('.ant-form-item-label label');
     for(var i=0;i<labels.length;i++){
       var txt=labels[i].textContent;
-      if(txt.indexOf('项目')>=0||txt.indexOf('缩写')>=0||txt.indexOf('编号')>=0){
+      if(txt.indexOf('项目编号')>=0||txt.indexOf('项目缩写')>=0||txt.indexOf('project_name_NO')>=0){
         var inp=labels[i].closest('.ant-form-item').querySelector('input');
         if(inp&&inp.value) return inp.value;
-      }
-      if(txt.indexOf('日期')>=0||txt.indexOf('录入')>=0){
-        var inp=labels[i].closest('.ant-form-item').querySelector('input');
-        if(inp) return inp.value;
       }
     }
   }catch(e){}
   return '';
 }
-
+function readParentDate(){
+  try{
+    var doc=parent.document;
+    var labels=doc.querySelectorAll('.ant-form-item-label label');
+    for(var i=0;i<labels.length;i++){
+      var txt=labels[i].textContent;
+      if(txt.indexOf('录入日期')>=0||txt.indexOf('日志日期')>=0||txt.indexOf('日期')>=0){
+        var inp=labels[i].closest('.ant-form-item').querySelector('input');
+        if(inp&&inp.value) return inp.value;
+      }
+    }
+  }catch(e){}
+  return '';
+}
 var code=readParentField('project_name_NO');
-var dt=readParentField('log_date');
+var dt=readParentDate();
 if(code){c.value=code;c.style.background='#f0f5ff';c.style.borderColor='#91d5ff'}else{c.placeholder='手动输入项目编号'}
 if(dt){var m=dt.match(/(\\d{4})[\\-\\/](\\d{1,2})[\\-\\/](\\d{1,2})/);if(m)d.value=m[1]+'-'+String(Number(m[2])).padStart(2,'0')+'-'+String(Number(m[3])).padStart(2,'0')}
 else d.value=new Date().toISOString().split('T')[0];
