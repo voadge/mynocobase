@@ -40,11 +40,15 @@ services:
           memory: 512M
         reservations:
           memory: 128M
+    secrets:
+      - db_password
+    environment:
+      - POSTGRES_PASSWORD_FILE=/run/secrets/db_password
 
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    command: ["redis-server", "--appendonly", "yes", "--requirepass", "nocobase123"]
+    command: ["redis-server", "--appendonly", "yes", "--requirepass-file", "/run/secrets/redis_password"]
     volumes:
       - redis-data:/data
     networks:
@@ -62,6 +66,8 @@ services:
           memory: 256M
         reservations:
           memory: 64M
+    secrets:
+      - redis_password
 
   app:
     image: nocobase/nocobase:beta-full
@@ -91,6 +97,14 @@ services:
           memory: 1G
         reservations:
           memory: 256M
+    secrets:
+      - app_key
+      - db_password
+      - redis_password
+    environment:
+      - APP_KEY_FILE=/run/secrets/app_key
+      - DB_PASSWORD_FILE=/run/secrets/db_password
+      - REDIS_PASSWORD_FILE=/run/secrets/redis_password
 
   nginx-proxy:
     image: nginx:alpine
@@ -100,7 +114,7 @@ services:
       - ./ssl:/etc/nginx/ssl:ro
       - ./acme-challenge:/var/www/acme:ro
       - ./dashboard:/usr/share/nginx/html/dashboard:ro
-      - ./dashboard-dev:/usr/share/nginx/html/dashboard-dev:ro
+
     ports:
       - "80:80"
       - "668:443"
@@ -128,3 +142,11 @@ networks:
 volumes:
   postgres-data:
   redis-data:
+
+secrets:
+  app_key:
+    file: ./secrets/app_key.txt
+  db_password:
+    file: ./secrets/db_password.txt
+  redis_password:
+    file: ./secrets/redis_password.txt

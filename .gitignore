@@ -4,6 +4,9 @@
 .env.production
 *.env.server-backup
 
+# Docker Secrets
+secrets/
+
 # 证书文件
 ssl/
 acme-challenge/
