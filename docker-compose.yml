@@ -77,7 +77,7 @@ services:
     volumes:
       - ./storage:/app/nocobase/storage
       - ./dashboard:/app/nocobase/storage/dashboard:ro
-      - ./plugin-dashboard-home:/app/nocobase/node_modules/@nocobase/plugin-dashboard-home:ro
+      - ./nocobase-plugin-dashboard-home:/app/nocobase/node_modules/@nocobase/plugin-dashboard-home:ro
       - ./entrypoint-wrapper.sh:/opt/noco-base/entrypoint-wrapper.sh:ro
       - ./patch-departments.js:/tmp/patch-departments.js:ro
     networks:
