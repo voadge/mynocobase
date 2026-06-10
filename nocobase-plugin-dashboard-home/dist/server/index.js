@@ -317,23 +317,22 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Ar
 <script>
 (function(){
 var c=document.getElementById('c'),d=document.getElementById('d'),n=document.getElementById('n'),ok=document.getElementById('ok'),b=document.getElementById('b');
-var code='',dt='';
+d.value=new Date().toISOString().split('T')[0];
 try{
   var doc=parent.document;
-  var inputs=doc.querySelectorAll('.ant-form-item');
-  for(var i=0;i<inputs.length;i++){
-    var item=inputs[i];
-    var label=item.querySelector('.ant-form-item-label label');
-    if(!label)continue;
-    var txt=label.textContent;
-    var inp=item.querySelector('input');
+  var items=doc.querySelectorAll('.ant-form-item');
+  for(var i=0;i<items.length;i++){
+    var lb=items[i].querySelector('.ant-form-item-label label');
+    if(!lb)continue;
+    var txt=lb.textContent,inp=items[i].querySelector('input');
     if(!inp)continue;
-    if(txt.indexOf('项目')>=0||txt.indexOf('缩写')>=0||txt.indexOf('编号')>=0){if(inp.value)code=inp.value}
-    if(txt.indexOf('日期')>=0||txt.indexOf('录入')>=0){if(inp.value)dt=inp.value}
+    if((txt.indexOf('项目')>=0||txt.indexOf('缩写')>=0)&&inp.value)c.value=inp.value;
+    if(txt.indexOf('日期')>=0&&inp.value)d.value=inp.value;
   }
-}catch(e){console.log('[agg] DOM error',e)}
-if(code){c.value=code;c.style.background='#f0f5ff';c.style.borderColor='#91d5ff'}else{c.placeholder='手动输入项目编号'}
-if(dt){var m=dt.match(/(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);if(m)d.value=m[1]+'-'+String(Number(m[2])).padStart(2,'0')+'-'+String(Number(m[3])).padStart(2,'0')}else d.value=new Date().toISOString().split('T')[0];
+  if(c.value){c.style.background='#f0f5ff';c.style.borderColor='#91d5ff'}
+  else console.log('[agg] project field not found in parent DOM');
+}catch(e){console.log('[agg] parent access denied:',e.message)}
+if(!c.value)c.placeholder='手动输入项目编号';
 if(code){c.value=code;c.style.background='#f0f5ff';c.style.borderColor='#91d5ff'}else{c.placeholder='手动输入项目编号'}
 if(dt){var m=dt.match(/(\\d{4})[\\-\\/](\\d{1,2})[\\-\\/](\\d{1,2})/);if(m)d.value=m[1]+'-'+String(Number(m[2])).padStart(2,'0')+'-'+String(Number(m[3])).padStart(2,'0')}
 else d.value=new Date().toISOString().split('T')[0];
