@@ -6,6 +6,20 @@ import type { Context } from '@nocobase/server';
 type Db = any;
 type PluginInstance = { db: Db; isAuthenticated: (ctx: Context) => Promise<boolean> };
 
+// Convert YYYYMMDD integer to YYYY-MM-DD string (for dateOnly field matching)
+function ymdToDateStr(ymd: number): string {
+  const s = String(ymd);
+  return s.substring(0, 4) + '-' + s.substring(4, 6) + '-' + s.substring(6, 8);
+}
+
+// Render a Date object to YYYY-MM-DD string
+function dateToDateStr(dt: Date): string {
+  const y = dt.getFullYear();
+  const m = String(dt.getMonth() + 1).padStart(2, '0');
+  const d = String(dt.getDate()).padStart(2, '0');
+  return y + '-' + m + '-' + d;
+}
+
 export function registerDashboardRoutes(app: any, plugin: PluginInstance): void {
   const { db } = plugin;
 
@@ -238,9 +252,10 @@ export function registerDashboardRoutes(app: any, plugin: PluginInstance): void 
         } else if (!summaryDate) {
           summaryDate = todayNum;
         }
+        const bclDateStr = ymdToDateStr(summaryDate);
 
         const existingLog = await db.getRepository('construction_daily_log').findOne({
-          filter: { project_id: projectId, log_date: summaryDate }
+          filter: { project_id: projectId, log_date: bclDateStr }
         });
         let logId = null;
         if (!existingLog) {
@@ -307,8 +322,9 @@ export function registerDashboardRoutes(app: any, plugin: PluginInstance): void 
         ctx.body = { code: -1, msg: 'Missing projectNameNo or date' };
         return;
       }
+      const dateStr = ymdToDateStr(date);
       const entries = await db.getRepository('construction_daily_entries').find({
-        filter: { project_name_NO: projectNameNo, entry_date: date },
+        filter: { project_name_NO: projectNameNo, entry_date: dateStr },
         sort: ['createdAt']
       });
       const reporterIds: number[] = [];
@@ -330,7 +346,7 @@ export function registerDashboardRoutes(app: any, plugin: PluginInstance): void 
         }
       }
       const log = await db.getRepository('construction_daily_log').findOne({
-        filter: { project_name_NO: projectNameNo, log_date: date }
+        filter: { project_name_NO: projectNameNo, log_date: dateStr }
       });
       ctx.body = {
         code: 0,
@@ -365,12 +381,13 @@ export function registerDashboardRoutes(app: any, plugin: PluginInstance): void 
           filter: { id: logId }
         });
       } else if (projectNameNo && date) {
+        const dateStr = ymdToDateStr(date);
         log = await db.getRepository('construction_daily_log').findOne({
-          filter: { project_name_NO: projectNameNo, log_date: date }
+          filter: { project_name_NO: projectNameNo, log_date: dateStr }
         });
         if (!log) {
           const entriesForWeather = await db.getRepository('construction_daily_entries').find({
-            filter: { project_name_NO: projectNameNo, entry_date: date },
+            filter: { project_name_NO: projectNameNo, entry_date: dateStr },
             sort: ['createdAt']
           });
           let weather = '';
@@ -397,15 +414,13 @@ export function registerDashboardRoutes(app: any, plugin: PluginInstance): void 
         return;
       }
       projectNameNo = log.get('project_name_NO');
-      let rawDate: any = log.get('log_date');
-      if (typeof rawDate === 'object' && rawDate && rawDate.getTime) {
-        date = parseInt(String(rawDate.getTime() / 1000));
-      } else {
-        date = parseInt(rawDate);
-      }
+      const rawDate: any = log.get('log_date');
+      const dateStr = typeof rawDate === 'object' && rawDate && rawDate.getTime
+        ? dateToDateStr(rawDate)
+        : ymdToDateStr(parseInt(rawDate));
       logId = log.get('id');
       const entries = await db.getRepository('construction_daily_entries').find({
-        filter: { project_name_NO: projectNameNo, entry_date: date },
+        filter: { project_name_NO: projectNameNo, entry_date: dateStr },
         sort: ['createdAt']
       });
       const aggregatedUpTo = log.get('aggregated_up_to') || null;
