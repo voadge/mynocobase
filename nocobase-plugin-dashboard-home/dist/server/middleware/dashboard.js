@@ -359,7 +359,7 @@ function registerDashboardRoutes(app, plugin) {
                 data: {
                     entryCount: entries.length,
                     submitters: submitters,
-                    aggregated: !!(log && log.get('aggregated_up_to')),
+                    aggregated: !!(log && log.getDataValue && log.getDataValue('aggregated_up_to')),
                     logId: log ? log.get('id') : null
                 }
             };
@@ -433,7 +433,7 @@ function registerDashboardRoutes(app, plugin) {
                 filter: { project_name_NO: projectNameNo, entry_date: dateStr },
                 sort: ['createdAt']
             });
-            const aggregatedUpTo = log.get('aggregated_up_to') || null;
+            const aggregatedUpTo = (log.getDataValue && log.getDataValue('aggregated_up_to')) || null;
             const newEntries = aggregatedUpTo
                 ? entries.filter((e) => e.get('id') > aggregatedUpTo)
                 : entries;
