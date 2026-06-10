@@ -302,16 +302,45 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Ar
 .btn:hover{background:#096dd9}
 .btn:disabled{background:#bfbfbf;cursor:not-allowed}
 </style></head><body>
-<div class="row"><label>项目编号</label><input id="c" placeholder="输入项目缩写"/></div>
+<div class="row"><label>项目编号</label><input id="c" placeholder="读取中..."/></div>
 <div class="row"><label>日期</label><input id="d" type="date"/></div>
 <div class="info">已填报：<span class="cnt" id="n">0</span> 份 <span class="done" id="ok">&#x2713; 已汇总</span></div>
 <button class="btn" id="b">&#x26A1; 汇总日志</button>
 <script>
 (function(){
 var c=document.getElementById('c'),d=document.getElementById('d'),n=document.getElementById('n'),ok=document.getElementById('ok'),b=document.getElementById('b');
-d.value=new Date().toISOString().split('T')[0];
+
+function readParentField(name){
+  try{
+    var doc=parent.document;
+    var el=doc.querySelector('[data-collection-field="'+name+'"] input, [data-key="'+name+'"] input, [name="'+name+'"]');
+    if(el&&el.value) return el.value;
+    var labels=doc.querySelectorAll('.ant-form-item-label label');
+    for(var i=0;i<labels.length;i++){
+      var txt=labels[i].textContent;
+      if(txt.indexOf('项目')>=0||txt.indexOf('缩写')>=0||txt.indexOf('编号')>=0){
+        var inp=labels[i].closest('.ant-form-item').querySelector('input');
+        if(inp&&inp.value) return inp.value;
+      }
+      if(txt.indexOf('日期')>=0||txt.indexOf('录入')>=0){
+        var inp=labels[i].closest('.ant-form-item').querySelector('input');
+        if(inp) return inp.value;
+      }
+    }
+  }catch(e){}
+  return '';
+}
+
+var code=readParentField('project_name_NO');
+var dt=readParentField('log_date');
+if(code){c.value=code;c.style.background='#f0f5ff';c.style.borderColor='#91d5ff'}else{c.placeholder='手动输入项目编号'}
+if(dt){var m=dt.match(/(\\d{4})[\\-\\/](\\d{1,2})[\\-\\/](\\d{1,2})/);if(m)d.value=m[1]+'-'+String(Number(m[2])).padStart(2,'0')+'-'+String(Number(m[3])).padStart(2,'0')}
+else d.value=new Date().toISOString().split('T')[0];
+
 async function rf(){var code=c.value.trim(),dt=d.value;if(!code||!dt){n.textContent='0';ok.style.display='none';return}try{var r=await fetch('/api/__pd__/daily-summary-status?projectNameNo='+encodeURIComponent(code)+'&date='+dt.replace(/-/g,''),{credentials:'same-origin'});var j=await r.json();if(j.code===0){n.textContent=j.data.entryCount||0;ok.style.display=j.data.aggregated?'inline':'none'}}catch(e){}}
 c.addEventListener('change',rf);d.addEventListener('change',rf);
+if(code&&d.value)setTimeout(rf,300);
+
 b.addEventListener('click',async function(){var code=c.value.trim(),dt=d.value;if(!code||!dt){alert('请填写项目编号和日期');return}var ymd=parseInt(dt.replace(/-/g,''));b.disabled=true;b.textContent='汇总中...';try{var r=await fetch('/api/__pd__/aggregate-log',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({projectNameNo:code,date:ymd})});var j=await r.json();if(j.code===0&&j.data?.updated)alert('汇总完成，新增 '+j.data.newEntryCount+' 份');else if(j.code===0)alert(j.data?.message||'没有新内容需要汇总');else alert('汇总失败：'+(j.msg||'未知错误'));rf()}catch(e){alert('汇总失败: '+e.message)}finally{b.disabled=false;b.textContent='\u26A1 汇总日志'}});
 })();
 </script></body></html>`;
