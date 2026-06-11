@@ -1,7 +1,0 @@
-<?xml version='1.0' encoding='utf-8'?>
-<resources>
-    <string name="app_name">人员动态</string>
-    <string name="title_activity_main">人员动态</string>
-    <string name="package_name">com.voadge.pd.attend</string>
-    <string name="custom_url_scheme">com.voadge.pd.attend</string>
-</resources>

@@ -1,0 +1,16 @@
+{
+  "name": "@nocobase/plugin-material-number",
+  "version": "1.0.0",
+  "main": "server/plugin.js",
+  "displayName": "Material Number Generator",
+  "displayName.zh-CN": "物料编码生成",
+  "description": "Auto-generates material_no for scm_materials spec records",
+  "description.zh-CN": "为 scm_materials 规格型号记录自动生成物料编码",
+  "license": "Apache-2.0",
+  "peerDependencies": {
+    "@nocobase/server": "2.x"
+  },
+  "dependencies": {
+    "pinyin-pro": "^3.24.0"
+  }
+}

@@ -1,0 +1,4 @@
+"use strict";(globalThis.webpackChunknocobase=globalThis.webpackChunknocobase||[]).push([["700"],{99287(e,t,l){l.r(t),l.d(t,{default:()=>i});var n=l(98542),s=l(25831);let i={contexts:[n.JSFieldRunJSContext,s.FormJSFieldItemRunJSContext],prefix:"sn-jsf-value",label:"Display text field as highlighted text",description:"Render the current text field value with simple highlight styling",locales:{"zh-CN":{label:"将文本字段显示为高亮文本",description:"将字段值写入容器并添加高亮样式"}},content:`
+const v = String(ctx.value ?? '');
+ctx.render(\`<span class="nb-js-field-value" style="color:#1890ff;font-weight:600">\${v}</span>\`);
+`}}}]);
