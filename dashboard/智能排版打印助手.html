@@ -1,0 +1,929 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>智能排版打印助手 - A4横竖混排一键打印</title>
+  <script src="/dashboard/lib/tailwind.min.js"></script>
+  <script src="/dashboard/lib/pdf.min.js"></script>
+  <script src="/dashboard/lib/xlsx.full.min.js"></script>
+  <script src="/dashboard/lib/mammoth.browser.min.js"></script>
+  <script src="/dashboard/lib/jspdf.umd.min.js"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: { 50:'#eff6ff',100:'#dbeafe',200:'#bfdbfe',300:'#93c5fd',400:'#60a5fa',500:'#3b82f6',600:'#2563eb',700:'#1d4ed8',800:'#1e40af',900:'#1e3a8a' },
+            accent:  { 50:'#f0fdf4',100:'#dcfce7',400:'#4ade80',500:'#22c55e',600:'#16a34a',700:'#15803d' },
+            warm:    { 50:'#fff7ed',100:'#ffedd5',400:'#fb923c',500:'#f97316',600:'#ea580c' }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    @keyframes fadeIn { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+    @keyframes pulse-border { 0%,100%{border-color:#3b82f6} 50%{border-color:#93c5fd} }
+    @keyframes slideUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
+    @keyframes spin { to{transform:rotate(360deg)} }
+    .fade-in{animation:fadeIn .4s ease-out}
+    .slide-up{animation:slideUp .5s ease-out}
+    .drop-zone-active{animation:pulse-border 1s ease-in-out infinite;background:#eff6ff!important}
+    .toast{position:fixed;top:20px;right:20px;z-index:1000;transform:translateX(120%);transition:transform .3s ease}
+    .toast.show{transform:translateX(0)}
+    ::-webkit-scrollbar{width:6px;height:6px}
+    ::-webkit-scrollbar-track{background:#f1f5f9}
+    ::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:3px}
+    ::-webkit-scrollbar-thumb:hover{background:#94a3b8}
+
+    /* A4 sheet preview */
+    .a4-sheet{width:210mm;min-height:297mm;background:#fff;box-shadow:0 2px 12px rgba(0,0,0,.1);position:relative;margin:0 auto}
+    .a4-half{width:100%;height:148.5mm;position:relative;box-sizing:border-box;overflow:hidden}
+    .a4-half-top{border-bottom:1px dashed #e2e8f0}
+    .a4-half-bottom{}
+
+    /* Slot for one document in a half */
+    .doc-slot{width:100%;height:100%;position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden}
+    .doc-slot img{max-width:100%;max-height:100%;object-fit:contain}
+    .doc-slot.left-half{width:50%;float:left}
+    .doc-slot.right-half{width:50%;float:right}
+    .doc-slot .slot-label{position:absolute;top:4px;left:4px;font-size:9px;padding:1px 5px;border-radius:3px;z-index:2;pointer-events:none}
+    .doc-slot .slot-delete{position:absolute;top:4px;right:4px;width:20px;height:20px;border-radius:50%;background:rgba(239,68,68,.85);color:#fff;display:none;align-items:center;justify-content:center;cursor:pointer;font-size:11px;z-index:2;line-height:1}
+    .doc-slot:hover .slot-delete{display:flex}
+
+    /* Cover page */
+    .cover-frame{width:100%;min-height:297mm;overflow:hidden}
+    .cover-frame iframe{width:100%;height:297mm;border:none;pointer-events:none}
+    .cover-frame .cover-placeholder{display:flex;flex-direction:column;align-items:center;justify-content:center;height:297mm;color:#94a3b8;font-size:14px}
+
+    /* File list with drag */
+    .file-item{transition:all .15s ease;cursor:grab;border:2px solid transparent}
+    .file-item:active{cursor:grabbing}
+    .file-item.dragging{opacity:.4;transform:scale(.95)}
+    .file-item.drag-over{border-color:#3b82f6;background:#eff6ff}
+
+    /* Cover file area */
+    .cover-upload-zone{border:2px dashed #cbd5e1;border-radius:12px;min-height:120px;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .2s}
+    .cover-upload-zone:hover{border-color:#3b82f6;background:#f8fafc}
+    .cover-upload-zone.has-file{border-style:solid;border-color:#22c55e;background:#f0fdf4}
+
+    /* Print styles */
+    @media print {
+      body * { visibility: hidden; }
+      #print-area, #print-area * { visibility: visible; }
+      #print-area { position: absolute; left: 0; top: 0; }
+      .a4-sheet { box-shadow: none; margin: 0; page-break-after: always; }
+      .slot-delete, .slot-label, .no-print { display: none !important; }
+      @page { size: A4 portrait; margin: 0; }
+    }
+
+    .spinner{animation:spin .8s linear infinite;border:3px solid #e2e8f0;border-top-color:#3b82f6;border-radius:50%;width:24px;height:24px}
+  </style>
+</head>
+<body class="bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-100 min-h-screen">
+
+  <!-- Toast -->
+  <div id="toast" class="toast bg-white rounded-xl shadow-lg border border-slate-200 px-5 py-3 flex items-center gap-3">
+    <span id="toast-icon" class="text-xl"></span>
+    <span id="toast-msg" class="text-slate-700 text-sm font-medium"></span>
+  </div>
+
+  <!-- Header -->
+  <header class="bg-white/80 backdrop-blur-md border-b border-slate-200/60 sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 bg-gradient-to-br from-primary-500 to-primary-700 rounded-xl flex items-center justify-center shadow-md shadow-primary-200">
+          <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+          </svg>
+        </div>
+        <div>
+          <h1 class="text-lg font-bold text-slate-800">智能排版打印助手</h1>
+          <p class="text-xs text-slate-400">A4横竖混排 · 封面文件 · 拖拽排序 · 一键打印</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <span id="file-count" class="hidden bg-primary-50 text-primary-600 text-xs font-semibold px-2.5 py-1 rounded-full"></span>
+        <button onclick="printAll()" class="text-sm bg-primary-500 hover:bg-primary-600 text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-1 shadow-sm" title="打印全部页面">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" /></svg>
+          打印
+        </button>
+        <button onclick="downloadPDF()" class="text-sm bg-accent-500 hover:bg-accent-600 text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-1 shadow-sm" title="下载排版PDF">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+          下载PDF
+        </button>
+        <button onclick="resetAll()" class="text-sm text-slate-400 hover:text-red-500 transition-colors px-3 py-1.5 rounded-lg hover:bg-red-50" title="清空重置">
+          <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+          重置
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+    <!-- Section 1: Cover Page -->
+    <section class="slide-up">
+      <div class="flex items-center gap-2 mb-3">
+        <span class="w-7 h-7 rounded-full bg-warm-500 text-white text-sm font-bold flex items-center justify-center">首</span>
+        <h2 class="text-base font-semibold text-slate-700">封面页</h2>
+        <span class="text-xs text-slate-400 ml-2">上传 Word/Excel/PDF 作为首页，按原格式打印</span>
+      </div>
+      <div class="bg-white rounded-2xl border border-slate-200/60 p-4">
+        <div id="cover-upload-zone" class="cover-upload-zone"
+             onclick="document.getElementById('coverFileInput').click()"
+             ondragover="event.preventDefault();this.classList.add('drop-zone-active')"
+             ondragleave="this.classList.remove('drop-zone-active')"
+             ondrop="handleCoverDrop(event)">
+          <input type="file" id="coverFileInput" class="hidden" accept=".pdf,.docx,.xlsx,.xls,.doc" onchange="handleCoverFile(this.files[0])" />
+          <div id="cover-placeholder" class="flex flex-col items-center gap-2 text-slate-400">
+            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+            <span class="text-sm">点击或拖拽上传封面文件（Word / Excel / PDF）</span>
+          </div>
+          <div id="cover-file-info" class="hidden flex items-center gap-3 w-full px-4">
+            <svg class="w-6 h-6 text-accent-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+            <div class="flex-1 min-w-0">
+              <div id="cover-filename" class="text-sm font-medium text-slate-700 truncate"></div>
+              <div id="cover-filetype" class="text-xs text-slate-400"></div>
+            </div>
+            <button onclick="event.stopPropagation();removeCover()" class="text-xs text-red-400 hover:text-red-600 px-2 py-1 rounded hover:bg-red-50">移除</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Section 2: Layout Pages - Upload & File List -->
+    <section class="slide-up">
+      <div class="flex items-center gap-2 mb-3">
+        <span class="w-7 h-7 rounded-full bg-primary-500 text-white text-sm font-bold flex items-center justify-center">排</span>
+        <h2 class="text-base font-semibold text-slate-700">排版文件</h2>
+        <span class="text-xs text-slate-400 ml-2">上传PDF/图片，拖拽排序，自动横竖混排</span>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Left: Upload + File List -->
+        <div class="lg:col-span-1 space-y-4">
+          <!-- Upload zone -->
+          <div id="dropZone" class="border-2 border-dashed border-slate-300 rounded-2xl bg-white/60 hover:bg-white/80 transition-all duration-200 cursor-pointer group"
+               ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event)" onclick="document.getElementById('fileInput').click()">
+            <input type="file" id="fileInput" class="hidden" accept=".pdf,.png,.jpg,.jpeg,.webp" multiple onchange="handleFiles(this.files)" />
+            <div class="py-8 flex flex-col items-center gap-2">
+              <div class="w-14 h-14 rounded-2xl bg-primary-50 flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
+                <svg class="w-7 h-7 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
+              </div>
+              <p class="text-sm text-slate-500">拖拽或点击上传</p>
+              <p class="text-xs text-slate-400">支持 PDF / PNG / JPG，可批量</p>
+            </div>
+          </div>
+
+          <!-- File List (sortable) -->
+          <div class="bg-white rounded-2xl border border-slate-200/60 p-3">
+            <div class="flex items-center justify-between mb-2">
+              <h3 class="text-sm font-semibold text-slate-600">文件列表</h3>
+              <span id="layout-count" class="text-xs text-slate-400">0 个文件</span>
+            </div>
+            <div id="file-list" class="space-y-1.5 min-h-[60px] max-h-[400px] overflow-y-auto pr-1">
+              <div id="file-list-empty" class="text-center text-xs text-slate-300 py-4">暂无文件，请上传</div>
+            </div>
+          </div>
+
+          <!-- Layout rules hint -->
+          <div class="bg-slate-50 rounded-xl p-3 text-xs text-slate-500 space-y-1.5">
+            <div class="font-semibold text-slate-600 mb-1">📐 排版规则</div>
+            <div>• <span class="text-primary-500 font-medium">横版文件</span> → 占A4半幅（上下均分）</div>
+            <div>• <span class="text-accent-500 font-medium">竖版×1</span> → 旋转90°，占A4半幅</div>
+            <div>• <span class="text-warm-500 font-medium">竖版×2</span> → 左右均分，合占A4半幅</div>
+            <div class="text-slate-400 pt-1">💡 拖拽文件项可调整顺序，顺序影响配对</div>
+          </div>
+        </div>
+
+        <!-- Right: Preview -->
+        <div class="lg:col-span-2">
+          <div class="bg-white rounded-2xl border border-slate-200/60 p-4">
+            <div class="flex items-center justify-between mb-3">
+              <h3 class="text-sm font-semibold text-slate-600">排版预览</h3>
+              <div id="preview-loading" class="hidden flex items-center gap-2 text-xs text-primary-500">
+                <div class="spinner"></div>
+                计算排版中...
+              </div>
+            </div>
+            <div id="preview-area" class="space-y-6 overflow-x-auto pb-4">
+              <div class="text-center text-sm text-slate-300 py-12">上传文件后显示排版预览</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Hidden print area -->
+  <div id="print-area" class="hidden"></div>
+
+  <footer class="text-center text-xs text-slate-300 py-4 border-t border-slate-100 mt-8">
+    智能排版打印助手 · 纯前端本地处理 · 数据不离开您的浏览器
+  </footer>
+
+<script>
+// ==================== State ====================
+let docPages = [];       // { id, dataURL, origW, origH, orientation, fileName, rotatedDataURL?, rotatedW?, rotatedH? }
+let coverDoc = null;     // { fileName, fileType, htmlContent?, pdfPages?, dataURL? }
+let layoutCache = null;
+let dragSrcIndex = null;
+
+// A4 dimensions in mm & pt (1pt = 1/72 inch, 1mm ≈ 2.835pt)
+const A4_W_MM = 210, A4_H_MM = 297;
+const A4_W_PT = 595.28, A4_H_PT = 841.89;
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = '/dashboard/lib/pdf.worker.min.js';
+
+// ==================== Toast ====================
+function showToast(msg, type='info') {
+  const t=document.getElementById('toast'), ic=document.getElementById('toast-icon'), m=document.getElementById('toast-msg');
+  ic.textContent = type==='success'?'✅':type==='warning'?'⚠️':type==='error'?'❌':'ℹ️';
+  m.textContent=msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 3000);
+}
+
+// ==================== Image Rotation ====================
+function rotateImage90CW(dataURL) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement('canvas');
+      c.width = img.naturalHeight;
+      c.height = img.naturalWidth;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, c.width, c.height);
+      ctx.translate(c.width, 0);
+      ctx.rotate(Math.PI / 2);
+      ctx.drawImage(img, 0, 0);
+      resolve(c.toDataURL('image/jpeg', 0.95));
+    };
+    img.onerror = () => resolve(dataURL);
+    img.src = dataURL;
+  });
+}
+
+// ==================== PDF Rendering (same as 发票报销助手) ====================
+async function renderPageToImage(page) {
+  const vp1 = page.getViewport({scale:1.0});
+  let scale = 3.0;
+  if(vp1.width * scale > 5000) scale = 5000 / vp1.width;
+  if(vp1.height * scale > 5000) scale = Math.min(scale, 5000 / vp1.height);
+
+  const vp = page.getViewport({scale, intent:'display'});
+  const c = document.createElement('canvas');
+  c.width = vp.width; c.height = vp.height;
+  const ctx = c.getContext('2d', { willReadFrequently: false });
+
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, c.width, c.height);
+
+  await page.render({
+    canvasContext: ctx,
+    viewport: vp,
+    annotationMode: 2,
+    disableFontFace: true
+  }).promise;
+
+  return { dataURL: c.toDataURL('image/jpeg', 0.95), origW: vp1.width, origH: vp1.height };
+}
+
+// Load PDF with CMap support (critical for 12306 CJK fonts)
+async function loadPDF(arrayBuffer) {
+  return await pdfjsLib.getDocument({
+    data: arrayBuffer,
+    isOffscreenCanvasSupported: false,
+    cMapUrl: '/dashboard/lib/cmaps/',
+    cMapPacked: true,
+    standardFontDataUrl: '/dashboard/lib/standard_fonts/',
+    useSystemFonts: true,
+    enableXfa: false
+  }).promise;
+}
+
+// ==================== Cover Page ====================
+async function handleCoverFile(file) {
+  if (!file) return;
+  const zone = document.getElementById('cover-upload-zone');
+  zone.classList.add('has-file');
+  document.getElementById('cover-placeholder').classList.add('hidden');
+  document.getElementById('cover-file-info').classList.remove('hidden');
+  document.getElementById('cover-filename').textContent = file.name;
+
+  const ext = file.name.split('.').pop().toLowerCase();
+  let fileType = '未知';
+  if (ext === 'pdf') fileType = 'PDF文档';
+  else if (/^(docx?|doc)$/.test(ext)) fileType = 'Word文档';
+  else if (/^(xlsx?|xls)$/.test(ext)) fileType = 'Excel表格';
+  document.getElementById('cover-filetype').textContent = fileType;
+
+  try {
+    const ab = await file.arrayBuffer();
+
+    if (ext === 'pdf') {
+      const pdf = await loadPDF(ab);
+      const coverPages = [];
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const { dataURL, origW, origH } = await renderPageToImage(page);
+        coverPages.push({ dataURL, origW, origH });
+      }
+      coverDoc = { fileName: file.name, fileType: ext, pdfPages: coverPages };
+    } else if (ext === 'docx') {
+      const result = await mammoth.convertToHtml({ arrayBuffer: ab });
+      coverDoc = { fileName: file.name, fileType: 'docx', htmlContent: result.value };
+    } else if (/^xlsx?$/.test(ext)) {
+      const wb = XLSX.read(ab, { type: 'array' });
+      let html = '';
+      for (const name of wb.SheetNames) {
+        const ws = wb.Sheets[name];
+        html += `<div style="margin-bottom:20px"><h3 style="font-size:14px;font-weight:600;margin-bottom:8px;color:#334155">${name}</h3>`;
+        html += XLSX.utils.sheet_to_html(ws, { editable: false });
+        html += '</div>';
+      }
+      coverDoc = { fileName: file.name, fileType: ext, htmlContent: html };
+    } else {
+      showToast('不支持的封面文件格式', 'warning');
+      return;
+    }
+    showToast('封面文件已加载', 'success');
+    renderPreview();
+  } catch (e) {
+    console.error('Cover file error:', e);
+    showToast('封面文件加载失败: ' + e.message, 'error');
+  }
+}
+
+function handleCoverDrop(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  document.getElementById('cover-upload-zone').classList.remove('drop-zone-active');
+  const file = e.dataTransfer.files[0];
+  if (file) handleCoverFile(file);
+}
+
+function removeCover() {
+  coverDoc = null;
+  const zone = document.getElementById('cover-upload-zone');
+  zone.classList.remove('has-file');
+  document.getElementById('cover-placeholder').classList.remove('hidden');
+  document.getElementById('cover-file-info').classList.add('hidden');
+  document.getElementById('coverFileInput').value = '';
+  renderPreview();
+  showToast('封面已移除', 'info');
+}
+
+// ==================== Layout File Upload ====================
+function handleDragOver(e) { e.preventDefault(); e.stopPropagation(); document.getElementById('dropZone').classList.add('drop-zone-active'); }
+function handleDragLeave(e) { e.preventDefault(); e.stopPropagation(); document.getElementById('dropZone').classList.remove('drop-zone-active'); }
+function handleDrop(e) { e.preventDefault(); e.stopPropagation(); document.getElementById('dropZone').classList.remove('drop-zone-active'); handleFiles(e.dataTransfer.files); }
+
+async function handleFiles(fileList) {
+  const files = Array.from(fileList).filter(f => {
+    const ext = f.name.split('.').pop().toLowerCase();
+    return f.type === 'application/pdf' || f.type.startsWith('image/') || ['pdf','png','jpg','jpeg','webp'].includes(ext);
+  });
+  if (!files.length) { showToast('请上传 PDF 或图片文件', 'warning'); return; }
+
+  for (const file of files) {
+    try {
+      const ab = await file.arrayBuffer();
+      const ext = file.name.split('.').pop().toLowerCase();
+
+      if (ext === 'pdf') {
+        const pdf = await loadPDF(ab);
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const { dataURL, origW, origH } = await renderPageToImage(page);
+          const orientation = origW > origH ? 'landscape' : 'portrait';
+          docPages.push({
+            id: 'page_' + Date.now() + '_' + i,
+            dataURL, origW, origH, orientation,
+            fileName: file.name,
+            pageIndex: i,
+            rotatedDataURL: null,
+            rotatedW: null,
+            rotatedH: null
+          });
+        }
+      } else {
+        // Image file
+        const dataURL = await loadImageFile(file);
+        const { origW, origH } = await getImageDimensions(dataURL);
+        const orientation = origW > origH ? 'landscape' : 'portrait';
+        docPages.push({
+          id: 'img_' + Date.now(),
+          dataURL, origW, origH, orientation,
+          fileName: file.name,
+          pageIndex: 1,
+          rotatedDataURL: null,
+          rotatedW: null,
+          rotatedH: null
+        });
+      }
+    } catch (e) {
+      console.error('File load error:', e);
+      showToast(`${file.name} 加载失败`, 'error');
+    }
+  }
+
+  layoutCache = null;
+  updateFileList();
+  renderPreview();
+  showToast(`已添加 ${files.length} 个文件`, 'success');
+}
+
+function loadImageFile(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function getImageDimensions(dataURL) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => resolve({ origW: img.naturalWidth, origH: img.naturalHeight });
+    img.onerror = () => resolve({ origW: 800, origH: 600 });
+    img.src = dataURL;
+  });
+}
+
+// ==================== File List (Sortable) ====================
+function updateFileList() {
+  const list = document.getElementById('file-list');
+  const empty = document.getElementById('file-list-empty');
+  const countEl = document.getElementById('layout-count');
+  const headerCount = document.getElementById('file-count');
+
+  countEl.textContent = docPages.length + ' 个文件';
+  if (docPages.length > 0) {
+    headerCount.textContent = docPages.length + ' 页';
+    headerCount.classList.remove('hidden');
+    empty.classList.add('hidden');
+  } else {
+    headerCount.classList.add('hidden');
+    empty.classList.remove('hidden');
+  }
+
+  // Build list items
+  const items = docPages.map((pg, idx) => {
+    const orientLabel = pg.orientation === 'landscape' ? '横版' : '竖版';
+    const orientClass = pg.orientation === 'landscape' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700';
+    return `
+      <div class="file-item flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-50 hover:bg-slate-100 group"
+           draggable="true"
+           ondragstart="onDragStart(event, ${idx})"
+           ondragover="onDragOver(event, ${idx})"
+           ondragleave="onDragLeave(event)"
+           ondrop="onDropItem(event, ${idx})"
+           data-index="${idx}">
+        <span class="text-slate-300 text-xs w-5 text-right shrink-0">${idx+1}</span>
+        <svg class="w-4 h-4 text-slate-300 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8h16M4 16h16" /></svg>
+        <span class="text-sm text-slate-700 truncate flex-1">${pg.fileName}<span class="text-slate-400 text-xs ml-1">P${pg.pageIndex}</span></span>
+        <span class="text-[10px] px-1.5 py-0.5 rounded ${orientClass} shrink-0">${orientLabel}</span>
+        <button onclick="removePage(${idx})" class="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" title="移除">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+        </button>
+      </div>
+    `;
+  }).join('');
+
+  // Keep empty placeholder but remove file items
+  list.querySelectorAll('.file-item').forEach(el => el.remove());
+  list.insertAdjacentHTML('beforeend', items);
+}
+
+function removePage(idx) {
+  docPages.splice(idx, 1);
+  layoutCache = null;
+  updateFileList();
+  renderPreview();
+  showToast('已移除', 'info');
+}
+
+// Drag & Drop reorder
+function onDragStart(e, idx) {
+  dragSrcIndex = idx;
+  e.currentTarget.classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move';
+}
+function onDragOver(e, idx) {
+  e.preventDefault();
+  e.currentTarget.classList.add('drag-over');
+}
+function onDragLeave(e) {
+  e.currentTarget.classList.remove('drag-over');
+}
+function onDropItem(e, idx) {
+  e.preventDefault();
+  e.currentTarget.classList.remove('drag-over');
+  if (dragSrcIndex === null || dragSrcIndex === idx) return;
+  const item = docPages.splice(dragSrcIndex, 1)[0];
+  docPages.splice(idx, 0, item);
+  dragSrcIndex = null;
+  layoutCache = null;
+  updateFileList();
+  renderPreview();
+}
+
+// ==================== Layout Engine ====================
+async function computeLayout() {
+  if (layoutCache) return layoutCache;
+
+  const rows = [];
+  let portraitBuffer = null;
+
+  for (const pg of docPages) {
+    if (pg.orientation === 'landscape') {
+      // Flush any buffered portrait first
+      if (portraitBuffer) {
+        await ensureRotated(portraitBuffer);
+        rows.push([{
+          dataURL: portraitBuffer.rotatedDataURL,
+          origW: portraitBuffer.rotatedW,
+          origH: portraitBuffer.rotatedH,
+          orientation: 'landscape',
+          _wasRotated: true,
+          fileName: portraitBuffer.fileName,
+          pageIndex: portraitBuffer.pageIndex,
+          _id: portraitBuffer.id
+        }]);
+        portraitBuffer = null;
+      }
+      // Landscape: occupies full half-width
+      rows.push([{
+        dataURL: pg.dataURL,
+        origW: pg.origW,
+        origH: pg.origH,
+        orientation: 'landscape',
+        _wasRotated: false,
+        fileName: pg.fileName,
+        pageIndex: pg.pageIndex,
+        _id: pg.id
+      }]);
+    } else {
+      // Portrait: try to pair with previous portrait
+      if (portraitBuffer) {
+        // Two portraits → pair side-by-side, no rotation
+        rows.push([{
+          dataURL: portraitBuffer.dataURL,
+          origW: portraitBuffer.origW,
+          origH: portraitBuffer.origH,
+          orientation: 'portrait',
+          _wasRotated: false,
+          fileName: portraitBuffer.fileName,
+          pageIndex: portraitBuffer.pageIndex,
+          _id: portraitBuffer.id
+        }, {
+          dataURL: pg.dataURL,
+          origW: pg.origW,
+          origH: pg.origH,
+          orientation: 'portrait',
+          _wasRotated: false,
+          fileName: pg.fileName,
+          pageIndex: pg.pageIndex,
+          _id: pg.id
+        }]);
+        portraitBuffer = null;
+      } else {
+        portraitBuffer = pg;
+      }
+    }
+  }
+
+  // Handle remaining single portrait → rotate
+  if (portraitBuffer) {
+    await ensureRotated(portraitBuffer);
+    rows.push([{
+      dataURL: portraitBuffer.rotatedDataURL,
+      origW: portraitBuffer.rotatedW,
+      origH: portraitBuffer.rotatedH,
+      orientation: 'landscape',
+      _wasRotated: true,
+      fileName: portraitBuffer.fileName,
+      pageIndex: portraitBuffer.pageIndex,
+      _id: portraitBuffer.id
+    }]);
+  }
+
+  layoutCache = rows;
+  return rows;
+}
+
+async function ensureRotated(pg) {
+  if (pg.rotatedDataURL) return pg;
+  pg.rotatedDataURL = await rotateImage90CW(pg.dataURL);
+  pg.rotatedW = pg.origH;  // swapped
+  pg.rotatedH = pg.origW;
+  return pg;
+}
+
+// ==================== Preview Rendering ====================
+async function renderPreview() {
+  const area = document.getElementById('preview-area');
+  const loading = document.getElementById('preview-loading');
+
+  if (docPages.length === 0 && !coverDoc) {
+    area.innerHTML = '<div class="text-center text-sm text-slate-300 py-12">上传文件后显示排版预览</div>';
+    return;
+  }
+
+  loading.classList.remove('hidden');
+  // Let UI update before heavy computation
+  await new Promise(r => setTimeout(r, 50));
+
+  const rows = await computeLayout();
+  let html = '';
+
+  // ---- Cover page ----
+  if (coverDoc) {
+    html += renderCoverPreview();
+  }
+
+  // ---- Layout pages ----
+  // Group rows into A4 pages (2 rows per page = top half + bottom half)
+  for (let i = 0; i < rows.length; i += 2) {
+    const topRow = rows[i];
+    const bottomRow = i + 1 < rows.length ? rows[i + 1] : null;
+
+    html += `<div class="a4-sheet rounded-lg overflow-hidden mb-4" style="transform-origin:top center">`;
+    // Top half
+    html += renderHalfRow(topRow, 'top');
+    // Bottom half
+    if (bottomRow) {
+      html += renderHalfRow(bottomRow, 'bottom');
+    } else {
+      html += `<div class="a4-half a4-half-bottom flex items-center justify-center text-slate-200 text-xs" style="height:148.5mm">空</div>`;
+    }
+    html += `</div>`;
+  }
+
+  area.innerHTML = html;
+  loading.classList.add('hidden');
+
+  // Scale A4 previews to fit container
+  scalePreviews();
+}
+
+function renderCoverPreview() {
+  if (!coverDoc) return '';
+
+  if (coverDoc.fileType === 'pdf' && coverDoc.pdfPages) {
+    let html = '<div class="a4-sheet rounded-lg overflow-hidden mb-4" style="transform-origin:top center">';
+    // Show first page of PDF as cover
+    const pg = coverDoc.pdfPages[0];
+    html += `<div style="width:100%;height:297mm;overflow:hidden;display:flex;align-items:center;justify-content:center;background:#fff">`;
+    html += `<img src="${pg.dataURL}" style="max-width:100%;max-height:100%;object-fit:contain" />`;
+    html += `</div>`;
+    // Additional pages as separate A4 sheets
+    for (let i = 1; i < coverDoc.pdfPages.length; i++) {
+      html += `</div>`;  // close previous sheet
+      html += `<div class="a4-sheet rounded-lg overflow-hidden mb-4" style="transform-origin:top center">`;
+      const p = coverDoc.pdfPages[i];
+      html += `<div style="width:100%;height:297mm;overflow:hidden;display:flex;align-items:center;justify-content:center;background:#fff">`;
+      html += `<img src="${p.dataURL}" style="max-width:100%;max-height:100%;object-fit:contain" />`;
+      html += `</div>`;
+    }
+    html += `</div>`;
+    return html;
+  } else if (coverDoc.htmlContent) {
+    return `<div class="a4-sheet rounded-lg overflow-hidden mb-4" style="transform-origin:top center">
+      <div class="cover-frame p-6" style="font-size:12px;line-height:1.6">
+        <div style="max-height:297mm;overflow:hidden">${coverDoc.htmlContent}</div>
+      </div>
+    </div>`;
+  }
+  return '';
+}
+
+function renderHalfRow(row, position) {
+  const isTop = position === 'top';
+  const isPaired = row.length === 2;
+
+  let html = `<div class="a4-half a4-half-${position}" style="height:148.5mm;display:flex;${isPaired ? '' : 'align-items:center;justify-content:center;'}">`;
+
+  if (isPaired) {
+    // Two portraits side by side
+    row.forEach((pg, idx) => {
+      const label = pg._wasRotated ? '竖→横' : (pg.orientation === 'portrait' ? '竖版' : '横版');
+      const labelClass = pg._wasRotated ? 'bg-amber-100 text-amber-700' : (pg.orientation === 'portrait' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700');
+      html += `<div class="doc-slot left-half" style="width:50%;height:100%;position:relative;padding:3mm;box-sizing:border-box">`;
+      html += `<span class="slot-label ${labelClass}">${label}</span>`;
+      html += `<span class="slot-delete no-print" onclick="removePageById('${pg._id}')">×</span>`;
+      html += `<img src="${pg.dataURL}" style="max-width:100%;max-height:100%;object-fit:contain" />`;
+      html += `</div>`;
+    });
+  } else {
+    // Single item (landscape or rotated portrait)
+    const pg = row[0];
+    const label = pg._wasRotated ? '竖→横' : (pg.orientation === 'portrait' ? '竖版' : '横版');
+    const labelClass = pg._wasRotated ? 'bg-amber-100 text-amber-700' : (pg.orientation === 'portrait' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700');
+    html += `<div class="doc-slot" style="width:100%;height:100%;position:relative;padding:3mm;box-sizing:border-box">`;
+    html += `<span class="slot-label ${labelClass}">${label}</span>`;
+    html += `<span class="slot-delete no-print" onclick="removePageById('${pg._id}')">×</span>`;
+    html += `<img src="${pg.dataURL}" style="max-width:100%;max-height:100%;object-fit:contain" />`;
+    html += `</div>`;
+  }
+
+  html += `</div>`;
+  return html;
+}
+
+function removePageById(id) {
+  const idx = docPages.findIndex(p => p.id === id);
+  if (idx >= 0) {
+    docPages.splice(idx, 1);
+    layoutCache = null;
+    updateFileList();
+    renderPreview();
+    showToast('已移除', 'info');
+  }
+}
+
+function scalePreviews() {
+  const container = document.getElementById('preview-area');
+  const sheets = container.querySelectorAll('.a4-sheet');
+  if (!sheets.length) return;
+
+  const containerWidth = container.clientWidth;
+  const sheetWidth = 210 * 3.78; // 210mm in px (approx)
+  const scale = Math.min(1, (containerWidth - 20) / sheetWidth);
+
+  sheets.forEach(s => {
+    s.style.transform = `scale(${scale})`;
+    s.style.marginBottom = `-${(1 - scale) * 297 * 3.78}px`;
+  });
+}
+
+window.addEventListener('resize', scalePreviews);
+
+// ==================== PDF Generation ====================
+async function downloadPDF() {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
+
+  let isFirst = true;
+
+  // Cover page
+  if (coverDoc) {
+    if (coverDoc.fileType === 'pdf' && coverDoc.pdfPages) {
+      for (const pg of coverDoc.pdfPages) {
+        if (!isFirst) doc.addPage();
+        const ratio = pg.origW / pg.origH;
+        let imgW = A4_W_PT, imgH = A4_W_PT / ratio;
+        if (imgH > A4_H_PT) { imgH = A4_H_PT; imgW = A4_H_PT * ratio; }
+        const x = (A4_W_PT - imgW) / 2;
+        const y = (A4_H_PT - imgH) / 2;
+        doc.addImage(pg.dataURL, 'JPEG', x, y, imgW, imgH);
+        isFirst = false;
+      }
+    } else if (coverDoc.htmlContent) {
+      // For Word/Excel cover, we add a note - these are best printed directly
+      if (!isFirst) doc.addPage();
+      doc.setFontSize(12);
+      doc.text('Cover: ' + coverDoc.fileName, 40, 40);
+      doc.setFontSize(9);
+      doc.setTextColor(100);
+      const lines = doc.splitTextToSize('Word/Excel封面请使用浏览器打印功能（Ctrl+P），此处仅作为排版页面占位。', A4_W_PT - 80);
+      doc.text(lines, 40, 60);
+      doc.setTextColor(0);
+      isFirst = false;
+    }
+  }
+
+  // Layout pages
+  const rows = await computeLayout();
+  const pageMargin = 5; // pt margin
+
+  for (let i = 0; i < rows.length; i += 2) {
+    // Top half
+    const topRow = rows[i];
+    if (!isFirst) doc.addPage();
+    renderRowToPDF(doc, topRow, pageMargin, 'top');
+    isFirst = false;
+
+    // Bottom half
+    if (i + 1 < rows.length) {
+      renderRowToPDF(doc, rows[i + 1], pageMargin, 'bottom');
+    }
+  }
+
+  doc.save('排版打印_' + new Date().toISOString().slice(0, 10) + '.pdf');
+  showToast('PDF已下载', 'success');
+}
+
+function renderRowToPDF(doc, row, margin, position) {
+  const halfH = A4_H_PT / 2;
+  const yOffset = position === 'top' ? margin : halfH + margin;
+  const availW = A4_W_PT - margin * 2;
+  const availH = halfH - margin * 2;
+
+  if (row.length === 2) {
+    // Paired: side by side
+    const slotW = (availW - margin) / 2;
+    row.forEach((pg, idx) => {
+      const x = margin + idx * (slotW + margin);
+      const ratio = pg.origW / pg.origH;
+      let imgW = slotW, imgH = slotW / ratio;
+      if (imgH > availH) { imgH = availH; imgW = availH * ratio; }
+      const imgX = x + (slotW - imgW) / 2;
+      const imgY = yOffset + (availH - imgH) / 2;
+      doc.addImage(pg.dataURL, 'JPEG', imgX, imgY, imgW, imgH);
+    });
+  } else {
+    // Single: center in half
+    const pg = row[0];
+    const ratio = pg.origW / pg.origH;
+    let imgW = availW, imgH = availW / ratio;
+    if (imgH > availH) { imgH = availH; imgW = availH * ratio; }
+    const imgX = (A4_W_PT - imgW) / 2;
+    const imgY = yOffset + (availH - imgH) / 2;
+    doc.addImage(pg.dataURL, 'JPEG', imgX, imgY, imgW, imgH);
+  }
+}
+
+// ==================== Print ====================
+function printAll() {
+  // Build print view
+  const printArea = document.getElementById('print-area');
+  printArea.classList.remove('hidden');
+  printArea.innerHTML = '';
+
+  // Build all pages as inline HTML
+  (async () => {
+    const rows = await computeLayout();
+    let html = '';
+
+    // Cover
+    if (coverDoc) {
+      if (coverDoc.fileType === 'pdf' && coverDoc.pdfPages) {
+        for (const pg of coverDoc.pdfPages) {
+          html += `<div class="a4-sheet" style="width:210mm;height:297mm;display:flex;align-items:center;justify-content:center">`;
+          html += `<img src="${pg.dataURL}" style="max-width:200mm;max-height:290mm;object-fit:contain" />`;
+          html += `</div>`;
+        }
+      } else if (coverDoc.htmlContent) {
+        html += `<div class="a4-sheet" style="width:210mm;height:297mm;padding:10mm;overflow:hidden;font-size:11px;line-height:1.5">`;
+        html += coverDoc.htmlContent;
+        html += `</div>`;
+      }
+    }
+
+    // Layout pages
+    for (let i = 0; i < rows.length; i += 2) {
+      html += `<div class="a4-sheet" style="width:210mm;height:297mm;display:flex;flex-direction:column">`;
+      // Top half
+      html += renderPrintHalf(rows[i]);
+      // Bottom half
+      if (i + 1 < rows.length) {
+        html += renderPrintHalf(rows[i + 1]);
+      }
+      html += `</div>`;
+    }
+
+    printArea.innerHTML = html;
+    setTimeout(() => {
+      window.print();
+      setTimeout(() => { printArea.classList.add('hidden'); }, 1000);
+    }, 500);
+  })();
+}
+
+function renderPrintHalf(row) {
+  const isPaired = row.length === 2;
+  let html = `<div style="width:210mm;height:148.5mm;display:flex;${isPaired ? '' : 'align-items:center;justify-content:center;'}overflow:hidden">`;
+
+  if (isPaired) {
+    row.forEach(pg => {
+      html += `<div style="width:105mm;height:148.5mm;display:flex;align-items:center;justify-content:center;overflow:hidden;padding:2mm;box-sizing:border-box">`;
+      html += `<img src="${pg.dataURL}" style="max-width:100%;max-height:100%;object-fit:contain" />`;
+      html += `</div>`;
+    });
+  } else {
+    const pg = row[0];
+    html += `<img src="${pg.dataURL}" style="max-width:200mm;max-height:144mm;object-fit:contain" />`;
+  }
+
+  html += `</div>`;
+  return html;
+}
+
+// ==================== Reset ====================
+function resetAll() {
+  docPages = [];
+  coverDoc = null;
+  layoutCache = null;
+  removeCover();
+  updateFileList();
+  renderPreview();
+  document.getElementById('fileInput').value = '';
+  showToast('已重置', 'info');
+}
+</script>
+</html>
