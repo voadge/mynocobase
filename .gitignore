@@ -73,3 +73,7 @@ mcp-body.json
 
 # Plugins (boilerplate)
 plugins/
+
+# 移动端/鸿蒙
+capacitor/
+.hvigor/
