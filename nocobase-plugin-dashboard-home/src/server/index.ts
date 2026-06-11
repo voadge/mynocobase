@@ -150,6 +150,26 @@ module.exports = class DashboardHomePlugin extends Plugin {
     registerWeatherRoutes(app);
     registerPeopleDynamicRoutes(app);
 
+    // Middleware: intercept construction_daily_log:trigger and create record first
+    app.resourceManager.use(async (ctx: any, next: () => Promise<void>) => {
+      const action = ctx.action || {};
+      const params = action.params || {};
+      if (params.resourceName === 'construction_daily_log' && params.actionName === 'trigger' && !params.filterByTk) {
+        const values = params.values || {};
+        if (values.project_id || values.project_name_NO) {
+          try {
+            const repo = db.getRepository('construction_daily_log');
+            const created = await repo.create({ values });
+            ctx.action.params.filterByTk = created.id;
+            ctx.action.params.values = { ...values, id: created.id };
+          } catch (e) {
+            console.log('[trigger-mw] create failed:', e.message);
+          }
+        }
+      }
+      await next();
+    }, { tag: 'dashboard-home-trigger', after: 'dataSource' });
+
     // Auto-fill hooks for construction daily entries and logs
     const entriesCol = db.getCollection('construction_daily_entries');
     const logCol = db.getCollection('construction_daily_log');
@@ -253,9 +273,11 @@ module.exports = class DashboardHomePlugin extends Plugin {
         // Auto-fill weather from project location
         if (!record.get('weather')) {
           const projectNameNo = record.get('project_name_NO');
-          if (projectNameNo) {
+          const projectId = record.get('project_id');
+          const projectLookup = projectNameNo ? { project_code: projectNameNo } : (projectId ? { id: projectId } : null);
+          if (projectLookup) {
             try {
-              const proj = await record.sequelize.model('projects').findByPk(projectNameNo);
+              const proj = await record.sequelize.model('projects').findOne({ where: projectLookup });
               if (proj && proj.location_lat && proj.location_lon) {
                 const weather = await qwFetch('https://' + QW_WEATHER_HOST + '/v7/weather/now?location=' + encodeURIComponent(proj.location_lon + ',' + proj.location_lat));
                 if (weather && weather.code === '200' && weather.now) {
@@ -267,6 +289,49 @@ module.exports = class DashboardHomePlugin extends Plugin {
             } catch (e) {
               console.log('[weather-auto-log] fetch failed:', e.message);
             }
+          }
+        }
+        // Auto-aggregate entries into the log
+        const aggProjectId = record.get('project_id');
+        const aggProjectNameNo = record.get('project_name_NO');
+        let aggLogDate = record.get('log_date');
+        if ((aggProjectId || aggProjectNameNo) && aggLogDate) {
+          try {
+            if (typeof aggLogDate === 'number' || /^\d{8}$/.test(String(aggLogDate))) {
+              const s = String(aggLogDate);
+              aggLogDate = s.slice(0, 4) + '-' + s.slice(4, 6) + '-' + s.slice(6, 8);
+            }
+            const whereClause: Record<string, any> = { entry_date: aggLogDate };
+            if (aggProjectId) whereClause.project_id = aggProjectId;
+            if (aggProjectNameNo) whereClause.project_name_NO = aggProjectNameNo;
+            const entries = await record.sequelize.model('construction_daily_entries').findAll({
+              where: whereClause
+            });
+            if (entries && entries.length > 0) {
+              const workContent: string[] = [], qualityIssues: string[] = [];
+              const safetyIssues: string[] = [], others: string[] = [];
+              const personnelCount: string[] = [], equipmentUsage: string[] = [], materialUsage: string[] = [];
+              for (let i = 0; i < entries.length; i++) {
+                const e = entries[i];
+                const n = (i + 1) + '. ';
+                if (e.get('work_content')) workContent.push(n + e.get('work_content'));
+                if (e.get('quality_issues')) qualityIssues.push(n + e.get('quality_issues'));
+                if (e.get('safety_issues')) safetyIssues.push(n + e.get('safety_issues'));
+                if (e.get('others')) others.push(n + e.get('others'));
+                if (e.get('personnel_count')) personnelCount.push(n + e.get('personnel_count'));
+                if (e.get('equipment_usage')) equipmentUsage.push(n + e.get('equipment_usage'));
+                if (e.get('material_usage')) materialUsage.push(n + e.get('material_usage'));
+              }
+              record.set('work_content', workContent.join('\n'));
+              record.set('quality_issues', qualityIssues.join('\n'));
+              record.set('safety_issues', safetyIssues.join('\n'));
+              record.set('others', others.join('\n'));
+              record.set('personnel_count', personnelCount.join('\n'));
+              record.set('equipment_usage', equipmentUsage.join('\n'));
+              record.set('material_usage', materialUsage.join('\n'));
+            }
+          } catch (e) {
+            console.log('[agg-hook] error:', e.message);
           }
         }
       });

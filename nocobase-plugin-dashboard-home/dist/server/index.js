@@ -155,9 +155,36 @@ module.exports = class DashboardHomePlugin extends server_1.Plugin {
         (0, dashboard_1.registerDashboardRoutes)(app, pluginRef);
         (0, weather_1.registerWeatherRoutes)(app);
         (0, people_dynamic_1.registerPeopleDynamicRoutes)(app);
-        // Auto-fill hooks for construction daily entries and logs
-        const entriesCol = db.getCollection('construction_daily_entries');
-        const logCol = db.getCollection('construction_daily_log');
+    // Middleware: intercept construction_daily_log:trigger on resource manager
+    app.resourceManager.use(async (ctx, next) => {
+        const a = ctx.action || {};
+        const p = a.params || {};
+        const rn = p.resourceName || '';
+        const an = p.actionName || '';
+        if (rn.indexOf('construction_daily_log') >= 0 && (an === 'trigger' || an === 'triggerNew')) {
+            const body = ctx.request.body || {};
+            if (!p.filterByTk && (body.project_id || body.project_name_NO)) {
+                try {
+                    const repo = db.getRepository('construction_daily_log');
+                    const values = {};
+                    for (const k in body) {
+                        if (k !== 'triggerWorkflows') values[k] = body[k];
+                    }
+                    const created = await repo.create({ values });
+                    a.params.filterByTk = created.id;
+                    console.log('[rmw] created log ' + created.id + ' for trigger');
+                }
+                catch (e) {
+                    console.log('[rmw] create failed:', e.message);
+                }
+            }
+        }
+        await next();
+    }, { tag: 'dashboard-home-trigger' });
+
+    // Auto-fill hooks for construction daily entries and logs
+    const entriesCol = db.getCollection('construction_daily_entries');
+    const logCol = db.getCollection('construction_daily_log');
         // Add aggregated_up_to field for tracking aggregation state
         if (logCol) {
             try {
@@ -262,9 +289,11 @@ module.exports = class DashboardHomePlugin extends server_1.Plugin {
                 // Auto-fill weather from project location
                 if (!record.get('weather')) {
                     const projectNameNo = record.get('project_name_NO');
-                    if (projectNameNo) {
+                    const projectId = record.get('project_id');
+                    const projectLookup = projectNameNo ? { project_code: projectNameNo } : (projectId ? { id: projectId } : null);
+                    if (projectLookup) {
                         try {
-                            const proj = await record.sequelize.model('projects').findByPk(projectNameNo);
+                            const proj = await record.sequelize.model('projects').findOne({ where: projectLookup });
                             if (proj && proj.location_lat && proj.location_lon) {
                                 const weather = await (0, qw_jwt_1.qwFetch)('https://' + qw_jwt_1.QW_WEATHER_HOST + '/v7/weather/now?location=' + encodeURIComponent(proj.location_lon + ',' + proj.location_lat));
                                 if (weather && weather.code === '200' && weather.now) {
@@ -277,6 +306,50 @@ module.exports = class DashboardHomePlugin extends server_1.Plugin {
                         catch (e) {
                             console.log('[weather-auto-log] fetch failed:', e.message);
                         }
+                    }
+                }
+                // Auto-aggregate entries into the log
+                const aggProjectId = record.get('project_id');
+                const aggProjectNameNo = record.get('project_name_NO');
+                let aggLogDate = record.get('log_date');
+                if ((aggProjectId || aggProjectNameNo) && aggLogDate) {
+                    try {
+                        if (typeof aggLogDate === 'number' || /^\d{8}$/.test(String(aggLogDate))) {
+                            const s = String(aggLogDate);
+                            aggLogDate = s.slice(0, 4) + '-' + s.slice(4, 6) + '-' + s.slice(6, 8);
+                        }
+                        const whereClause = { entry_date: aggLogDate };
+                        if (aggProjectId) whereClause.project_id = aggProjectId;
+                        if (aggProjectNameNo) whereClause.project_name_NO = aggProjectNameNo;
+                        const entries = await record.sequelize.model('construction_daily_entries').findAll({
+                            where: whereClause
+                        });
+                        if (entries && entries.length > 0) {
+                            const workContent = [], qualityIssues = [];
+                            const safetyIssues = [], others = [];
+                            const personnelCount = [], equipmentUsage = [], materialUsage = [];
+                            for (let i = 0; i < entries.length; i++) {
+                                const e = entries[i];
+                                const n = (i + 1) + '. ';
+                                if (e.get('work_content')) workContent.push(n + e.get('work_content'));
+                                if (e.get('quality_issues')) qualityIssues.push(n + e.get('quality_issues'));
+                                if (e.get('safety_issues')) safetyIssues.push(n + e.get('safety_issues'));
+                                if (e.get('others')) others.push(n + e.get('others'));
+                                if (e.get('personnel_count')) personnelCount.push(n + e.get('personnel_count'));
+                                if (e.get('equipment_usage')) equipmentUsage.push(n + e.get('equipment_usage'));
+                                if (e.get('material_usage')) materialUsage.push(n + e.get('material_usage'));
+                            }
+                            record.set('work_content', workContent.join('\n'));
+                            record.set('quality_issues', qualityIssues.join('\n'));
+                            record.set('safety_issues', safetyIssues.join('\n'));
+                            record.set('others', others.join('\n'));
+                            record.set('personnel_count', personnelCount.join('\n'));
+                            record.set('equipment_usage', equipmentUsage.join('\n'));
+                            record.set('material_usage', materialUsage.join('\n'));
+                        }
+                    }
+                    catch (e) {
+                        console.log('[agg-hook] error:', e.message);
                     }
                 }
             });
@@ -341,7 +414,7 @@ async function rf(){var code=c.value.trim(),dt=d.value;if(!code||!dt){n.textCont
 c.addEventListener('change',rf);d.addEventListener('change',rf);
 if(code&&d.value)setTimeout(rf,300);
 
-b.addEventListener('click',async function(){var code=c.value.trim(),dt=d.value;if(!code||!dt){alert('请填写项目编号和日期');return}var ymd=parseInt(dt.replace(/-/g,''));b.disabled=true;b.textContent='汇总中...';try{var r=await fetch('/api/__pd__/aggregate-log',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({projectNameNo:code,date:ymd})});var j=await r.json();if(j.code===0&&j.data?.updated)alert('汇总完成，新增 '+j.data.newEntryCount+' 份');else if(j.code===0)alert(j.data?.message||'没有新内容需要汇总');else alert('汇总失败：'+(j.msg||'未知错误'));rf()}catch(e){alert('汇总失败: '+e.message)}finally{b.disabled=false;b.textContent='\u26A1 汇总日志'}});
+b.addEventListener('click',async function(){var code=c.value.trim(),dt=d.value;if(!code||!dt){alert('请填写项目编号和日期');return}var ymd=parseInt(dt.replace(/-/g,''));b.disabled=true;b.textContent='汇总中...';try{var r=await fetch('/api/__pd__/aggregate-log',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({projectNameNo:code,date:ymd})});var j=await r.json();if(j.code===0&&j.data?.updated){var msg='汇总完成，新增 '+j.data.newEntryCount+' 份';st=document.getElementById('ok');if(st){st.textContent=msg;st.style.display='inline';n.textContent=j.data.totalEntryCount;b.style.display='none'};var lid=j.data.logId;if(lid){try{parent.location.href='/admin/collections/construction_daily_log/records/'+lid+'/edit'}catch(e){}}}else if(j.code===0){var m=j.data?.message||'没有新内容需要汇总';st=document.getElementById('ok');if(st){st.textContent=m;st.style.display='inline'}}else alert('汇总失败：'+(j.msg||'未知错误'));rf()}catch(e){alert('汇总失败: '+e.message)}finally{b.disabled=false;if(b.style.display!=='none')b.textContent='\u26A1 汇总日志'}});
 })();
 </script></body></html>`;
         }, { tag: 'dashboard-home', before: 'dataSource' });

@@ -407,7 +407,7 @@ function registerDashboardRoutes(app, plugin) {
                     log = await db.getRepository('construction_daily_log').create({
                         values: {
                             project_name_NO: projectNameNo,
-                            log_date: date,
+                            log_date: dateStr,
                             weather: weather,
                             status: '待审核',
                             previous_status: ''
@@ -425,9 +425,17 @@ function registerDashboardRoutes(app, plugin) {
             }
             projectNameNo = log.get('project_name_NO');
             const rawDate = log.get('log_date');
-            const dateStr = typeof rawDate === 'object' && rawDate && rawDate.getTime
-                ? dateToDateStr(rawDate)
-                : ymdToDateStr(parseInt(rawDate));
+            let dateStr;
+            if (typeof rawDate === 'object' && rawDate && rawDate.getTime) {
+                dateStr = dateToDateStr(rawDate);
+            }
+            else if (typeof rawDate === 'string' && /^\d{4}-\d{2}-\d{2}/.test(rawDate)) {
+                dateStr = rawDate.substring(0, 10);
+            }
+            else {
+                const num = parseInt(String(rawDate).replace(/[^0-9]/g, ''));
+                dateStr = ymdToDateStr(isNaN(num) ? date : num);
+            }
             logId = log.get('id');
             const entries = await db.getRepository('construction_daily_entries').find({
                 filter: { project_name_NO: projectNameNo, entry_date: dateStr },
@@ -482,6 +490,7 @@ function registerDashboardRoutes(app, plugin) {
                 code: 0,
                 data: {
                     updated: true,
+                    logId: logId,
                     newEntryCount: newEntries.length,
                     totalEntryCount: entries.length,
                     fields: Object.keys(updates).filter((k) => k !== 'aggregated_up_to')

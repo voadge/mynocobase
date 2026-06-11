@@ -16,9 +16,138 @@ define(function(){
   DashboardHomePlugin.prototype.load = function() {
     initAggregateButton(this.app);
     watchLogDetailPage(this.app);
+    initWeatherAutoFill();
   };
   return DashboardHomePlugin;
 });
+
+function initWeatherAutoFill() {
+  var filledForms = {};
+  var obs = new MutationObserver(function() {
+    autoFillWeather(filledForms);
+  });
+  obs.observe(document.body, { childList: true, subtree: true });
+  setTimeout(function() { autoFillWeather(filledForms); }, 1500);
+}
+
+function autoFillWeather(filledForms) {
+  var forms = document.querySelectorAll('.ant-form, .nb-form, form');
+  for (var i = 0; i < forms.length; i++) {
+    var form = forms[i];
+    if (filledForms[form.dataset.weatherFilled]) continue;
+    var weatherInput = findWeatherInput(form);
+    if (!weatherInput) continue;
+    var formKey = getFormKey(form);
+    if (!formKey) continue;
+    filledForms[formKey] = true;
+    weatherInput.dataset.weatherFilled = '1';
+    doFetchWeather(form, weatherInput);
+  }
+}
+
+function findWeatherInput(form) {
+  var items = form.querySelectorAll('.ant-form-item');
+  for (var i = 0; i < items.length; i++) {
+    var label = items[i].querySelector('.ant-form-item-label label');
+    if (!label) continue;
+    var text = label.textContent.trim();
+    if (text === '天气' || text === 'weather' || text.indexOf('天气') >= 0) {
+      var input = items[i].querySelector('input, textarea, .ant-select-selector, .ant-picker');
+      if (input) return input;
+    }
+  }
+  return null;
+}
+
+function getFormKey(form) {
+  try {
+    var url = window.location.href;
+    var parentClass = '';
+    var el = form;
+    for (var i = 0; i < 5; i++) {
+      if (el && el.className) { parentClass = el.className.substring(0, 40); break; }
+      el = el.parentElement;
+    }
+    return url + '|' + parentClass;
+  } catch(e) { return '' + Date.now(); }
+}
+
+function doFetchWeather(form, weatherInput) {
+  // Priority 1: project location coordinates (from dataset.coords on project field)
+  var projectField = findProjectField(form);
+  if (projectField && projectField.dataset && projectField.dataset.coords) {
+    var parts = projectField.dataset.coords.split(',');
+    var lat = parts[0].trim();
+    var lng = parts[1].trim();
+    if (lat && lng) {
+      fetchWeatherByCoords(lat, lng, weatherInput);
+      return;
+    }
+  }
+  // Priority 2: browser GPS
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      function(pos) {
+        fetchWeatherByCoords(pos.coords.latitude, pos.coords.longitude, weatherInput);
+      },
+      function() { fetchWeatherByIP(weatherInput); },
+      { enableHighAccuracy: false, timeout: 5000 }
+    );
+  } else {
+    fetchWeatherByIP(weatherInput);
+  }
+}
+
+function findProjectField(form) {
+  var items = form.querySelectorAll('.ant-form-item');
+  for (var i = 0; i < items.length; i++) {
+    var label = items[i].querySelector('.ant-form-item-label label');
+    if (!label) continue;
+    var text = label.textContent.trim();
+    if (text === '项目' || text.indexOf('项目') >= 0 || text === 'project') {
+      var select = items[i].querySelector('.ant-select-selector');
+      if (select) return select;
+    }
+  }
+  return null;
+}
+
+function fetchWeatherByCoords(lat, lng, weatherInput) {
+  fetch('/api/__pd__/weather-qw?lat=' + lat + '&lng=' + lng)
+    .then(function(r) {
+      if (!r.ok) throw new Error();
+      return r.json();
+    })
+    .then(function(d) {
+      if (d.code === 0 && d.data && d.data.weather) {
+        setWeatherInput(weatherInput, d.data);
+      }
+    })
+    .catch(function() { fetchWeatherByIP(weatherInput); });
+}
+
+function fetchWeatherByIP(weatherInput) {
+  fetch('/api/__pd__/weather-qw?city=遵义')
+    .then(function(r) {
+      if (!r.ok) throw new Error();
+      return r.json();
+    })
+    .then(function(d) {
+      if (d.code === 0 && d.data && d.data.weather) {
+        setWeatherInput(weatherInput, d.data);
+      }
+    })
+    .catch(function() {});
+}
+
+function setWeatherInput(input, data) {
+  if (!input) return;
+  var weatherStr = data.weather + ' ' + (data.temperature || '') + 'C ' + (data.windDirection || '');
+  var nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+  nativeInputValueSetter.call(input, weatherStr);
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+  input.dispatchEvent(new Event('change', { bubbles: true }));
+}
 
 function initAggregateButton(app) {
   function findAndInit() {
