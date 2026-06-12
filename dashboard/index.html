@@ -539,6 +539,7 @@
             border-top: 1px solid rgba(0, 212, 255, 0.1);
         }
         .footer a { color: #00d4ff; text-decoration: none; }
+        .beian-icon { height: 16px; vertical-align: middle; margin-right: 2px; }
 
         @keyframes fadeIn {
             from { opacity: 0; transform: translateY(20px); }
@@ -979,7 +980,7 @@
                <button class="footer-enter" onclick="openNocoBase()" style="display:none">开始工作</button>
                 <span id="adminLinks" style="display:none"><a href="/admin/ffw9h2yb5cp" target="_blank">管理后台</a> | <a href="/admin/lk63lo7m7ak" target="_blank">流程日志</a></span>
                <a class="footer-toolbox" href="/api/__tb__" style="display:none">百宝箱</a>
-                <span>贵州遵大数智化平台 <span id="nb-version">v2.1.0-beta.42</span> | 服务器: 110.42.236.231 | 运行时间: <span id="uptime"></span></span>
+                 <span>贵州遵大数智化平台 <span id="nb-version">v2.1.0-beta.42</span> | <img src="/dashboard/备案图标.png" class="beian-icon"> <a href="https://beian.mps.gov.cn/#/query/webSearch?code=51162302000288" rel="noreferrer" target="_blank">川公网安备51162302000288号</a> | <a href="https://beian.miit.gov.cn/" target="_blank">蜀ICP备2026030576号</a></span>
             </p>
         </div>
     </div>
@@ -1061,17 +1062,17 @@
         function loadSource(idx) {
             sourceIndex = ((idx % EXTERN_URLS.length) + EXTERN_URLS.length) % EXTERN_URLS.length;
             rpCancel = true; clearTimeout(rpTimer);
-            const frame = document.getElementById('externFrame');
-            const src = EXTERN_URLS[sourceIndex];
-            frame.setAttribute('sandbox', sourceIndex === 1
+            var _frame=document.getElementById('externFrame');if(!_frame)return;
+            var src = EXTERN_URLS[sourceIndex];
+            _frame.setAttribute('sandbox', sourceIndex === 1
                 ? 'allow-scripts allow-forms allow-same-origin allow-popups'
                 : 'allow-scripts allow-forms allow-same-origin');
-            if (sourceIndex === 0 || sourceIndex === 1) { doRoadPatrol(frame); }
-            else if (src.url) { frame.src = src.url; }
+            if (sourceIndex === 0 || sourceIndex === 1) { doRoadPatrol(_frame); }
+            else if (src.url) { _frame.src = src.url; }
             else {
-                frame.srcdoc = '<div style="display:flex;align-items:center;justify-content:center;height:100%;background:#0c1426;color:#5a6a7a;font-size:1.2em;font-family:sans-serif">📊 ' + escHtml(src.label) + '<br><span style="font-size:0.7em;margin-top:8px">预留数据源</span></div>';
+                _frame.srcdoc = '<div style="display:flex;align-items:center;justify-content:center;height:100%;background:#0c1426;color:#5a6a7a;font-size:1.2em;font-family:sans-serif">📊 ' + escHtml(src.label) + '<br><span style="font-size:0.7em;margin-top:8px">预留数据源</span></div>';
             }
-            document.getElementById('sourceLabel').textContent = `${src.label} ${sourceIndex+1}/${EXTERN_URLS.length}`;
+            var _sl=document.getElementById('sourceLabel');if(_sl)_sl.textContent=`${src.label} ${sourceIndex+1}/${EXTERN_URLS.length}`;
         }
 
         function prevSource() { loadSource(sourceIndex - 1); }
@@ -1315,7 +1316,7 @@
             const track = document.getElementById('announceTrack');
             try {
                 const r = await fetch(
-                    '/api/announcements:list?filter[status]=published&filter[archived__ne]=true&sort=-publishedAt,-createdAt&pageSize=8',
+                    '/api/company_announcements:list?filter[status]=published&sort=-publishedAt,-createdAt&pageSize=8',
                     { credentials: 'include' }
                 );
                 if (!r.ok) throw Error();
@@ -2737,13 +2738,13 @@
             const n=new Date();
             const y=n.getFullYear(), mo=String(n.getMonth()+1).padStart(2,'0'), d=String(n.getDate()).padStart(2,'0');
             const h=String(n.getHours()).padStart(2,'0'), mi=String(n.getMinutes()).padStart(2,'0'), sc=String(n.getSeconds()).padStart(2,'0');
-            document.getElementById('clockHour').textContent=h;
-            document.getElementById('clockMin').textContent=mi;
+            var _e1=document.getElementById('clockHour');if(_e1)_e1.textContent=h;
+            var _e2=document.getElementById('clockMin');if(_e2)_e2.textContent=mi;
             document.querySelector('#dateDisplay .label-date').textContent=`${y}年${mo}月${d}日`;
             const lu=getLunarDate(n);
             document.querySelector('#lunarDisplay .label-lunar').textContent=`农历${lu.month}月${lu.day}`;
             const t=getSolarTerm(n.getMonth()+1,n.getDate());
-            var termEl=document.getElementById('termDisplay');
+            var termEl=document.getElementById('termDisplay');if(!termEl)return;
             if (t) {
                 termEl.querySelector('.label-term').textContent=t;
                 termEl.style.display='';
@@ -2762,7 +2763,7 @@
             const s=new Date('2026-05-22T00:00:00');
             const n=new Date();
             const df=n-s;
-            document.getElementById('uptime').textContent=`${Math.floor(df/86400000)}天 ${Math.floor((df%86400000)/3600000)}小时`;
+            var _upEl=document.getElementById('uptime');if(!_upEl)return;_upEl.textContent=`${Math.floor(df/86400000)}天 ${Math.floor((df%86400000)/3600000)}小时`;
         }
 
         // 从 localStorage 复制 token 到 cookie（供 nginx auth_request 使用）
@@ -2775,19 +2776,19 @@
             } catch(e){}
         })();
 
-        loadSource(0);
-        checkAdmin();
-        fetchTodos();
-        fetchAnnouncements();
-        fetchAttendance();
-        fetchWeather();
-        fetchNbVersion();
-        updateDisplay();
-        updateUptime();
-        rotateCycle();
-        setInterval(updateDisplay,1000);
-        setInterval(updateUptime,60000);
-        setInterval(rotateCycle,3000);
+        try{loadSource(0);}catch(e){console.warn('[b]loadSource',e)}
+        try{checkAdmin();}catch(e){console.warn('[b]checkAdmin',e)}
+        try{fetchTodos();}catch(e){console.warn('[b]fetchTodos',e)}
+        try{fetchAnnouncements();}catch(e){console.warn('[b]fetchAnn',e)}
+        try{fetchAttendance();}catch(e){console.warn('[b]fetchAtt',e)}
+        try{fetchWeather();}catch(e){console.warn('[b]fetchWx',e)}
+        try{fetchNbVersion();}catch(e){console.warn('[b]fetchNb',e)}
+        try{updateDisplay();}catch(e){console.warn('[b]updateDisp',e)}
+        try{updateUptime();}catch(e){console.warn('[b]updateUp',e)}
+        try{rotateCycle();}catch(e){console.warn('[b]rotateCycle',e)}
+        try{setInterval(updateDisplay,1000);}catch(e){console.warn('[b]clockInt',e)}
+        try{setInterval(updateUptime,60000);}catch(e){console.warn('[b]upInt',e)}
+        try{setInterval(rotateCycle,3000);}catch(e){console.warn('[b]cycleInt',e)}
         function scheduleWeatherRefresh() {
             var h = new Date().getHours();
             var interval = h >= 6 && h < 22 ? 1800000 : 7200000;
