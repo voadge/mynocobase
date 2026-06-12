@@ -17,6 +17,9 @@ const attendance_1 = require("./middleware/attendance");
 const dashboard_1 = require("./middleware/dashboard");
 const weather_1 = require("./middleware/weather");
 const people_dynamic_1 = require("./middleware/people-dynamic");
+const department_acl_1 = require("./middleware/department-acl");
+const dept_admin_api_1 = require("./middleware/dept-admin-api");
+const dept_admin_pages_1 = require("./middleware/dept-admin-pages");
 const qw_jwt_1 = require("./utils/qw-jwt");
 const STORAGE_DIR = '/app/nocobase/storage/dashboard';
 module.exports = class DashboardHomePlugin extends server_1.Plugin {
@@ -46,6 +49,41 @@ module.exports = class DashboardHomePlugin extends server_1.Plugin {
                 arCol.addField('workflow_status', { type: 'string', nullable: true, defaultValue: 'normal' });
             arCol.sync({ alter: true });
         }
+        // Register department_acl_rules collection
+        db.collection({
+            name: 'department_acl_rules',
+            fields: [
+                { type: 'bigInt', name: 'id', primaryKey: true, autoIncrement: true },
+                { type: 'belongsTo', name: 'department', target: 'departments', foreignKey: 'departmentId' },
+                { type: 'integer', name: 'priority', defaultValue: 100 },
+                { type: 'string', name: 'mode', defaultValue: 'dept' },
+                { type: 'belongsTo', name: 'role', target: 'roles', foreignKey: 'roleId' },
+                { type: 'string', name: 'resourceName' },
+                { type: 'string', name: 'action' },
+                { type: 'boolean', name: 'allow', defaultValue: true },
+                { type: 'json', name: 'dataScope', nullable: true },
+                { type: 'string', name: 'ruleNo', nullable: true },
+                { type: 'text', name: 'remark', nullable: true },
+                { type: 'boolean', name: 'enabled', defaultValue: true },
+                { type: 'belongsTo', name: 'createdBy', target: 'users' },
+            ],
+        });
+        // Register department_approval_routes collection
+        db.collection({
+            name: 'department_approval_routes',
+            fields: [
+                { type: 'bigInt', name: 'id', primaryKey: true, autoIncrement: true },
+                { type: 'string', name: 'name' },
+                { type: 'string', name: 'levelKey' },
+                { type: 'string', name: 'mode', defaultValue: 'dept' },
+                { type: 'belongsTo', name: 'department', target: 'departments', foreignKey: 'departmentId' },
+                { type: 'belongsTo', name: 'role', target: 'roles', foreignKey: 'roleId' },
+                { type: 'text', name: 'remark', nullable: true },
+                { type: 'boolean', name: 'enabled', defaultValue: true },
+                { type: 'belongsTo', name: 'createdBy', target: 'users' },
+            ],
+        });
+        await db.sync();
         // Normalize path — strip /api prefix for consistent path matching
         app.use(async (ctx, next) => {
             ctx.state.reqPath = ctx.path.replace(/^\/api/, '');
@@ -67,13 +105,13 @@ module.exports = class DashboardHomePlugin extends server_1.Plugin {
                 return patchedBundle;
             if (!DEPT_BUNDLE_PATH)
                 return null;
-            const content = fs_1.default.readFileSync(DEPT_BUNDLE_PATH, 'utf8');
-            content.replace('owners:{title:\'{{t("Owners")}}\',"x-component":"DepartmentOwnersField","x-decorator":"FormItem"},footer:', 'owners:{title:\'{{t("Owners")}}\',"x-component":"DepartmentOwnersField","x-decorator":"FormItem"},manager_in_charge:{title:\'{{t("分管领导")}}\',"x-component":"CollectionField","x-decorator":"FormItem","x-collection-field":"departments.manager_in_charge"},footer:');
-            content.replace('roles:{"x-component":"CollectionField","x-decorator":"FormItem","x-collection-field":"departments.roles"},footer:', 'roles:{"x-component":"CollectionField","x-decorator":"FormItem","x-collection-field":"departments.roles"},manager_in_charge:{title:\'{{t("分管领导")}}\',"x-component":"CollectionField","x-decorator":"FormItem","x-collection-field":"departments.manager_in_charge"},footer:');
-            content.replace('appends:["parent(recursively=true)","roles","owners"]', 'appends:["parent(recursively=true)","roles","owners","manager_in_charge"]');
-            content.replace(/departments_manager_users/g, 'departmentsUsers');
+            let content = fs_1.default.readFileSync(DEPT_BUNDLE_PATH, 'utf8');
+            content = content.replace('owners:{title:\'{{t("Owners")}}\',"x-component":"DepartmentOwnersField","x-decorator":"FormItem"},footer:', 'owners:{title:\'{{t("Owners")}}\',"x-component":"DepartmentOwnersField","x-decorator":"FormItem"},manager_in_charge:{title:\'{{t("分管领导")}}\',"x-component":"CollectionField","x-decorator":"FormItem","x-collection-field":"departments.manager_in_charge"},footer:');
+            content = content.replace('roles:{"x-component":"CollectionField","x-decorator":"FormItem","x-collection-field":"departments.roles"},footer:', 'roles:{"x-component":"CollectionField","x-decorator":"FormItem","x-collection-field":"departments.roles"},manager_in_charge:{title:\'{{t("分管领导")}}\',"x-component":"CollectionField","x-decorator":"FormItem","x-collection-field":"departments.manager_in_charge"},footer:');
+            content = content.replace('appends:["parent(recursively=true)","roles","owners"]', 'appends:["parent(recursively=true)","roles","owners","manager_in_charge"]');
+            content = content.replace(/departments_manager_users/g, 'departmentsUsers');
             patchedBundle = content;
-            return content;
+            return patchedBundle;
         }
         app.use(async (ctx, next) => {
             if (ctx.method !== 'GET')
@@ -155,36 +193,57 @@ module.exports = class DashboardHomePlugin extends server_1.Plugin {
         (0, dashboard_1.registerDashboardRoutes)(app, pluginRef);
         (0, weather_1.registerWeatherRoutes)(app);
         (0, people_dynamic_1.registerPeopleDynamicRoutes)(app);
-    // Middleware: intercept construction_daily_log:trigger on resource manager
-    app.resourceManager.use(async (ctx, next) => {
-        const a = ctx.action || {};
-        const p = a.params || {};
-        const rn = p.resourceName || '';
-        const an = p.actionName || '';
-        if (rn.indexOf('construction_daily_log') >= 0 && (an === 'trigger' || an === 'triggerNew')) {
-            const body = ctx.request.body || {};
-            if (!p.filterByTk && (body.project_id || body.project_name_NO)) {
-                try {
-                    const repo = db.getRepository('construction_daily_log');
-                    const values = {};
-                    for (const k in body) {
-                        if (k !== 'triggerWorkflows') values[k] = body[k];
+        // Register department ACL middleware (injects into ACL pipeline before core)
+        (0, department_acl_1.registerDepartmentAcl)(app, db);
+        // Register department admin API
+        (0, dept_admin_api_1.registerDeptAdminApi)(app, pluginRef);
+        // Register department admin pages
+        (0, dept_admin_pages_1.registerDeptAdminPages)(app);
+        // Middleware: intercept construction_daily_log:trigger and create record first
+        app.resourceManager.use(async (ctx, next) => {
+            const action = ctx.action || {};
+            const params = action.params || {};
+            if (params.resourceName === 'construction_daily_log' && params.actionName === 'trigger' && !params.filterByTk) {
+                const values = params.values || {};
+                if (values.project_id || values.project_name_NO) {
+                    try {
+                        const repo = db.getRepository('construction_daily_log');
+                        const created = await repo.create({ values });
+                        ctx.action.params.filterByTk = created.id;
+                        ctx.action.params.values = { ...values, id: created.id };
                     }
-                    const created = await repo.create({ values });
-                    a.params.filterByTk = created.id;
-                    console.log('[rmw] created log ' + created.id + ' for trigger');
-                }
-                catch (e) {
-                    console.log('[rmw] create failed:', e.message);
+                    catch (e) {
+                        console.log('[trigger-mw] create failed:', e.message);
+                    }
                 }
             }
-        }
-        await next();
-    }, { tag: 'dashboard-home-trigger' });
-
-    // Auto-fill hooks for construction daily entries and logs
-    const entriesCol = db.getCollection('construction_daily_entries');
-    const logCol = db.getCollection('construction_daily_log');
+            await next();
+        }, { tag: 'dashboard-home-trigger', after: 'dataSource' });
+        // Middleware: enrich auth:check response with departments (for linkage rules)
+        app.resourceManager.use(async (ctx, next) => {
+            await next();
+            const action = ctx.action || {};
+            if (action.resourceName === 'auth' && action.actionName === 'check') {
+                const body = ctx.body;
+                if (body && body.data && body.data.id && !body.data.departments) {
+                    try {
+                        const user = await db.getRepository('users').findOne({
+                            filterByTk: body.data.id,
+                            appends: ['departments']
+                        });
+                        if (user && user.departments) {
+                            body.data.departments = user.departments;
+                        }
+                    }
+                    catch (e) {
+                        console.log('[auth-check-enrich] Error:', e.message);
+                    }
+                }
+            }
+        }, { tag: 'dashboard-home-auth-enrich', after: 'dataSource' });
+        // Auto-fill hooks for construction daily entries and logs
+        const entriesCol = db.getCollection('construction_daily_entries');
+        const logCol = db.getCollection('construction_daily_log');
         // Add aggregated_up_to field for tracking aggregation state
         if (logCol) {
             try {
@@ -319,8 +378,10 @@ module.exports = class DashboardHomePlugin extends server_1.Plugin {
                             aggLogDate = s.slice(0, 4) + '-' + s.slice(4, 6) + '-' + s.slice(6, 8);
                         }
                         const whereClause = { entry_date: aggLogDate };
-                        if (aggProjectId) whereClause.project_id = aggProjectId;
-                        if (aggProjectNameNo) whereClause.project_name_NO = aggProjectNameNo;
+                        if (aggProjectId)
+                            whereClause.project_id = aggProjectId;
+                        if (aggProjectNameNo)
+                            whereClause.project_name_NO = aggProjectNameNo;
                         const entries = await record.sequelize.model('construction_daily_entries').findAll({
                             where: whereClause
                         });
@@ -331,13 +392,20 @@ module.exports = class DashboardHomePlugin extends server_1.Plugin {
                             for (let i = 0; i < entries.length; i++) {
                                 const e = entries[i];
                                 const n = (i + 1) + '. ';
-                                if (e.get('work_content')) workContent.push(n + e.get('work_content'));
-                                if (e.get('quality_issues')) qualityIssues.push(n + e.get('quality_issues'));
-                                if (e.get('safety_issues')) safetyIssues.push(n + e.get('safety_issues'));
-                                if (e.get('others')) others.push(n + e.get('others'));
-                                if (e.get('personnel_count')) personnelCount.push(n + e.get('personnel_count'));
-                                if (e.get('equipment_usage')) equipmentUsage.push(n + e.get('equipment_usage'));
-                                if (e.get('material_usage')) materialUsage.push(n + e.get('material_usage'));
+                                if (e.get('work_content'))
+                                    workContent.push(n + e.get('work_content'));
+                                if (e.get('quality_issues'))
+                                    qualityIssues.push(n + e.get('quality_issues'));
+                                if (e.get('safety_issues'))
+                                    safetyIssues.push(n + e.get('safety_issues'));
+                                if (e.get('others'))
+                                    others.push(n + e.get('others'));
+                                if (e.get('personnel_count'))
+                                    personnelCount.push(n + e.get('personnel_count'));
+                                if (e.get('equipment_usage'))
+                                    equipmentUsage.push(n + e.get('equipment_usage'));
+                                if (e.get('material_usage'))
+                                    materialUsage.push(n + e.get('material_usage'));
                             }
                             record.set('work_content', workContent.join('\n'));
                             record.set('quality_issues', qualityIssues.join('\n'));
@@ -405,8 +473,9 @@ try{
   if(c.value){c.style.background='#f0f5ff';c.style.borderColor='#91d5ff'}
   else console.log('[agg] project field not found in parent DOM');
 }catch(e){console.log('[agg] parent access denied:',e.message)}
+var up=new URLSearchParams(location.search),code=up.get('code'),dt=up.get('date');
 if(!c.value)c.placeholder='手动输入项目编号';
-if(code){c.value=code;c.style.background='#f0f5ff';c.style.borderColor='#91d5ff'}else{c.placeholder='手动输入项目编号'}
+if(code){c.value=code;c.style.background='#f0f5ff';c.style.borderColor='#91d5ff'}else if(!c.value)c.placeholder='手动输入项目编号';
 if(dt){var m=dt.match(/(\\d{4})[\\-\\/](\\d{1,2})[\\-\\/](\\d{1,2})/);if(m)d.value=m[1]+'-'+String(Number(m[2])).padStart(2,'0')+'-'+String(Number(m[3])).padStart(2,'0')}
 else d.value=new Date().toISOString().split('T')[0];
 
@@ -414,7 +483,7 @@ async function rf(){var code=c.value.trim(),dt=d.value;if(!code||!dt){n.textCont
 c.addEventListener('change',rf);d.addEventListener('change',rf);
 if(code&&d.value)setTimeout(rf,300);
 
-b.addEventListener('click',async function(){var code=c.value.trim(),dt=d.value;if(!code||!dt){alert('请填写项目编号和日期');return}var ymd=parseInt(dt.replace(/-/g,''));b.disabled=true;b.textContent='汇总中...';try{var r=await fetch('/api/__pd__/aggregate-log',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({projectNameNo:code,date:ymd})});var j=await r.json();if(j.code===0&&j.data?.updated){var msg='汇总完成，新增 '+j.data.newEntryCount+' 份';st=document.getElementById('ok');if(st){st.textContent=msg;st.style.display='inline';n.textContent=j.data.totalEntryCount;b.style.display='none'};var lid=j.data.logId;if(lid){try{parent.location.href='/admin/collections/construction_daily_log/records/'+lid+'/edit'}catch(e){}}}else if(j.code===0){var m=j.data?.message||'没有新内容需要汇总';st=document.getElementById('ok');if(st){st.textContent=m;st.style.display='inline'}}else alert('汇总失败：'+(j.msg||'未知错误'));rf()}catch(e){alert('汇总失败: '+e.message)}finally{b.disabled=false;if(b.style.display!=='none')b.textContent='\u26A1 汇总日志'}});
+b.addEventListener('click',async function(){var code=c.value.trim(),dt=d.value;if(!code||!dt){alert('请填写项目编号和日期');return}var ymd=parseInt(dt.replace(/-/g,''));b.disabled=true;b.textContent='汇总中...';try{var r=await fetch('/api/__pd__/aggregate-log',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({projectNameNo:code,date:ymd})});var j=await r.json();if(j.code===0&&j.data?.updated)alert('汇总完成，新增 '+j.data.newEntryCount+' 份');else if(j.code===0)alert(j.data?.message||'没有新内容需要汇总');else alert('汇总失败：'+(j.msg||'未知错误'));rf()}catch(e){alert('汇总失败: '+e.message)}finally{b.disabled=false;b.textContent='\u26A1 汇总日志'}});
 })();
 </script></body></html>`;
         }, { tag: 'dashboard-home', before: 'dataSource' });

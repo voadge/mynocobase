@@ -395,6 +395,7 @@
             border-top: 1px solid rgba(0, 212, 255, 0.1);
         }
         .footer a { color: var(--primary); text-decoration: none; }
+        .beian-icon { height: 16px; vertical-align: middle; margin-right: 2px; }
 
         @keyframes fadeIn {
             from { opacity: 0; transform: translateY(20px); }
@@ -635,8 +636,8 @@
         <div class="footer">
             <p>贵州遵大数智化平台 v2.0.57 | 
                <a href="/admin/alruvklcz9v" target="_blank">管理后台</a> | <a href="/admin/alruvklcz9v" target="_blank">访问系统</a> | 
-               服务器: 110.42.236.231 | 
-               运行时间: <span id="uptime"></span>
+               <img src="/dashboard/备案图标.png" class="beian-icon"> <a href="https://beian.mps.gov.cn/#/query/webSearch?code=51162302000288" rel="noreferrer" target="_blank">川公网安备51162302000288号</a> | 
+               <a href="https://beian.miit.gov.cn/" target="_blank">蜀ICP备2026030576号</a>
             </p>
         </div>
     </div>
@@ -1032,10 +1033,12 @@
         }
 
         function updateUptime() {
+            const el=document.getElementById('uptime');
+            if (!el) return;
             const s=new Date('2026-05-22T00:00:00');
             const n=new Date();
             const df=n-s;
-            document.getElementById('uptime').textContent=`${Math.floor(df/86400000)}天 ${Math.floor((df%86400000)/3600000)}小时`;
+            el.textContent=`${Math.floor(df/86400000)}天 ${Math.floor((df%86400000)/3600000)}小时`;
         }
 
         loadSource(0);

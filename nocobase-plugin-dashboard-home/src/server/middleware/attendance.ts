@@ -3,6 +3,7 @@
  */
 import type { Context } from '@nocobase/server';
 import { isAuthenticated } from './auth';
+import { getUserApprovalLevels } from './dept-helpers';
 
 type Db = any;
 type PluginInstance = { db: Db; isAuthenticated: typeof isAuthenticated };
@@ -70,7 +71,7 @@ export function registerAttendanceRoutes(app: any, plugin: PluginInstance): void
       if (isAdmin) {
         const allRecs = await db.getRepository('attendance_records').find({
           filter: {
-            workflow_status: { $in: ['level1_pending', 'level2_pending', 'level3a_pending', 'level3b_pending', 'level4_pending'] },
+            workflow_status: { $in: ['level1_pending', 'level2_pending', 'level3_pending', 'level4_pending', 'level5_pending', 'level3a_pending', 'level3b_pending'] },
             check_type: { $in: ['请假', '出差'] }
           },
           appends: ['createdBy', 'createdBy.departments'],
@@ -81,55 +82,17 @@ export function registerAttendanceRoutes(app: any, plugin: PluginInstance): void
         return;
       }
 
-      const orConditions: any[] = [];
-
-      // a) Department owner → level1_pending
-      const ownerDepts = await db.getRepository('departments').find({
-        filter: { 'owners.id': userId },
-        limit: 50
-      });
-      if (ownerDepts && ownerDepts.length > 0) {
-        const oids = ownerDepts.map((d: any) => d.id);
-        orConditions.push({
-          $and: [
-            { workflow_status: 'level1_pending' },
-            { 'createdBy.departments.id': { $in: oids } }
-          ]
-        });
-      }
-
-      // b) manager_in_charge → level2_pending, level3a_pending
-      const picDepts = await db.getRepository('departments').find({
-        filter: { 'manager_in_charge.id': userId },
-        limit: 50
-      });
-      if (picDepts && picDepts.length > 0) {
-        const pids = picDepts.map((d: any) => d.id);
-        orConditions.push({
-          $and: [
-            { workflow_status: { $in: ['level2_pending', 'level3a_pending'] } },
-            { 'createdBy.departments.id': { $in: pids } }
-          ]
-        });
-      }
-
-      // c) hr_admin role → level3b_pending
-      if (roles.indexOf('hr_admin') !== -1) {
-        orConditions.push({ workflow_status: 'level3b_pending' });
-      }
-
-      // d) GeneralManager role → level4_pending
-      if (roles.indexOf('GeneralManager') !== -1) {
-        orConditions.push({ workflow_status: 'level4_pending' });
-      }
-
-      if (orConditions.length === 0) {
+      const allowedLevels = await getUserApprovalLevels(userId, roles, db);
+      if (allowedLevels.length === 0) {
         ctx.body = { data: [], roles: roles, reason: 'no_authority' };
         return;
       }
 
       const recs = await db.getRepository('attendance_records').find({
-        filter: { $or: orConditions, check_type: { $in: ['请假', '出差'] } },
+        filter: {
+          workflow_status: { $in: allowedLevels },
+          check_type: { $in: ['请假', '出差'] }
+        },
         appends: ['createdBy', 'createdBy.departments'],
         sort: '-check_time',
         limit: 50
@@ -175,44 +138,8 @@ export function registerAttendanceRoutes(app: any, plugin: PluginInstance): void
       const curStatus = record.workflow_status;
       const creatorId = record.createdById || (record.createdBy && record.createdBy.id);
 
-      async function isDeptOwner(uid: number, cid: number): Promise<boolean> {
-        if (isAdmin) return true;
-        const depts = await db.getRepository('departments').find({
-          filter: { 'members.id': cid },
-          limit: 20
-        });
-        for (let i = 0; i < depts.length; i++) {
-          const d = await db.getRepository('departments').findOne({
-            filter: { id: depts[i].id, 'owners.id': uid },
-            limit: 1
-          });
-          if (d) return true;
-        }
-        return false;
-      }
-      async function isDeptPic(uid: number, cid: number): Promise<boolean> {
-        if (isAdmin) return true;
-        const depts = await db.getRepository('departments').find({
-          filter: { 'members.id': cid },
-          limit: 20
-        });
-        for (let i = 0; i < depts.length; i++) {
-          const d = await db.getRepository('departments').findOne({
-            filter: { id: depts[i].id, 'manager_in_charge.id': uid },
-            limit: 1
-          });
-          if (d) return true;
-        }
-        return false;
-      }
-
-      let allowed = false;
-      if (curStatus === 'level1_pending') allowed = await isDeptOwner(userId, creatorId);
-      else if (curStatus === 'level2_pending') allowed = await isDeptPic(userId, creatorId);
-      else if (curStatus === 'level3a_pending') allowed = await isDeptPic(userId, creatorId);
-      else if (curStatus === 'level3b_pending') allowed = isAdmin || roles.indexOf('hr_admin') !== -1;
-      else if (curStatus === 'level4_pending') allowed = isAdmin || roles.indexOf('GeneralManager') !== -1;
-      else if (isAdmin) allowed = true;
+      const allowedLevels = await getUserApprovalLevels(userId, roles, db);
+      const allowed = isAdmin || allowedLevels.indexOf(curStatus) !== -1;
 
       if (!allowed) {
         ctx.body = { status: 'error', message: '您没有权限处理此审批' };
@@ -226,9 +153,12 @@ export function registerAttendanceRoutes(app: any, plugin: PluginInstance): void
       let nextStatus = 'approved';
       if (curStatus === 'level1_pending') nextStatus = 'approved';
       else if (curStatus === 'level2_pending') nextStatus = 'approved';
-      else if (curStatus === 'level3a_pending') nextStatus = 'level3b_pending';
-      else if (curStatus === 'level3b_pending') nextStatus = 'approved';
+      else if (curStatus === 'level3_pending') nextStatus = 'approved';
       else if (curStatus === 'level4_pending') nextStatus = 'approved';
+      else if (curStatus === 'level5_pending') nextStatus = 'approved';
+      // backward compat: old level3a/3b records
+      else if (curStatus === 'level3a_pending') nextStatus = 'approved';
+      else if (curStatus === 'level3b_pending') nextStatus = 'approved';
       await repo.update({ filter: { id: recordId }, values: { workflow_status: nextStatus, verify_status: 'approved_by_' + curStatus } });
       // 请假/出差审批最终通过 → 更新归档统计
       if (nextStatus === 'approved' && (record.check_type === '请假' || record.check_type === '出差')) {

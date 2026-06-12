@@ -12,6 +12,9 @@ import { registerAttendanceRoutes } from './middleware/attendance';
 import { registerDashboardRoutes } from './middleware/dashboard';
 import { registerWeatherRoutes } from './middleware/weather';
 import { registerPeopleDynamicRoutes } from './middleware/people-dynamic';
+import { registerDepartmentAcl } from './middleware/department-acl';
+import { registerDeptAdminApi } from './middleware/dept-admin-api';
+import { registerDeptAdminPages } from './middleware/dept-admin-pages';
 import { qwFetch, QW_WEATHER_HOST } from './utils/qw-jwt';
 
 const STORAGE_DIR = '/app/nocobase/storage/dashboard';
@@ -36,6 +39,44 @@ module.exports = class DashboardHomePlugin extends Plugin {
       arCol.sync({ alter: true });
     }
 
+    // Register department_acl_rules collection
+    db.collection({
+      name: 'department_acl_rules',
+      fields: [
+        { type: 'bigInt', name: 'id', primaryKey: true, autoIncrement: true },
+        { type: 'belongsTo', name: 'department', target: 'departments', foreignKey: 'departmentId' },
+        { type: 'integer', name: 'priority', defaultValue: 100 },
+        { type: 'string', name: 'mode', defaultValue: 'dept' },
+        { type: 'belongsTo', name: 'role', target: 'roles', foreignKey: 'roleId' },
+        { type: 'string', name: 'resourceName' },
+        { type: 'string', name: 'action' },
+        { type: 'boolean', name: 'allow', defaultValue: true },
+        { type: 'json', name: 'dataScope', nullable: true },
+        { type: 'string', name: 'ruleNo', nullable: true },
+        { type: 'text', name: 'remark', nullable: true },
+        { type: 'boolean', name: 'enabled', defaultValue: true },
+        { type: 'belongsTo', name: 'createdBy', target: 'users' },
+      ],
+    });
+
+    // Register department_approval_routes collection
+    db.collection({
+      name: 'department_approval_routes',
+      fields: [
+        { type: 'bigInt', name: 'id', primaryKey: true, autoIncrement: true },
+        { type: 'string', name: 'name' },
+        { type: 'string', name: 'levelKey' },
+        { type: 'string', name: 'mode', defaultValue: 'dept' },
+        { type: 'belongsTo', name: 'department', target: 'departments', foreignKey: 'departmentId' },
+        { type: 'belongsTo', name: 'role', target: 'roles', foreignKey: 'roleId' },
+        { type: 'text', name: 'remark', nullable: true },
+        { type: 'boolean', name: 'enabled', defaultValue: true },
+        { type: 'belongsTo', name: 'createdBy', target: 'users' },
+      ],
+    });
+
+    await db.sync();
+
     // Normalize path — strip /api prefix for consistent path matching
     app.use(async (ctx: any, next: () => Promise<void>) => {
       ctx.state.reqPath = ctx.path.replace(/^\/api/, '');
@@ -54,22 +95,22 @@ module.exports = class DashboardHomePlugin extends Plugin {
     function getPatchedBundle(): string | null {
       if (patchedBundle) return patchedBundle;
       if (!DEPT_BUNDLE_PATH) return null;
-      const content = fs.readFileSync(DEPT_BUNDLE_PATH, 'utf8');
-      content.replace(
+      let content = fs.readFileSync(DEPT_BUNDLE_PATH, 'utf8');
+      content = content.replace(
         'owners:{title:\'{{t("Owners")}}\',"x-component":"DepartmentOwnersField","x-decorator":"FormItem"},footer:',
         'owners:{title:\'{{t("Owners")}}\',"x-component":"DepartmentOwnersField","x-decorator":"FormItem"},manager_in_charge:{title:\'{{t("分管领导")}}\',"x-component":"CollectionField","x-decorator":"FormItem","x-collection-field":"departments.manager_in_charge"},footer:'
       );
-      content.replace(
+      content = content.replace(
         'roles:{"x-component":"CollectionField","x-decorator":"FormItem","x-collection-field":"departments.roles"},footer:',
         'roles:{"x-component":"CollectionField","x-decorator":"FormItem","x-collection-field":"departments.roles"},manager_in_charge:{title:\'{{t("分管领导")}}\',"x-component":"CollectionField","x-decorator":"FormItem","x-collection-field":"departments.manager_in_charge"},footer:'
       );
-      content.replace(
+      content = content.replace(
         'appends:["parent(recursively=true)","roles","owners"]',
         'appends:["parent(recursively=true)","roles","owners","manager_in_charge"]'
       );
-      content.replace(/departments_manager_users/g, 'departmentsUsers');
+      content = content.replace(/departments_manager_users/g, 'departmentsUsers');
       patchedBundle = content;
-      return content;
+      return patchedBundle;
     }
 
     app.use(async (ctx: any, next: () => Promise<void>) => {
@@ -150,6 +191,15 @@ module.exports = class DashboardHomePlugin extends Plugin {
     registerWeatherRoutes(app);
     registerPeopleDynamicRoutes(app);
 
+    // Register department ACL middleware (injects into ACL pipeline before core)
+    registerDepartmentAcl(app, db);
+
+    // Register department admin API
+    registerDeptAdminApi(app, pluginRef);
+
+    // Register department admin pages
+    registerDeptAdminPages(app);
+
     // Middleware: intercept construction_daily_log:trigger and create record first
     app.resourceManager.use(async (ctx: any, next: () => Promise<void>) => {
       const action = ctx.action || {};
@@ -169,6 +219,28 @@ module.exports = class DashboardHomePlugin extends Plugin {
       }
       await next();
     }, { tag: 'dashboard-home-trigger', after: 'dataSource' });
+
+    // Middleware: enrich auth:check response with departments (for linkage rules)
+    app.resourceManager.use(async (ctx: any, next: () => Promise<void>) => {
+      await next();
+      const action = ctx.action || {};
+      if (action.resourceName === 'auth' && action.actionName === 'check') {
+        const body = ctx.body;
+        if (body && body.data && body.data.id && !body.data.departments) {
+          try {
+            const user = await db.getRepository('users').findOne({
+              filterByTk: body.data.id,
+              appends: ['departments']
+            });
+            if (user && user.departments) {
+              body.data.departments = user.departments;
+            }
+          } catch (e) {
+            console.log('[auth-check-enrich] Error:', e.message);
+          }
+        }
+      }
+    }, { tag: 'dashboard-home-auth-enrich', after: 'dataSource' });
 
     // Auto-fill hooks for construction daily entries and logs
     const entriesCol = db.getCollection('construction_daily_entries');
@@ -389,8 +461,9 @@ try{
   if(c.value){c.style.background='#f0f5ff';c.style.borderColor='#91d5ff'}
   else console.log('[agg] project field not found in parent DOM');
 }catch(e){console.log('[agg] parent access denied:',e.message)}
+var up=new URLSearchParams(location.search),code=up.get('code'),dt=up.get('date');
 if(!c.value)c.placeholder='手动输入项目编号';
-if(code){c.value=code;c.style.background='#f0f5ff';c.style.borderColor='#91d5ff'}else{c.placeholder='手动输入项目编号'}
+if(code){c.value=code;c.style.background='#f0f5ff';c.style.borderColor='#91d5ff'}else if(!c.value)c.placeholder='手动输入项目编号';
 if(dt){var m=dt.match(/(\\d{4})[\\-\\/](\\d{1,2})[\\-\\/](\\d{1,2})/);if(m)d.value=m[1]+'-'+String(Number(m[2])).padStart(2,'0')+'-'+String(Number(m[3])).padStart(2,'0')}
 else d.value=new Date().toISOString().split('T')[0];
 
