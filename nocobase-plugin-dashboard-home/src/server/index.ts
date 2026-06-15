@@ -12,7 +12,6 @@ import { registerAttendanceRoutes } from './middleware/attendance';
 import { registerDashboardRoutes } from './middleware/dashboard';
 import { registerWeatherRoutes } from './middleware/weather';
 import { registerPeopleDynamicRoutes } from './middleware/people-dynamic';
-import { registerDepartmentAcl } from './middleware/department-acl';
 import { registerDeptAdminApi } from './middleware/dept-admin-api';
 import { registerDeptAdminPages } from './middleware/dept-admin-pages';
 import { qwFetch, QW_WEATHER_HOST } from './utils/qw-jwt';
@@ -39,43 +38,101 @@ module.exports = class DashboardHomePlugin extends Plugin {
       arCol.sync({ alter: true });
     }
 
-    // Register department_acl_rules collection
-    db.collection({
-      name: 'department_acl_rules',
-      fields: [
-        { type: 'bigInt', name: 'id', primaryKey: true, autoIncrement: true },
-        { type: 'belongsTo', name: 'department', target: 'departments', foreignKey: 'departmentId' },
-        { type: 'integer', name: 'priority', defaultValue: 100 },
-        { type: 'string', name: 'mode', defaultValue: 'dept' },
-        { type: 'belongsTo', name: 'role', target: 'roles', foreignKey: 'roleId' },
-        { type: 'string', name: 'resourceName' },
-        { type: 'string', name: 'action' },
-        { type: 'boolean', name: 'allow', defaultValue: true },
-        { type: 'json', name: 'dataScope', nullable: true },
-        { type: 'string', name: 'ruleNo', nullable: true },
-        { type: 'text', name: 'remark', nullable: true },
-        { type: 'boolean', name: 'enabled', defaultValue: true },
-        { type: 'belongsTo', name: 'createdBy', target: 'users' },
-      ],
-    });
 
-    // Register department_approval_routes collection
-    db.collection({
-      name: 'department_approval_routes',
-      fields: [
-        { type: 'bigInt', name: 'id', primaryKey: true, autoIncrement: true },
-        { type: 'string', name: 'name' },
-        { type: 'string', name: 'levelKey' },
-        { type: 'string', name: 'mode', defaultValue: 'dept' },
-        { type: 'belongsTo', name: 'department', target: 'departments', foreignKey: 'departmentId' },
-        { type: 'belongsTo', name: 'role', target: 'roles', foreignKey: 'roleId' },
-        { type: 'text', name: 'remark', nullable: true },
-        { type: 'boolean', name: 'enabled', defaultValue: true },
-        { type: 'belongsTo', name: 'createdBy', target: 'users' },
-      ],
-    });
 
-    await db.sync();
+    // Register virtual computed fields on users collection (Plan B: native ACL)
+    const usersCol = db.getCollection('users');
+    if (usersCol) {
+      if (!usersCol.hasField('departmentIds')) {
+        usersCol.addField('departmentIds', {
+          type: 'virtual',
+          async value(user: any, ctx: any) {
+            const departments = ctx?.state?.currentUser?.departments;
+            if (departments) return departments.map((d: any) => d.id);
+            const dus = await ctx.db.getRepository('departmentsUsers').find({
+              filter: { userId: user.id },
+              fields: ['departmentId']
+            });
+            return dus.map((d: any) => d.departmentId);
+          }
+        });
+      }
+      if (!usersCol.hasField('childDepartmentIds')) {
+        usersCol.addField('childDepartmentIds', {
+          type: 'virtual',
+          async value(user: any, ctx: any) {
+            const deptIds = await user.get('departmentIds') || [];
+            if (!Array.isArray(deptIds) || !deptIds.length) return [];
+            const allIds = new Set<number>(deptIds);
+            const queue = [...deptIds];
+            while (queue.length) {
+              const pid = queue.shift()!;
+              const children = await ctx.db.getRepository('departments').find({
+                filter: { parentId: pid },
+                fields: ['id']
+              });
+              for (const c of children) {
+                if (!allIds.has(c.id)) { allIds.add(c.id); queue.push(c.id); }
+              }
+            }
+            return Array.from(allIds);
+          }
+        });
+      }
+      if (!usersCol.hasField('accessibleProjectIds')) {
+        usersCol.addField('accessibleProjectIds', {
+          type: 'virtual',
+          async value(user: any, ctx: any) {
+            const deptIds = await user.get('childDepartmentIds') || [];
+            if (!Array.isArray(deptIds) || !deptIds.length) return [];
+            const projects = await ctx.db.getRepository('projects').find({
+              filter: { departmentId: { $in: deptIds } },
+              fields: ['id']
+            });
+            return projects.map((p: any) => p.id);
+          }
+        });
+      }
+
+      // Restrict nickname modification to root users only
+      usersCol.model.addHook('beforeUpdate', async (record: any, options: any) => {
+        const ctx = options.ctx;
+        if (ctx?.state?.currentUser) {
+          const userRoles = ctx.state.currentUser.roles?.map((r: any) => r.name) || [];
+          const isRoot = userRoles.includes('root');
+          if (!isRoot && record.changed('nickname')) {
+            record.set('nickname', record.previous('nickname'));
+            console.log('[nickname-guard] Non-root user attempted to modify nickname, reverted');
+          }
+        }
+      });
+    }
+
+    // Auto-assign departmentId on new project creation
+    const projCol = db.getCollection('projects');
+    if (projCol) {
+      if (!projCol.hasField('departmentId')) {
+        projCol.addField('departmentId', { type: 'bigInt', nullable: true });
+      }
+      projCol.model.addHook('beforeCreate', async (record: any, options: any) => {
+        if (!record.get('departmentId')) {
+          const userId = record.get('createdById');
+          if (userId) {
+            try {
+              const user = await db.getRepository('users').findOne({
+                filterByTk: userId,
+                fields: ['mainDepartmentId']
+              });
+              if (user?.mainDepartmentId) {
+                record.set('departmentId', user.mainDepartmentId);
+              }
+            } catch (e) {
+              console.log('[proj-dept-hook] Error:', e.message);
+            }
+          }
+        }
+      });
+    }
 
     // Normalize path — strip /api prefix for consistent path matching
     app.use(async (ctx: any, next: () => Promise<void>) => {
@@ -190,9 +247,6 @@ module.exports = class DashboardHomePlugin extends Plugin {
     registerDashboardRoutes(app, pluginRef);
     registerWeatherRoutes(app);
     registerPeopleDynamicRoutes(app);
-
-    // Register department ACL middleware (injects into ACL pipeline before core)
-    registerDepartmentAcl(app, db);
 
     // Register department admin API
     registerDeptAdminApi(app, pluginRef);
@@ -408,6 +462,34 @@ module.exports = class DashboardHomePlugin extends Plugin {
         }
       });
     }
+
+    // ACL context endpoint for frontend department linkage (placed before auth-check)
+    app.use(async (ctx: any, next: () => Promise<void>) => {
+      if (ctx.method !== 'GET' || ctx.state.reqPath !== '/__pd__/acl-context') {
+        return await next();
+      }
+      try {
+        const user = ctx.state.currentUser;
+        if (!user) {
+          ctx.status = 401;
+          ctx.body = { error: 'Unauthenticated' };
+          return;
+        }
+        ctx.body = {
+          user: {
+            id: user.id,
+            mainDepartmentId: user.mainDepartmentId,
+            departmentIds: user.departments?.map((d: any) => d.id) || [],
+            departments: user.departments || [],
+          },
+          attachRoles: ctx.state.attachRoles || [],
+        };
+      } catch (e) {
+        console.error('[acl-context] Error:', e.message);
+        ctx.status = 500;
+        ctx.body = { error: 'Internal server error', message: e.message };
+      }
+    }, { tag: 'dashboard-home', before: 'dataSource' });
 
     // Auth-check endpoint for nginx auth_request
     app.use(async (ctx: any, next: () => Promise<void>) => {
