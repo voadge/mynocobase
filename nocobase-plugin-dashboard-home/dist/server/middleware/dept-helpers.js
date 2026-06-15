@@ -40,30 +40,32 @@ async function resolveApproversByRoute(departmentId, levelKey, db) {
 }
 /**
  * Given a user's department IDs and role names, return all levelKeys they can approve.
- * (Reverse of resolveApproversByRoute — used for "my pending approvals" listing.)
+ * Role/flag → level mapping:
+ *   ProfessionalManager (专业负责人) → level1_pending
+ *   is_person_in_charge OR project_manager (部门负责人) → level2_pending
+ *   is_manager_in_charge (分管领导) → level3_pending
+ *   GeneralManager (总经理) → level4_pending
+ *   Chairman (董事长) → level5_pending
  */
 async function getUserApprovalLevels(userId, userRoleNames, db) {
     const deptUsers = await db.getRepository('departmentsUsers').find({
         filter: { userId },
-        appends: ['department'],
+        fields: ['departmentId', 'isOwner', 'is_manager_in_charge'],
     });
-    const deptIds = deptUsers.map((d) => d.departmentId);
-    if (deptIds.length === 0)
+    if (deptUsers.length === 0)
         return [];
-    const routes = await db.getRepository('department_approval_routes').find({
-        filter: { enabled: true },
-    });
-    const allowedLevels = [];
-    for (const route of routes) {
-        const inDept = deptIds.includes(route.departmentId);
-        if (route.mode === 'dept' && inDept) {
-            allowedLevels.push(route.levelKey);
-        }
-        else if (route.mode === 'dept_and_role' && inDept && route.roleId) {
-            if (userRoleNames.includes(route.roleId)) {
-                allowedLevels.push(route.levelKey);
-            }
-        }
-    }
-    return [...new Set(allowedLevels)];
+    const levels = [];
+    const isOwner = deptUsers.some((d) => d.isOwner);
+    const isManagerInCharge = deptUsers.some((d) => d.is_manager_in_charge);
+    if (userRoleNames.includes('ProfessionalManager'))
+        levels.push('level1_pending');
+    if (isOwner)
+        levels.push('level2_pending');
+    if (isManagerInCharge)
+        levels.push('level3_pending');
+    if (userRoleNames.includes('GeneralManager'))
+        levels.push('level4_pending');
+    if (userRoleNames.includes('Chairman'))
+        levels.push('level5_pending');
+    return levels;
 }
