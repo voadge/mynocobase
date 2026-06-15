@@ -96,11 +96,10 @@ module.exports = class DashboardHomePlugin extends Plugin {
 
       // Restrict nickname modification to root users only
       usersCol.model.addHook('beforeUpdate', async (record: any, options: any) => {
-        const ctx = options.ctx;
-        if (ctx?.state?.currentUser) {
-          const userRoles = ctx.state.currentUser.roles?.map((r: any) => r.name) || [];
-          const isRoot = userRoles.includes('root');
-          if (!isRoot && record.changed('nickname')) {
+        if (record.changed('nickname')) {
+          const ctx = options.ctx;
+          const isRoot = ctx?.state?.currentUser?.roles?.some((r: any) => r.name === 'root');
+          if (!isRoot) {
             record.set('nickname', record.previous('nickname'));
             console.log('[nickname-guard] Non-root user attempted to modify nickname, reverted');
           }
