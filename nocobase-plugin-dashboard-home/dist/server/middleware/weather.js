@@ -10,10 +10,22 @@ function registerWeatherRoutes(app) {
         }
         ctx.withoutDataWrapping = true;
         ctx.type = 'application/json; charset=utf-8';
-        const lat = ctx.query.lat;
-        const lng = ctx.query.lng;
+        const projectId = ctx.query.projectId;
+    let lat = ctx.query.lat;
+        let lng = ctx.query.lng;
         let city = ctx.query.city || '';
         city = city.replace(/市$/, '').replace(/地区$/, '');
+      if (projectId && ctx.db) {
+        try {
+          var p = await ctx.db.getRepository('projects').findOne({filterByTk: projectId});
+          if (p && p.location_lat && p.location_lon) {
+            lat = p.location_lat;
+            lng = p.location_lon;
+          } else if (p && p.location) {
+            city = p.project_name || p.location || '';
+          }
+        } catch(e) {}
+      }
         try {
             let loc = '';
             let locCity = '';
@@ -81,8 +93,9 @@ function registerWeatherRoutes(app) {
         }
         ctx.withoutDataWrapping = true;
         ctx.type = 'application/json; charset=utf-8';
-        const lat = ctx.query.lat;
-        const lng = ctx.query.lng;
+        const projectId = ctx.query.projectId;
+    let lat = ctx.query.lat;
+        let lng = ctx.query.lng;
         if (!lat || !lng) {
             ctx.body = { status: '0', address: null };
             return;

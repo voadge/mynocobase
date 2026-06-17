@@ -195,63 +195,73 @@ body {
   left: 0; top: 0;
   width: 100%; height: 100%;
   background: var(--modal-overlay);
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
-  padding: 20px;
+  padding: 60px 20px;
 }
 .modal-overlay.open { display: flex; }
 .modal {
   background: var(--modal-bg);
-  border-radius: 12px;
+  border-radius: 8px;
   max-width: 520px;
   width: 100%;
-  max-height: 80vh;
-  overflow-y: auto;
-  padding: 24px;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.2);
-  animation: modalIn 0.3s ease;
+  box-shadow: 0 6px 30px rgba(0,0,0,0.15);
+  animation: modalIn 0.25s ease;
+  position: relative;
 }
 @keyframes modalIn {
-  from { transform: translateY(20px); opacity: 0; }
+  from { transform: translateY(12px); opacity: 0; }
   to { transform: translateY(0); opacity: 1; }
 }
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px 0;
+}
+.modal-title {
+  font-size: 1em;
+  font-weight: 600;
+  color: var(--text);
+}
 .modal-close {
-  float: right;
   border: none;
   background: none;
-  font-size: 1.5em;
-  color: var(--text-muted);
+  font-size: 1.3em;
+  color: var(--text-secondary);
   cursor: pointer;
   line-height: 1;
-  padding: 0 4px;
+  padding: 0 2px;
+  transition: color 0.15s;
 }
 .modal-close:hover { color: var(--text); }
-.modal-title {
-  font-size: 1.15em;
-  font-weight: 600;
-  margin-bottom: 16px;
-  padding-right: 30px;
+.modal-body {
+  padding: 16px 20px 20px;
 }
-.modal-field {
-  margin-bottom: 12px;
+.modal-row {
+  display: flex;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
 }
-.modal-field-label {
-  font-size: 0.78em;
+.modal-row:last-child { border-bottom: none; }
+.modal-row-label {
+  width: 80px;
+  flex-shrink: 0;
+  font-size: 0.82em;
   color: var(--text-secondary);
-  margin-bottom: 2px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+  padding-top: 1px;
 }
-.modal-field-value {
-  font-size: 0.9em;
+.modal-row-value {
+  flex: 1;
+  font-size: 0.88em;
   color: var(--text);
   line-height: 1.5;
-  white-space: pre-wrap;
+  word-break: break-word;
 }
 .modal-divider {
   border: none;
   border-top: 1px solid var(--border);
-  margin: 16px 0;
+  margin: 8px 0;
 }
 .loading {
   display: flex;
@@ -291,16 +301,22 @@ body {
 
 <script>
 (function() {
-  var TOKEN_KEY = 'NOCOBASE_token';
+  var TOKEN_KEYS = ['NOCOBASE_TOKEN', 'nocobase_token', 'token', 'auth_token', 'access_token'];
   var SEEN_KEY = 'briefing_seen';
   var SCROLL_SPEED = 50;
   var PAUSE_AFTER_SCROLL = 1500;
-  var SEEN_DELAY = 3000;
+  var SEEN_DELAY = 15000;
   var MAX_AGE_DAYS = 7;
   var BRIEFING_API = '/api/briefings:list?pageSize=50&sort=createdAt';
   var RECORD_API = '/api/construction_daily_log:get?filterByTk=';
 
-  var token = localStorage.getItem(TOKEN_KEY);
+  var token = '';
+  for (var ki = 0; ki < TOKEN_KEYS.length; ki++) {
+    try { var v = localStorage.getItem(TOKEN_KEYS[ki]); if (v && v.length > 20) { token = v; break; } } catch(e) {}
+  }
+  if (!token) {
+    try { var m = document.cookie.match(/\bnb_token=([^;]+)/); if (m && m[1] && m[1].length > 20) token = m[1]; } catch(e) {}
+  }
   if (!token) {
     document.getElementById('app').innerHTML = '<div class="empty-state"><div class="empty-icon">🔒</div><div class="empty-title">未登录</div></div>';
     return;
@@ -620,7 +636,7 @@ body {
   }
 
   function renderModal(d, project, reviewer, approver) {
-    var fields = [
+    var rows = [
       { label: '项目', value: project.project_name || d.project_name || '' },
       { label: '日期', value: d.log_date ? String(d.log_date).slice(0,10) : '' },
       { label: '天气', value: d.weather || '' },
@@ -638,28 +654,29 @@ body {
     var hasReviewer = reviewer && (reviewer.nickname || reviewer.username);
     var hasApprover = approver && (approver.nickname || approver.username);
 
-    var html = '<button class="modal-close" onclick="closeModal()">&times;</button>';
-    html += '<div class="modal-title">施工日志详情</div>';
-    fields.forEach(function(f) {
-      if (!f.value && f.label !== '安全情况' && f.label !== '质量问题') return;
-      html += '<div class="modal-field"><div class="modal-field-label">' + f.label + '</div><div class="modal-field-value">' + esc(f.value) + '</div></div>';
+    var html = '<div class="modal-header"><div class="modal-title">施工日志详情</div><button class="modal-close" onclick="closeModal()">&times;</button></div>';
+    html += '<div class="modal-body">';
+    rows.forEach(function(r) {
+      if (!r.value && r.label !== '安全情况' && r.label !== '质量问题') return;
+      html += '<div class="modal-row"><div class="modal-row-label">' + esc(r.label) + '</div><div class="modal-row-value">' + esc(r.value) + '</div></div>';
     });
     if (hasReviewer || hasApprover) {
-      html += '<hr class="modal-divider">';
+      html += '<div class="modal-divider"></div>';
       if (hasReviewer) {
-        html += '<div class="modal-field"><div class="modal-field-label">复核人</div><div class="modal-field-value">' + esc(nameOf(reviewer)) + '</div></div>';
+        html += '<div class="modal-row"><div class="modal-row-label">复核人</div><div class="modal-row-value">' + esc(nameOf(reviewer)) + '</div></div>';
       }
       if (hasApprover) {
-        html += '<div class="modal-field"><div class="modal-field-label">审批人</div><div class="modal-field-value">' + esc(nameOf(approver)) + '</div></div>';
+        html += '<div class="modal-row"><div class="modal-row-label">审批人</div><div class="modal-row-value">' + esc(nameOf(approver)) + '</div></div>';
       }
     }
+    html += '</div>';
     modalContent.innerHTML = html;
   }
 
   function showModalSimple(title, msg) {
-    modalContent.innerHTML = '<button class="modal-close" onclick="closeModal()">&times;</button>' +
-      '<div class="modal-title">' + esc(title) + '</div>' +
-      '<div class="modal-field-value">' + esc(msg) + '</div>';
+    var html = '<div class="modal-header"><div class="modal-title">' + esc(title) + '</div><button class="modal-close" onclick="closeModal()">&times;</button></div>';
+    html += '<div class="modal-body"><div class="modal-row-value">' + esc(msg) + '</div></div>';
+    modalContent.innerHTML = html;
     modalOverlay.classList.add('open');
   }
 

@@ -79,7 +79,6 @@ services:
       - ./dashboard:/app/nocobase/storage/dashboard:ro
       - ./nocobase-plugin-dashboard-home:/app/nocobase/node_modules/@nocobase/plugin-dashboard-home:ro
       - ./entrypoint-wrapper.sh:/opt/noco-base/entrypoint-wrapper.sh:ro
-      - ./patch-departments.js:/tmp/patch-departments.js:ro
     networks:
       - nocobase
     depends_on:
