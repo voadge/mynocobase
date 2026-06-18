@@ -397,12 +397,10 @@ module.exports = class DashboardHomePlugin extends Plugin {
         }
         // Auto-fill weather from project location
         if (!record.get('weather')) {
-          const projectNameNo = record.get('project_name_NO');
-          const projectId = record.get('project_id');
-          const projectLookup = projectNameNo ? { project_code: projectNameNo } : (projectId ? { id: projectId } : null);
-          if (projectLookup) {
+          const projectFk = record.get('link-projectID');
+          if (projectFk) {
             try {
-              const proj = await record.sequelize.model('projects').findOne({ where: projectLookup });
+              const proj = await record.sequelize.model('projects').findByPk(projectFk);
               if (proj && proj.location_lat && proj.location_lon) {
                 const weather = await qwFetch('https://' + QW_WEATHER_HOST + '/v7/weather/now?location=' + encodeURIComponent(proj.location_lon + ',' + proj.location_lat));
                 if (weather && weather.code === '200' && weather.now) {
@@ -417,10 +415,9 @@ module.exports = class DashboardHomePlugin extends Plugin {
           }
         }
         // Auto-aggregate entries into the log
-        const aggProjectId = record.get('project_id');
-        const aggProjectNameNo = record.get('project_name_NO');
+        const aggProjectId = record.get('link-projectID');
         let aggLogDate = record.get('log_date');
-        if ((aggProjectId || aggProjectNameNo) && aggLogDate) {
+        if (aggProjectId && aggLogDate) {
           try {
             if (typeof aggLogDate === 'number' || /^\d{8}$/.test(String(aggLogDate))) {
               const s = String(aggLogDate);
@@ -428,7 +425,6 @@ module.exports = class DashboardHomePlugin extends Plugin {
             }
             const whereClause: Record<string, any> = { entry_date: aggLogDate };
             if (aggProjectId) whereClause.project_id = aggProjectId;
-            if (aggProjectNameNo) whereClause.project_name_NO = aggProjectNameNo;
             const entries = await record.sequelize.model('construction_daily_entries').findAll({
               where: whereClause
             });

@@ -303,12 +303,18 @@ body {
 (function() {
   var TOKEN_KEYS = ['NOCOBASE_TOKEN', 'nocobase_token', 'token', 'auth_token', 'access_token'];
   var SEEN_KEY = 'briefing_seen';
-  var SCROLL_SPEED = 50;
+  var SCROLL_SPEED = 25;
   var PAUSE_AFTER_SCROLL = 1500;
-  var SEEN_DELAY = 15000;
+  var TAB_DISPLAY_TIME = 15000;
+  var SEEN_DELAY = 30000;
   var MAX_AGE_DAYS = 7;
   var BRIEFING_API = '/api/briefings:list?pageSize=50&sort=createdAt';
   var RECORD_API = '/api/construction_daily_log:get?filterByTk=';
+
+  var ROUTE_MAP = {
+    '施工日志': { route: 'z9k63jbjdne', collection: 'construction_daily_log', serialField: 'log_no' },
+    '新增报备': { route: 'q03hdwvntli', collection: 'temporary_additions', serialField: 'addition_no' }
+  };
 
   var token = '';
   for (var ki = 0; ki < TOKEN_KEYS.length; ki++) {
@@ -468,7 +474,7 @@ body {
       html += '<div class="cards-scroll">';
       groups[type].forEach(function(b) {
         var seenClass = isUnseen(b.id) ? '' : ' seen';
-        html += '<div class="card' + seenClass + '" data-id="' + b.id + '" data-source="' + esc(b.source_workflow_id || '') + '" data-type="' + esc(b.briefing_type || '') + '">';
+        html += '<div class="card' + seenClass + '" data-id="' + b.id + '" data-source="' + esc(b.source_workflow_id || '') + '" data-serial="' + esc(b.FormSerialNo || '') + '" data-type="' + esc(b.briefing_type || '') + '">';
         html += '<div class="card-title">' + esc(b.title || '') + '</div>';
         html += '<div class="card-meta">' + formatDate(b.briefing_date) + '</div>';
         html += '<div class="card-summary">' + esc(b.summary || '') + '</div>';
@@ -482,7 +488,10 @@ body {
     stage.addEventListener('click', function(e) {
       var card = e.target.closest('.card');
       if (!card) return;
-      openModal(card);
+      var id = card.getAttribute('data-id');
+      markSeen(id);
+      updateBadge(id);
+      openNativeForm(card);
     });
   }
 
@@ -526,15 +535,22 @@ body {
 
     scrollEl.scrollTop = 0;
     var maxScroll = scrollEl.scrollHeight - scrollEl.clientHeight;
+    var tabStartTime = Date.now();
 
-    if (maxScroll <= 0) {
-      if (autoNext && !scrollPaused && categories.length > 1) {
-        scrollAnimId = setTimeout(function() {
+    function switchAfterMinTime() {
+      var elapsed = Date.now() - tabStartTime;
+      var remaining = Math.max(0, TAB_DISPLAY_TIME - elapsed);
+      scrollAnimId = setTimeout(function() {
+        if (autoNext && !scrollPaused && categories.length > 1) {
           var next = (currentTab + 1) % categories.length;
           switchTab(next);
           startScrollForTab(next, true);
-        }, PAUSE_AFTER_SCROLL);
-      }
+        }
+      }, remaining + PAUSE_AFTER_SCROLL);
+    }
+
+    if (maxScroll <= 0) {
+      switchAfterMinTime();
       return;
     }
 
@@ -550,13 +566,7 @@ body {
       if (progress < 1) {
         scrollAnimId = requestAnimationFrame(animate);
       } else {
-        if (autoNext && !scrollPaused && categories.length > 1) {
-          scrollAnimId = setTimeout(function() {
-            var next = (currentTab + 1) % categories.length;
-            switchTab(next);
-            startScrollForTab(next, true);
-          }, PAUSE_AFTER_SCROLL);
-        }
+        switchAfterMinTime();
       }
     }
 
@@ -610,29 +620,37 @@ body {
     }
   }
 
-  function openModal(card) {
+  function findRecordBySerial(collection, serialNo, serialField) {
+    var filter = {};
+    filter[serialField] = serialNo;
+    var filterStr = encodeURIComponent(JSON.stringify(filter));
+    return fetch('/api/' + collection + ':list?filter=' + filterStr + '&pageSize=1', {
+      headers: { 'Authorization': 'Bearer ' + token, 'Accept': 'application/json' }
+    }).then(function(r) { return r.json(); });
+  }
+
+  function openNativeForm(card) {
     var sourceId = card.getAttribute('data-source');
-    if (!sourceId) {
-      showModalSimple('详细信息', '暂无关联的完整表单');
+    var briefType = card.getAttribute('data-type');
+    var serialNo = card.getAttribute('data-serial');
+    var routeInfo = ROUTE_MAP[briefType];
+
+    if (routeInfo && sourceId) {
+      window.open('/admin/' + routeInfo.route + '?filterByTk=' + sourceId, '_blank');
       return;
     }
-
-    modalContent.innerHTML = '<div class="loading"><span class="loading-dot"></span><span class="loading-dot"></span><span class="loading-dot"></span></div>';
-    modalOverlay.classList.add('open');
-
-    var recordUrl = RECORD_API + sourceId + '&appends=project_id_id,reviewer_id_id,approver_id_id';
-    fetch(recordUrl, { headers: { 'Authorization': 'Bearer ' + token, 'Accept': 'application/json' } })
-      .then(function(r) { return r.json(); })
-      .then(function(res) {
-        var d = (res && res.data) || {};
-        var project = d.project_id_id || {};
-        var reviewer = d.reviewer_id_id || {};
-        var approver = d.approver_id_id || {};
-        renderModal(d, project, reviewer, approver);
-      })
-      .catch(function() {
-        showModalSimple('错误', '加载表单数据失败');
+    if (routeInfo && serialNo) {
+      findRecordBySerial(routeInfo.collection, serialNo, routeInfo.serialField).then(function(res) {
+        var found = (res && res.data && res.data[0]);
+        if (found && found.id) {
+          window.open('/admin/' + routeInfo.route + '?filterByTk=' + found.id, '_blank');
+        } else {
+          showModalSimple('未找到', '未找到 FormSerialNo 为 ' + esc(serialNo) + ' 的记录');
+        }
       });
+      return;
+    }
+    showModalSimple('详细信息', '暂无关联的完整表单');
   }
 
   function renderModal(d, project, reviewer, approver) {

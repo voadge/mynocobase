@@ -1,76 +1,30 @@
-'use strict';
-
-const { Plugin } = require('@nocobase/server');
-const http = require('http');
-const https = require('https');
-const zlib = require('zlib');
-const fs = require('fs');
-const path = require('path');
-const crypto = require('crypto');
-
-const AMAP_KEY = process.env.AMAP_KEY || '31e73c1d12b2848e7bd964774782a954';
-
-// Haversine distance between two points in meters
-function haversineDist(lat1, lon1, lat2, lon2) {
-  var R = 6371000;
-  var toRad = Math.PI / 180;
-  var dLat = (lat2 - lat1) * toRad;
-  var dLon = (lon2 - lon1) * toRad;
-  var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-          Math.cos(lat1 * toRad) * Math.cos(lat2 * toRad) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
-// Point-to-segment distance for polyline geofence check
-function pointToSegmentDistance(lat, lon, lat1, lon1, lat2, lon2) {
-  var dAC = haversineDist(lat, lon, lat1, lon1);
-  var dBC = haversineDist(lat, lon, lat2, lon2);
-  var dAB = haversineDist(lat1, lon1, lat2, lon2);
-  if (dAB < 1) return dAC;
-  var cosA = (dAC * dAC + dAB * dAB - dBC * dBC) / (2 * dAC * dAB);
-  var cosB = (dBC * dBC + dAB * dAB - dAC * dAC) / (2 * dBC * dAB);
-  if (cosA <= 0) return dAC;
-  if (cosB <= 0) return dBC;
-  var s = (dAC + dBC + dAB) / 2;
-  var area = Math.sqrt(Math.max(0, s * (s - dAC) * (s - dBC) * (s - dAB)));
-  return area * 2 / dAB;
-}
-
-// QWeather JWT config
-const QW_KEY_ID = 'KAGXVT4Y78';
-const QW_PROJECT_ID = '3MTGWKPJXJ';
-const QW_WEATHER_HOST = 'ke7p448t6h.re.qweatherapi.com';
-const QW_GEO_HOST = 'ke7p448t6h.re.qweatherapi.com';
-const QW_PRIVATE_KEY = `-----BEGIN PRIVATE KEY-----
-MC4CAQAwBQYDK2VwBCIEIHwCpGLzy/EZjEdh4WJlKI081vmFXEUhCMFkGqs2dEj6
------END PRIVATE KEY-----`;
-
-function qwJwt() {
-  var h = Buffer.from(JSON.stringify({ alg: 'EdDSA', kid: QW_KEY_ID })).toString('base64url');
-  var iat = Math.floor(Date.now() / 1000) - 30;
-  var exp = iat + 900;
-  var p = Buffer.from(JSON.stringify({ sub: QW_PROJECT_ID, iat: iat, exp: exp })).toString('base64url');
-  var d = h + '.' + p;
-  var k = crypto.createPrivateKey(QW_PRIVATE_KEY);
-  var s = crypto.sign(null, Buffer.from(d), k).toString('base64url');
-  return d + '.' + s;
-}
-
-const PAGE_MAP = {
-  '/__dh__': 'index.html',
-  '/__tb__': '百宝箱.html',
-  '/__fp__': '行程发票报销助手.html',
-  '/__tp__': '智能排版打印助手.html',
-  '/__gf__': 'geofence-manager.html',
-  '/__pd__': '人员动态.html',
-};
+/**
+ * Dashboard Home Plugin - Main entry point
+ * Modularized from monolithic index.js into separate middleware files
+ */
+import { Plugin } from '@nocobase/server';
+import fs from 'fs';
+import path from 'path';
+import { isAuthenticated, authCheckHandler } from './middleware/auth';
+import { registerProxyRoutes } from './middleware/proxy';
+import { registerPageRoutes } from './middleware/pages';
+import { registerAttendanceRoutes } from './middleware/attendance';
+import { registerDashboardRoutes } from './middleware/dashboard';
+import { registerWeatherRoutes } from './middleware/weather';
+import { registerPeopleDynamicRoutes } from './middleware/people-dynamic';
+import { registerDeptAdminApi } from './middleware/dept-admin-api';
+import { registerDeptAdminPages } from './middleware/dept-admin-pages';
+import { qwFetch, QW_WEATHER_HOST } from './utils/qw-jwt';
 
 const STORAGE_DIR = '/app/nocobase/storage/dashboard';
 
 module.exports = class DashboardHomePlugin extends Plugin {
   async load() {
+    const app = this.app;
+    const db = this.db;
+
     // Ensure approval trigger fields exist on attendance_records
-    var arCol = this.db.getCollection('attendance_records');
+    const arCol = db.getCollection('attendance_records');
     if (arCol) {
       if (!arCol.hasField('approval_action')) arCol.addField('approval_action', { type: 'string', nullable: true });
       if (!arCol.hasField('approval_remark')) arCol.addField('approval_remark', { type: 'text', nullable: true });
@@ -84,1018 +38,526 @@ module.exports = class DashboardHomePlugin extends Plugin {
       arCol.sync({ alter: true });
     }
 
+
+
+    // Register virtual computed fields on users collection (Plan B: native ACL)
+    const usersCol = db.getCollection('users');
+    if (usersCol) {
+      if (!usersCol.hasField('departmentIds')) {
+        usersCol.addField('departmentIds', {
+          type: 'virtual',
+          async value(user: any, ctx: any) {
+            const departments = ctx?.state?.currentUser?.departments;
+            if (departments) return departments.map((d: any) => d.id);
+            const dus = await ctx.db.getRepository('departmentsUsers').find({
+              filter: { userId: user.id },
+              fields: ['departmentId']
+            });
+            return dus.map((d: any) => d.departmentId);
+          }
+        });
+      }
+      if (!usersCol.hasField('childDepartmentIds')) {
+        usersCol.addField('childDepartmentIds', {
+          type: 'virtual',
+          async value(user: any, ctx: any) {
+            const deptIds = await user.get('departmentIds') || [];
+            if (!Array.isArray(deptIds) || !deptIds.length) return [];
+            const allIds = new Set<number>(deptIds);
+            const queue = [...deptIds];
+            while (queue.length) {
+              const pid = queue.shift()!;
+              const children = await ctx.db.getRepository('departments').find({
+                filter: { parentId: pid },
+                fields: ['id']
+              });
+              for (const c of children) {
+                if (!allIds.has(c.id)) { allIds.add(c.id); queue.push(c.id); }
+              }
+            }
+            return Array.from(allIds);
+          }
+        });
+      }
+      if (!usersCol.hasField('accessibleProjectIds')) {
+        usersCol.addField('accessibleProjectIds', {
+          type: 'virtual',
+          async value(user: any, ctx: any) {
+            const deptIds = await user.get('childDepartmentIds') || [];
+            if (!Array.isArray(deptIds) || !deptIds.length) return [];
+            const projects = await ctx.db.getRepository('projects').find({
+              filter: { departmentId: { $in: deptIds } },
+              fields: ['id']
+            });
+            return projects.map((p: any) => p.id);
+          }
+        });
+      }
+
+      // Restrict nickname modification to root users only
+      usersCol.model.addHook('beforeUpdate', async (record: any, options: any) => {
+        if (record.changed('nickname')) {
+          const ctx = options.ctx;
+          const isRoot = ctx?.state?.currentUser?.roles?.some((r: any) => r.name === 'root');
+          if (!isRoot) {
+            record.set('nickname', record.previous('nickname'));
+            console.log('[nickname-guard] Non-root user attempted to modify nickname, reverted');
+          }
+        }
+      });
+    }
+
+    // Auto-assign departmentId on new project creation
+    const projCol = db.getCollection('projects');
+    if (projCol) {
+      if (!projCol.hasField('departmentId')) {
+        projCol.addField('departmentId', { type: 'bigInt', nullable: true });
+      }
+      projCol.model.addHook('beforeCreate', async (record: any, options: any) => {
+        if (!record.get('departmentId')) {
+          const userId = record.get('createdById');
+          if (userId) {
+            try {
+              const user = await db.getRepository('users').findOne({
+                filterByTk: userId,
+                fields: ['mainDepartmentId']
+              });
+              if (user?.mainDepartmentId) {
+                record.set('departmentId', user.mainDepartmentId);
+              }
+            } catch (e) {
+              console.log('[proj-dept-hook] Error:', e.message);
+            }
+          }
+        }
+      });
+    }
+
     // Normalize path — strip /api prefix for consistent path matching
-    this.app.use(async (ctx, next) => {
+    app.use(async (ctx: any, next: () => Promise<void>) => {
       ctx.state.reqPath = ctx.path.replace(/^\/api/, '');
       await next();
     }, { before: 'dataSource' });
 
-    // Auth-check endpoint for nginx auth_request
-    this.app.use(async (ctx, next) => {
-      var p = ctx.state.reqPath || ctx.path.replace(/^\/api/, '');
-      if (ctx.method !== 'GET' || p !== '/plugin-dashboard-home/auth-check') {
-        return await next();
-      }
-      ctx.status = await this.isAuthenticated(ctx) ? 200 : 401;
-      ctx.body = ctx.status === 200 ? 'ok' : 'Unauthorized';
-    });
+    // Route: Serve patched plugin-departments bundle with manager_in_charge field injected
+    let DEPT_BUNDLE_PATH: string | null = null;
+    try {
+      DEPT_BUNDLE_PATH = require.resolve('@nocobase/plugin-departments/dist/client/index.js');
+    } catch (e) {
+      const altPath = path.join(process.cwd(), 'node_modules/@nocobase/plugin-departments/dist/client/index.js');
+      if (fs.existsSync(altPath)) DEPT_BUNDLE_PATH = altPath;
+    }
+    let patchedBundle: string | null = null;
+    function getPatchedBundle(): string | null {
+      if (patchedBundle) return patchedBundle;
+      if (!DEPT_BUNDLE_PATH) return null;
+      let content = fs.readFileSync(DEPT_BUNDLE_PATH, 'utf8');
+      content = content.replace(
+        'owners:{title:\'{{t("Owners")}}\',"x-component":"DepartmentOwnersField","x-decorator":"FormItem"},footer:',
+        'owners:{title:\'{{t("Owners")}}\',"x-component":"DepartmentOwnersField","x-decorator":"FormItem"},manager_in_charge:{title:\'{{t("分管领导")}}\',"x-component":"CollectionField","x-decorator":"FormItem","x-collection-field":"departments.manager_in_charge"},footer:'
+      );
+      content = content.replace(
+        'roles:{"x-component":"CollectionField","x-decorator":"FormItem","x-collection-field":"departments.roles"},footer:',
+        'roles:{"x-component":"CollectionField","x-decorator":"FormItem","x-collection-field":"departments.roles"},manager_in_charge:{title:\'{{t("分管领导")}}\',"x-component":"CollectionField","x-decorator":"FormItem","x-collection-field":"departments.manager_in_charge"},footer:'
+      );
+      content = content.replace(
+        'appends:["parent(recursively=true)","roles","owners"]',
+        'appends:["parent(recursively=true)","roles","owners","manager_in_charge"]'
+      );
+      content = content.replace(/departments_manager_users/g, 'departmentsUsers');
+      patchedBundle = content;
+      return patchedBundle;
+    }
 
-    // Geocode + IP locate proxy (via Amap, server-side to respect IP whitelist)
-    this.app.use(async (ctx, next) => {
-      if (ctx.method !== 'GET' || !(ctx.state.reqPath.endsWith('/geocode') || ctx.state.reqPath.endsWith('/locate') || ctx.state.reqPath.endsWith('/regeo'))) {
-        return await next();
-      }
-      ctx.withoutDataWrapping = true;
-      ctx.type = 'application/json; charset=utf-8';
-      var amapKey = process.env.AMAP_KEY || '31e73c1d12b2848e7bd964774782a954';
-      if (ctx.state.reqPath.endsWith('/geocode')) {
-        var q = ctx.query.q;
-        if (!q) { ctx.body = { status: '0', tips: [] }; return; }
-        try {
-          var url = 'https://restapi.amap.com/v3/assistant/inputtips?key=' + amapKey + '&keywords=' + encodeURIComponent(q) + '&output=json&offset=20';
-          var data = await new Promise(function(resolve, reject) {
-            https.get(url, function(res) {
-              var body = '';
-              res.on('data', function(c) { body += c; });
-              res.on('end', function() {
-                try { resolve(JSON.parse(body)); } catch(e) { reject(e); }
-              });
-            }).on('error', reject);
-          });
-          ctx.body = data;
-        } catch(e) {
-          ctx.status = 502;
-          ctx.body = { status: '0', tips: [], error: e.message };
+    app.use(async (ctx: any, next: () => Promise<void>) => {
+      if (ctx.method !== 'GET') return await next();
+      if (ctx.state.reqPath && ctx.state.reqPath === '/__pd__/dept-bundle') {
+        const p = getPatchedBundle();
+        if (!p) {
+          ctx.status = 404;
+          ctx.body = 'Bundle not found';
+          return;
         }
-      } else if (ctx.state.reqPath.endsWith('/regeo')) {
-        var location = ctx.query.location;
-        if (!location) { ctx.body = { status: '0', regeocode: null }; return; }
+        ctx.type = 'application/javascript; charset=utf-8';
+        ctx.body = p;
+        return;
+      }
+      await next();
+    }, { before: 'dataSource' });
+
+    // Resource middleware: Mirror owner pattern for manager_in_charge
+    app.resourceManager.use(async (ctx: any, next: () => Promise<void>) => {
+      const action = ctx.action || {};
+      const params = action.params || {};
+      const values = params.values || {};
+      const managerInCharge = values.manager_in_charge;
+      if (params.resourceName === 'departments' && (params.actionName === 'update' || params.actionName === 'create') && managerInCharge && Array.isArray(managerInCharge)) {
+        const managerIds = managerInCharge.map((m: any) => {
+          return typeof m === 'object' ? parseInt(m.id, 10) : parseInt(m, 10);
+        }).filter((id: number) => id > 0);
+        const newValues: Record<string, any> = {};
+        for (const k in values) {
+          if (k !== 'manager_in_charge') newValues[k] = values[k];
+        }
+        params.values = newValues;
+        ctx.action.params = params;
+        await next();
         try {
-          var url = 'https://restapi.amap.com/v3/geocode/regeo?key=' + amapKey + '&location=' + encodeURIComponent(location) + '&output=json&radius=1000';
-          var data = await new Promise(function(resolve, reject) {
-            https.get(url, function(res) {
-              var body = '';
-              res.on('data', function(c) { body += c; });
-              res.on('end', function() {
-                try { resolve(JSON.parse(body)); } catch(e) { reject(e); }
-              });
-            }).on('error', reject);
+          const deptId = params.actionName === 'update' ? params.filterByTk : (ctx.body && ctx.body.data && ctx.body.data.id);
+          if (!deptId) return;
+          const repo = db.getRepository('departmentsUsers');
+          await db.sequelize.transaction(async (t: any) => {
+            await repo.update({
+              filter: { departmentId: deptId },
+              values: { is_manager_in_charge: false },
+              transaction: t
+            });
+            await repo.update({
+              filter: { departmentId: deptId, userId: { $in: managerIds } },
+              values: { is_manager_in_charge: true },
+              transaction: t
+            });
+            const existing = await repo.find({
+              filter: { departmentId: deptId },
+              transaction: t
+            });
+            const existingIds = existing.map((d: any) => d.userId);
+            for (let i = 0; i < managerIds.length; i++) {
+              if (existingIds.indexOf(managerIds[i]) < 0) {
+                await repo.create({
+                  values: { departmentId: deptId, userId: managerIds[i], is_manager_in_charge: true },
+                  transaction: t
+                });
+              }
+            }
           });
-          ctx.body = data;
-        } catch(e) {
-          ctx.status = 502;
-          ctx.body = { status: '0', regeocode: null, error: e.message };
+        } catch (e) {
+          console.log('[manager-resource-mw] Error:', e.message);
         }
       } else {
-        try {
-          var url = 'https://restapi.amap.com/v3/ip?key=' + amapKey + '&output=json';
-          var data = await new Promise(function(resolve, reject) {
-            https.get(url, function(res) {
-              var body = '';
-              res.on('data', function(c) { body += c; });
-              res.on('end', function() {
-                try { resolve(JSON.parse(body)); } catch(e) { reject(e); }
-              });
-            }).on('error', reject);
-          });
-          ctx.body = data;
-        } catch(e) {
-          ctx.status = 502;
-          ctx.body = { status: '0', rectangle: null, city: null, province: null, error: e.message };
-        }
+        await next();
       }
-    }, { tag: 'dashboard-home', before: 'dataSource' });
+    });
 
-    // Unified attendance submission endpoint – frontend only collects, backend processes
-    this.app.use(async (ctx, next) => {
-      var p = ctx.state.reqPath || ctx.path.replace(/^\/api/, '');
-      if (ctx.method !== 'POST' || p !== '/__pd__/attendance/submit') return await next();
-      if (!await this.isAuthenticated(ctx)) {
-        ctx.status = 401;
-        ctx.body = 'Unauthorized';
-        return;
-      }
-      ctx.withoutDataWrapping = true;
-      ctx.type = 'application/json; charset=utf-8';
-      try {
-        var body = ctx.request.body || {};
-        var user = ctx.state.currentUser;
-        var isLeave = (body.check_type === '请假' || body.check_type === '出差');
-        var vals = {
-          check_type: body.check_type,
-          check_time: body.check_time,
-          latitude: body.latitude,
-          longitude: body.longitude,
-          gps_accuracy: body.gps_accuracy,
-          verify_status: body.verify_status,
-          anomaly_reason: body.anomaly_reason,
-          photo_hash: body.photo_hash,
-          device_fingerprint: body.device_fingerprint,
-          reason: body.reason,
-          start_date: body.start_date,
-          end_date: body.end_date,
-          workflow_status: isLeave ? 'level1_pending' : 'normal',
-          createdById: user && user.id || 19
-        };
-        var record = await this.db.getRepository('attendance_records').create({ values: vals });
-        ctx.body = { status: 'ok', data: record, message: isLeave ? '已提交审批' : '打卡成功' };
-      } catch(e) {
-        ctx.status = 500;
-        ctx.body = { status: 'error', message: e.message };
-      }
-    }, { tag: 'dashboard-home', before: 'dataSource' });
+    // Register all route modules
+    const pluginRef = { db, isAuthenticated: isAuthenticated.bind(this) };
+    registerProxyRoutes(app);
+    registerAttendanceRoutes(app, pluginRef);
+    registerDashboardRoutes(app, pluginRef);
+    registerWeatherRoutes(app);
+    registerPeopleDynamicRoutes(app);
 
-    // Leave/Travel approval pending list
-    // Permission model:
-    //   level1_pending → department owners (departments.owners, isOwner=true)
-    //   level2/3a_pending → department Person_in_charge
-    //   level3b_pending → hr_admin role
-    //   level4_pending → GeneralManager role
-    //   admin/root → all
-    this.app.use(async (ctx, next) => {
-      if (ctx.method !== 'GET' || ctx.state.reqPath !== '/__pd__/approvals/pending') {
-        return await next();
-      }
-      if (!await this.isAuthenticated(ctx)) {
-        ctx.status = 401;
-        ctx.body = 'Unauthorized';
-        return;
-      }
-      ctx.withoutDataWrapping = true;
-      ctx.type = 'application/json; charset=utf-8';
-      try {
-        var user = ctx.state.currentUser;
-        var userId = user.id;
-        var roles = user.roles ? user.roles.map(function(r) { return r.name; }) : [];
-        var isAdmin = roles.indexOf('admin') !== -1 || roles.indexOf('root') !== -1;
+    // Register department admin API
+    registerDeptAdminApi(app, pluginRef);
 
-        if (isAdmin) {
-          var allRecs = await this.db.getRepository('attendance_records').find({
-            filter: {
-              workflow_status: { $in: ['level1_pending', 'level2_pending', 'level3a_pending', 'level3b_pending', 'level4_pending'] },
-              check_type: { $in: ['请假', '出差'] }
-            },
-            appends: ['createdBy', 'createdBy.departments'],
-            sort: '-check_time',
-            limit: 50
-          });
-          ctx.body = { data: allRecs, roles: roles };
-          return;
-        }
+    // Register department admin pages
+    registerDeptAdminPages(app);
 
-        // Build OR conditions based on user's department authority
-        var orConditions = [];
-
-        // a) Department owner → level1_pending
-        var ownerDepts = await this.db.getRepository('departments').find({
-          filter: { 'owners.id': userId },
-          limit: 50
-        });
-        if (ownerDepts && ownerDepts.length > 0) {
-          var oids = ownerDepts.map(function(d) { return d.id; });
-          orConditions.push({
-            $and: [
-              { workflow_status: 'level1_pending' },
-              { 'createdBy.departments.id': { $in: oids } }
-            ]
-          });
-        }
-
-        // b) Person_in_charge → level2_pending, level3a_pending
-        var picDepts = await this.db.getRepository('departments').find({
-          filter: { 'Person_in_charge.id': userId },
-          limit: 50
-        });
-        if (picDepts && picDepts.length > 0) {
-          var pids = picDepts.map(function(d) { return d.id; });
-          orConditions.push({
-            $and: [
-              { workflow_status: { $in: ['level2_pending', 'level3a_pending'] } },
-              { 'createdBy.departments.id': { $in: pids } }
-            ]
-          });
-        }
-
-        // c) hr_admin role → level3b_pending (all departments)
-        if (roles.indexOf('hr_admin') !== -1) {
-          orConditions.push({ workflow_status: 'level3b_pending' });
-        }
-
-        // d) GeneralManager role → level4_pending (all)
-        if (roles.indexOf('GeneralManager') !== -1) {
-          orConditions.push({ workflow_status: 'level4_pending' });
-        }
-
-        if (orConditions.length === 0) {
-          ctx.body = { data: [], roles: roles, reason: 'no_authority' };
-          return;
-        }
-
-        var recs = await this.db.getRepository('attendance_records').find({
-          filter: { $or: orConditions, check_type: { $in: ['请假', '出差'] } },
-          appends: ['createdBy', 'createdBy.departments'],
-          sort: '-check_time',
-          limit: 50
-        });
-        ctx.body = { data: recs, roles: roles };
-      } catch(e) {
-        ctx.status = 500;
-        ctx.body = { data: [], error: e.message };
-      }
-    }, { tag: 'dashboard-home', before: 'dataSource' });
-
-    this.app.use(async (ctx, next) => {
-      if (ctx.method !== 'POST' || ctx.state.reqPath !== '/__pd__/approvals/process') {
-        return await next();
-      }
-      if (!await this.isAuthenticated(ctx)) {
-        ctx.status = 401;
-        ctx.body = 'Unauthorized';
-        return;
-      }
-      ctx.withoutDataWrapping = true;
-      ctx.type = 'application/json; charset=utf-8';
-      try {
-        var body = ctx.request.body || {};
-        var recordId = body.recordId;
-        var action = body.action;
-        var remark = body.remark || '';
-        if (!recordId || !action) {
-          ctx.body = { status: 'error', message: '缺少参数 recordId 或 action' };
-          return;
-        }
-        var repo = this.db.getRepository('attendance_records');
-        var record = await repo.findOne({ filter: { id: recordId }, appends: ['createdBy'] });
-        if (!record) {
-          ctx.body = { status: 'error', message: '记录不存在' };
-          return;
-        }
-        var user = ctx.state.currentUser;
-        var userId = user.id;
-        var roles = user.roles ? user.roles.map(function(r) { return r.name; }) : [];
-        var isAdmin = roles.indexOf('admin') !== -1 || roles.indexOf('root') !== -1;
-        var curStatus = record.workflow_status;
-        var creatorId = record.createdById || (record.createdBy && record.createdBy.id);
-
-        // Check permission based on department relationships
-        async function isDeptOwner(uid, cid) {
-          if (isAdmin) return true;
-          var depts = await ctx.db.getRepository('departments').find({
-            filter: { 'members.id': cid },
-            limit: 20
-          });
-          for (var i = 0; i < depts.length; i++) {
-            var d = await ctx.db.getRepository('departments').findOne({
-              filter: { id: depts[i].id, 'owners.id': uid },
-              limit: 1
-            });
-            if (d) return true;
-          }
-          return false;
-        }
-        async function isDeptPic(uid, cid) {
-          if (isAdmin) return true;
-          var depts = await ctx.db.getRepository('departments').find({
-            filter: { 'members.id': cid },
-            limit: 20
-          });
-          for (var i = 0; i < depts.length; i++) {
-            var d = await ctx.db.getRepository('departments').findOne({
-              filter: { id: depts[i].id, 'Person_in_charge.id': uid },
-              limit: 1
-            });
-            if (d) return true;
-          }
-          return false;
-        }
-
-        var allowed = false;
-        if (curStatus === 'level1_pending') allowed = await isDeptOwner(userId, creatorId);
-        else if (curStatus === 'level2_pending') allowed = await isDeptPic(userId, creatorId);
-        else if (curStatus === 'level3a_pending') allowed = await isDeptPic(userId, creatorId);
-        else if (curStatus === 'level3b_pending') allowed = isAdmin || roles.indexOf('hr_admin') !== -1;
-        else if (curStatus === 'level4_pending') allowed = isAdmin || roles.indexOf('GeneralManager') !== -1;
-        else if (isAdmin) allowed = true;
-
-        if (!allowed) {
-          ctx.body = { status: 'error', message: '您没有权限处理此审批' };
-          return;
-        }
-        if (action === 'reject') {
-          await repo.update({ filter: { id: recordId }, values: { workflow_status: 'rejected', verify_status: 'rejected:' + remark } });
-          ctx.body = { status: 'ok', message: '已驳回' };
-          return;
-        }
-        var nextStatus = 'approved';
-        if (curStatus === 'level1_pending') nextStatus = 'approved';
-        else if (curStatus === 'level2_pending') nextStatus = 'approved';
-        else if (curStatus === 'level3a_pending') nextStatus = 'level3b_pending';
-        else if (curStatus === 'level3b_pending') nextStatus = 'approved';
-        else if (curStatus === 'level4_pending') nextStatus = 'approved';
-        await repo.update({ filter: { id: recordId }, values: { workflow_status: nextStatus, verify_status: 'approved_by_' + curStatus } });
-        // 请假/出差审批最终通过 → 更新归档统计
-        if (nextStatus === 'approved' && (record.check_type === '请假' || record.check_type === '出差')) {
+    // Middleware: intercept construction_daily_log:trigger and create record first
+    app.resourceManager.use(async (ctx: any, next: () => Promise<void>) => {
+      const action = ctx.action || {};
+      const params = action.params || {};
+      if (params.resourceName === 'construction_daily_log' && params.actionName === 'trigger' && !params.filterByTk) {
+        const values = params.values || {};
+        if (values.project_id || values.project_name_NO) {
           try {
-            var archRepo = ctx.db.getRepository('att_archives');
-            var dd = new Date();
-            var period = dd.getFullYear() + '-' + String(dd.getMonth() + 1).padStart(2, '0');
-            var arch = await archRepo.findOne({ filter: { period: period, createdBy: creatorId } });
-            var leaveDays = record.days || 1;
-            if (!arch) {
-              await archRepo.create({
-                values: { period: period, archive_year: String(dd.getFullYear()), total_work_days: 0, total_leave_days: leaveDays, createdBy: creatorId, geofence_inside_days: 0, geofence_outside_days: 0, geofence_anomaly_count: 0 }
-              });
+            const repo = db.getRepository('construction_daily_log');
+            const created = await repo.create({ values });
+            ctx.action.params.filterByTk = created.id;
+            ctx.action.params.values = { ...values, id: created.id };
+          } catch (e) {
+            console.log('[trigger-mw] create failed:', e.message);
+          }
+        }
+      }
+      await next();
+    }, { tag: 'dashboard-home-trigger', after: 'dataSource' });
+
+    // Middleware: enrich auth:check response with departments (for linkage rules)
+    app.resourceManager.use(async (ctx: any, next: () => Promise<void>) => {
+      await next();
+      const action = ctx.action || {};
+      if (action.resourceName === 'auth' && action.actionName === 'check') {
+        const body = ctx.body;
+        if (body && body.data && body.data.id && !body.data.departments) {
+          try {
+            const user = await db.getRepository('users').findOne({
+              filterByTk: body.data.id,
+              appends: ['departments']
+            });
+            if (user && user.departments) {
+              body.data.departments = user.departments;
+            }
+          } catch (e) {
+            console.log('[auth-check-enrich] Error:', e.message);
+          }
+        }
+      }
+    }, { tag: 'dashboard-home-auth-enrich', after: 'dataSource' });
+
+    // Auto-fill hooks for construction daily entries and logs
+    const entriesCol = db.getCollection('construction_daily_entries');
+    const logCol = db.getCollection('construction_daily_log');
+
+    // Add aggregated_up_to field for tracking aggregation state
+    if (logCol) {
+      try { logCol.addField('aggregated_up_to', { type: 'bigint' }); } catch (e) {}
+    }
+
+    // Auto-fill entry_date, weather, entry_no on entry creation
+    if (entriesCol) {
+      entriesCol.model.addHook('beforeCreate', async (record: any, options: any) => {
+        const logId = record.get('log_id');
+        if (logId && !record.get('project_name_NO')) {
+          try {
+            const parentLog = await record.sequelize.model('construction_daily_log').findByPk(logId);
+            if (parentLog) {
+              const projectNameNo = parentLog.get('project_name_NO');
+              if (projectNameNo) {
+                record.set('project_name_NO', projectNameNo);
+              }
+            }
+          } catch (e) {
+            console.log('[entry-hook] copy project_name_NO failed:', e.message);
+          }
+        }
+      });
+
+      entriesCol.model.addHook('beforeCreate', async (record: any, options: any) => {
+        if (!record.get('entry_no')) {
+          const now = new Date();
+          const datePart = now.getFullYear().toString() + String(now.getMonth() + 1).padStart(2, '0') + String(now.getDate()).padStart(2, '0');
+          const fullPrefix = 'SG-' + datePart + '-';
+          try {
+            const repo = record.sequelize.model('sys_serial_counters');
+            const counter = await repo.findOne({ where: { prefix: fullPrefix } });
+            let seq: number;
+            if (!counter) {
+              await repo.create({ prefix: fullPrefix, current_seq: 1, module: 'construction_daily' });
+              seq = 1;
             } else {
-              await archRepo.update({ filter: { id: arch.id }, values: { total_leave_days: (arch.total_leave_days || 0) + leaveDays } });
+              seq = counter.current_seq + 1;
+              await repo.update({ current_seq: seq }, { where: { id: counter.id } });
             }
-          } catch(e) { /* archive update non-fatal */ }
+            record.set('entry_no', fullPrefix + String(seq).padStart(3, '0'));
+          } catch (e) {
+            record.set('entry_no', fullPrefix + '001');
+          }
         }
-        ctx.body = { status: 'ok', message: '已审批', nextStatus: nextStatus };
-      } catch(e) {
-        ctx.status = 500;
-        ctx.body = { status: 'error', message: e.message };
-      }
-    }, { tag: 'dashboard-home', before: 'dataSource' });
+      });
+    }
 
-    // Workers API - server-side query bypasses ACL
-    this.app.use(async (ctx, next) => {
-      if (ctx.method !== 'GET' || ctx.state.reqPath !== '/__pd__/workers') {
+    // Copy project_name_NO from parent log when entry's log_id is updated
+    if (entriesCol) {
+      entriesCol.model.addHook('beforeUpdate', async (record: any, options: any) => {
+        const logId = record.get('log_id');
+        if (logId && record.changed('log_id') && !record.get('project_name_NO')) {
+          try {
+            const parentLog = await record.sequelize.model('construction_daily_log').findByPk(logId);
+            if (parentLog) {
+              const projectNameNo = parentLog.get('project_name_NO');
+              if (projectNameNo) {
+                record.set('project_name_NO', projectNameNo);
+              }
+            }
+          } catch (e) {
+            console.log('[entry-hook] copy project_name_NO on update failed:', e.message);
+          }
+        }
+      });
+    }
+
+    // Auto-fill log_date, log_no and weather on log creation
+    if (logCol) {
+      logCol.model.addHook('beforeCreate', async (record: any, options: any) => {
+        if (!record.get('log_date')) {
+          const now = new Date();
+          const datePart = now.getFullYear().toString() + String(now.getMonth() + 1).padStart(2, '0') + String(now.getDate()).padStart(2, '0');
+          record.set('log_date', parseInt(datePart));
+        }
+        if (!record.get('log_no')) {
+          const now = new Date();
+          const datePart = now.getFullYear().toString() + String(now.getMonth() + 1).padStart(2, '0') + String(now.getDate()).padStart(2, '0');
+          const fullPrefix = 'LG-' + datePart + '-';
+          try {
+            const repo = record.sequelize.model('sys_serial_counters');
+            const counter = await repo.findOne({ where: { prefix: fullPrefix } });
+            let seq: number;
+            if (!counter) {
+              await repo.create({ prefix: fullPrefix, current_seq: 1, module: 'construction_daily' });
+              seq = 1;
+            } else {
+              seq = counter.current_seq + 1;
+              await repo.update({ current_seq: seq }, { where: { id: counter.id } });
+            }
+            record.set('log_no', fullPrefix + String(seq).padStart(3, '0'));
+          } catch (e) {
+            record.set('log_no', fullPrefix + '001');
+          }
+        }
+        // Auto-fill weather from project location
+        if (!record.get('weather')) {
+          const projectFk = record.get('link-projectID');
+          if (projectFk) {
+            try {
+              const proj = await record.sequelize.model('projects').findByPk(projectFk);
+              if (proj && proj.location_lat && proj.location_lon) {
+                const weather = await qwFetch('https://' + QW_WEATHER_HOST + '/v7/weather/now?location=' + encodeURIComponent(proj.location_lon + ',' + proj.location_lat));
+                if (weather && weather.code === '200' && weather.now) {
+                  const n = weather.now;
+                  const weatherStr = n.text + ' ' + (n.temp || '') + 'C ' + (n.windDir || '');
+                  record.set('weather', weatherStr);
+                }
+              }
+            } catch (e) {
+              console.log('[weather-auto-log] fetch failed:', e.message);
+            }
+          }
+        }
+        // Auto-aggregate entries into the log
+        const aggProjectId = record.get('link-projectID');
+        let aggLogDate = record.get('log_date');
+        if (aggProjectId && aggLogDate) {
+          try {
+            if (typeof aggLogDate === 'number' || /^\d{8}$/.test(String(aggLogDate))) {
+              const s = String(aggLogDate);
+              aggLogDate = s.slice(0, 4) + '-' + s.slice(4, 6) + '-' + s.slice(6, 8);
+            }
+            const whereClause: Record<string, any> = { entry_date: aggLogDate };
+            if (aggProjectId) whereClause.project_id = aggProjectId;
+            const entries = await record.sequelize.model('construction_daily_entries').findAll({
+              where: whereClause
+            });
+            if (entries && entries.length > 0) {
+              const workContent: string[] = [], qualityIssues: string[] = [];
+              const safetyIssues: string[] = [], others: string[] = [];
+              const personnelCount: string[] = [], equipmentUsage: string[] = [], materialUsage: string[] = [];
+              for (let i = 0; i < entries.length; i++) {
+                const e = entries[i];
+                const n = (i + 1) + '. ';
+                if (e.get('work_content')) workContent.push(n + e.get('work_content'));
+                if (e.get('quality_issues')) qualityIssues.push(n + e.get('quality_issues'));
+                if (e.get('safety_issues')) safetyIssues.push(n + e.get('safety_issues'));
+                if (e.get('others')) others.push(n + e.get('others'));
+                if (e.get('personnel_count')) personnelCount.push(n + e.get('personnel_count'));
+                if (e.get('equipment_usage')) equipmentUsage.push(n + e.get('equipment_usage'));
+                if (e.get('material_usage')) materialUsage.push(n + e.get('material_usage'));
+              }
+              record.set('work_content', workContent.join('\n'));
+              record.set('quality_issues', qualityIssues.join('\n'));
+              record.set('safety_issues', safetyIssues.join('\n'));
+              record.set('others', others.join('\n'));
+              record.set('personnel_count', personnelCount.join('\n'));
+              record.set('equipment_usage', equipmentUsage.join('\n'));
+              record.set('material_usage', materialUsage.join('\n'));
+            }
+          } catch (e) {
+            console.log('[agg-hook] error:', e.message);
+          }
+        }
+      });
+    }
+
+    // ACL context endpoint for frontend department linkage (placed before auth-check)
+    app.use(async (ctx: any, next: () => Promise<void>) => {
+      if (ctx.method !== 'GET' || ctx.state.reqPath !== '/__pd__/acl-context') {
         return await next();
       }
-      if (!await this.isAuthenticated(ctx)) {
-        ctx.status = 401;
-        ctx.body = 'Unauthorized';
-        return;
-      }
-      ctx.withoutDataWrapping = true;
-      ctx.type = 'application/json; charset=utf-8';
       try {
-        const repo = this.db.getRepository('users');
-        const users = await repo.find({
-          filter: { 'roles.name': 'workers' },
-          appends: ['roles', 'departments'],
-          limit: 200
-        });
-        ctx.body = { data: users };
-      } catch (e) {
-        ctx.status = 500;
-        ctx.body = { data: [], error: e.message };
-      }
-    }, { tag: 'dashboard-home', before: 'dataSource' });
-
-    // Batch collect - server-side location history filling (called by cron)
-    this.app.use(async (ctx, next) => {
-      if (ctx.method !== 'GET' || ctx.state.reqPath !== '/__pd__/batch-collect') {
-        return await next();
-      }
-      if (!await this.isAuthenticated(ctx)) {
-        ctx.status = 401;
-        ctx.body = 'Unauthorized';
-        return;
-      }
-      ctx.withoutDataWrapping = true;
-      ctx.type = 'application/json; charset=utf-8';
-      try {
-        var today = new Date().toISOString().substring(0, 10);
-        var records = await this.db.getRepository('attendance_records').find({
-          filter: { createdAt: { $dateBetween: [today + 'T00:00:00.000Z', today + 'T23:59:59.999Z'] } },
-          appends: ['createdBy'],
-          sort: '-check_time',
-          limit: 2000
-        });
-        var userStatus = {};
-        records.forEach(function(r){
-          var uid = r.createdBy ? (r.createdBy.id || r.createdById) : null;
-          if (!uid) return;
-          if (!userStatus[uid]) userStatus[uid] = { checkIn: null, checkOut: null, latestLat: null, latestLng: null, latestTime: null };
-          var t = r.check_time || r.createdAt;
-          if (r.check_type === '上班') {
-            if (!userStatus[uid].checkIn || t > userStatus[uid].checkIn) userStatus[uid].checkIn = t;
-          }
-          if (r.check_type === '下班') {
-            if (!userStatus[uid].checkOut || t > userStatus[uid].checkOut) userStatus[uid].checkOut = t;
-          }
-          if (r.latitude && r.longitude) {
-            if (!userStatus[uid].latestTime || t > userStatus[uid].latestTime) {
-              userStatus[uid].latestLat = r.latitude;
-              userStatus[uid].latestLng = r.longitude;
-              userStatus[uid].latestTime = t;
-            }
-          }
-        });
-        var activeUsers = [];
-        Object.keys(userStatus).forEach(function(uid){
-          var s = userStatus[uid];
-          if (s.checkIn && (!s.checkOut || s.checkOut < s.checkIn) && s.latestLat && s.latestLng) {
-            activeUsers.push({ uid: parseInt(uid), lat: s.latestLat, lng: s.latestLng, time: s.latestTime });
-          }
-        });
-        var LocationHistory = this.db.getRepository('location_history');
-        var written = [];
-        for (var i = 0; i < activeUsers.length; i++) {
-          var u = activeUsers[i];
-          var hist = await LocationHistory.find({
-            filter: { createdById: u.uid },
-            sort: '-recorded_at',
-            limit: 1
-          });
-          var last = hist.length > 0 ? hist[0] : null;
-          var skip = last && last.latitude === String(u.lat) && last.longitude === String(u.lng) &&
-                     (Date.now() - new Date(last.recorded_at || last.createdAt).getTime()) < 5 * 60 * 1000;
-          if (skip) continue;
-          await LocationHistory.create({
-            values: {
-              latitude: u.lat,
-              longitude: u.lng,
-              accuracy: null,
-              recorded_at: u.time || new Date().toISOString(),
-              createdById: u.uid
-            }
-          });
-          written.push(u.uid);
-        }
-        ctx.body = { data: { processed: activeUsers.length, written: written.length, userIds: written } };
-      } catch (e) {
-        ctx.status = 500;
-        ctx.body = { data: null, error: e.message };
-      }
-    }, { tag: 'dashboard-home', before: 'dataSource' });
-
-    // Dashboard snapshot - aggregated data for people dynamic page
-    this.app.use(async (ctx, next) => {
-      if (ctx.method !== 'GET' || ctx.state.reqPath !== '/__pd__/dashboard-snapshot') {
-        return await next();
-      }
-      if (!await this.isAuthenticated(ctx)) {
-        ctx.status = 401;
-        ctx.body = 'Unauthorized';
-        return;
-      }
-      ctx.withoutDataWrapping = true;
-      ctx.type = 'application/json; charset=utf-8';
-      try {
-        const today = new Date().toISOString().substring(0, 10);
-        const db = this.db;
-        const [workers, fences, records, latestLocs] = await Promise.all([
-          db.getRepository('users').find({
-            filter: { roles: { name: { $in: ['workers', 'worker'] } } },
-            appends: ['departments', 'roles'],
-            sort: 'nickname'
-          }),
-          db.getRepository('geofences').find({
-            filter: { is_active: true },
-            sort: 'sort'
-          }),
-          db.getRepository('attendance_records').find({
-            filter: { createdAt: { $dateBetween: [today, today] } },
-            sort: '-check_time',
-            pageSize: 500,
-            appends: ['createdBy']
-          }),
-          db.getRepository('location_history').find({
-            filter: { recorded_at: { $dateBetween: [today, today] } },
-            sort: '-recorded_at',
-            pageSize: 500
-          })
-        ]);
-        const onlineMap = {};
-        const latestMap = {};
-        const checkedInSet = new Set();
-        for (const r of records) {
-          const uid = r.createdBy && r.createdBy.id || r.createdById;
-          if (!uid) continue;
-          if (!onlineMap[uid]) onlineMap[uid] = { checkIn: null, checkOut: null };
-          if (r.check_type === '上班') {
-            if (!onlineMap[uid].checkIn || r.check_time > onlineMap[uid].checkIn) {
-              onlineMap[uid].checkIn = r.check_time;
-              checkedInSet.add(uid);
-            }
-          }
-          if (r.check_type === '下班') {
-            if (!onlineMap[uid].checkOut || r.check_time > onlineMap[uid].checkOut) {
-              onlineMap[uid].checkOut = r.check_time;
-            }
-          }
-        }
-        const onlineStatus = {};
-        for (const uid in onlineMap) {
-          const u = onlineMap[uid];
-          onlineStatus[uid] = !!(u.checkIn && (!u.checkOut || u.checkOut < u.checkIn));
-        }
-        for (const r of latestLocs) {
-          const uid = r.createdById;
-          if (!uid || latestMap[uid]) continue;
-          latestMap[uid] = {
-            lat: parseFloat(r.latitude), lng: parseFloat(r.longitude),
-            accuracy: r.accuracy, source: r.source, trigger: r.trigger,
-            township: r.township, street: r.street, district: r.district,
-            recorded_at: r.recorded_at || r.createdAt
-          };
-        }
-        const deptStats = {};
-        for (const u of workers) {
-          const deptName = u.departments && u.departments[0] && u.departments[0].title || '未分组';
-          if (!deptStats[deptName]) deptStats[deptName] = { total: 0, online: 0, checkedIn: 0 };
-          deptStats[deptName].total++;
-          if (onlineStatus[u.id]) deptStats[deptName].online++;
-          if (checkedInSet.has(u.id)) deptStats[deptName].checkedIn++;
+        const user = ctx.state.currentUser;
+        if (!user) {
+          ctx.status = 401;
+          ctx.body = { error: 'Unauthenticated' };
+          return;
         }
         ctx.body = {
-          workers, fences, records,
-          latestLocations: latestMap,
-          online: onlineStatus,
-          stats: {
-            totalCheckedIn: checkedInSet.size,
-            onlineCount: Object.values(onlineStatus).filter(Boolean).length,
-            deptStats
+          user: {
+            id: user.id,
+            mainDepartmentId: user.mainDepartmentId,
+            departmentIds: user.departments?.map((d: any) => d.id) || [],
+            departments: user.departments || [],
           },
-          serverTime: new Date().toISOString(),
-          pollInterval: { snapshot: 10000, fence: 30000 }
+          attachRoles: ctx.state.attachRoles || [],
         };
       } catch (e) {
+        console.error('[acl-context] Error:', e.message);
         ctx.status = 500;
-        ctx.body = { error: e.message };
-      }
-    });
-
-    // Attendance CSV export
-    this.app.use(async (ctx, next) => {
-      if (ctx.method !== 'GET' || ctx.state.reqPath !== '/__pd__/attendance/export') {
-        return await next();
-      }
-      if (!await this.isAuthenticated(ctx)) { ctx.status = 401; ctx.body = 'Unauthorized'; return; }
-      ctx.withoutDataWrapping = true;
-      ctx.type = 'text/csv; charset=utf-8';
-      ctx.set('Content-Disposition', 'attachment; filename="attendance_export.csv"');
-      try {
-        var period = ctx.query.period || '';
-        var userId = ctx.query.userId ? parseInt(ctx.query.userId) : 0;
-        var filter = {};
-        if (period) filter.period = period;
-        if (userId) filter.createdBy = userId;
-        var records = await this.db.getRepository('attendance_records').find({
-          filter: filter,
-          appends: ['createdBy'],
-          sort: '-check_time',
-          limit: 5000
-        });
-        var csv = '\uFEFF'; // BOM for Excel Chinese
-        csv += 'ID,姓名,部门,打卡类型,打卡时间,经度,纬度,精度(米),打卡结果,异常原因,围栏内,围栏距离(米),审批状态\n';
-        for (var i = 0; i < records.length; i++) {
-          var r = records[i];
-          var uname = '', dept = '';
-          if (r.createdBy) {
-            uname = r.createdBy.nickname || r.createdBy.username || '';
-            dept = (r.createdBy.departments && r.createdBy.departments[0] && r.createdBy.departments[0].title) || '';
-          }
-          var row = [
-            r.id, uname, dept, r.check_type, r.check_time,
-            r.longitude || '', r.latitude || '', r.gps_accuracy || '',
-            r.check_result || '', (r.anomaly_reason || '').replace(/"/g,'""'),
-            r.geofence_inside != null ? (r.geofence_inside ? '是' : '否') : '',
-            r.geofence_distance || '', r.workflow_status || ''
-          ].map(function(v){ return '"' + String(v) + '"'; }).join(',');
-          csv += row + '\n';
-        }
-        ctx.body = csv;
-      } catch(e) {
-        ctx.status = 500;
-        ctx.body = '导出失败: ' + e.message;
+        ctx.body = { error: 'Internal server error', message: e.message };
       }
     }, { tag: 'dashboard-home', before: 'dataSource' });
 
-    // Archive monthly summary export (CSV)
-    this.app.use(async (ctx, next) => {
-      if (ctx.method !== 'GET' || ctx.state.reqPath !== '/__pd__/archive/export') {
+    // Auth-check endpoint for nginx auth_request
+    app.use(async (ctx: any, next: () => Promise<void>) => {
+      if (ctx.method !== 'GET' || ctx.state.reqPath !== '/__auth_check__') {
         return await next();
       }
-      if (!await this.isAuthenticated(ctx)) { ctx.status = 401; ctx.body = 'Unauthorized'; return; }
-      ctx.withoutDataWrapping = true;
-      ctx.type = 'text/csv; charset=utf-8';
-      ctx.set('Content-Disposition', 'attachment; filename="archive_monthly.csv"');
-      try {
-        var period = ctx.query.period || '';
-        var userId = ctx.query.userId ? parseInt(ctx.query.userId) : 0;
-        var filter = {};
-        if (period) filter.period = period;
-        if (userId) filter.createdBy = userId;
-        var archives = await this.db.getRepository('att_archives').find({
-          filter: filter,
-          appends: ['createdBy'],
-          sort: '-period',
-          limit: 500
-        });
-        var csv = '\uFEFF';
-        csv += '姓名,月份,工作日,请假天数,围栏内天数,围栏外天数,异常次数\n';
-        for (var i = 0; i < archives.length; i++) {
-          var a = archives[i];
-          var uname = a.createdBy ? (a.createdBy.nickname || a.createdBy.username || '') : '';
-          var row = [uname, a.period, a.total_work_days || 0, a.total_leave_days || 0,
-            a.geofence_inside_days || 0, a.geofence_outside_days || 0, a.geofence_anomaly_count || 0
-          ].map(function(v){ return '"' + String(v) + '"'; }).join(',');
-          csv += row + '\n';
-        }
-        ctx.body = csv;
-      } catch(e) {
-        ctx.status = 500;
-        ctx.body = '导出失败: ' + e.message;
-      }
+      await authCheckHandler(ctx);
     }, { tag: 'dashboard-home', before: 'dataSource' });
 
-    // Search API - AMAP inputtips proxy (no auth check, page-level auth already done by nginx)
-    this.app.use(async (ctx, next) => {
-      if (ctx.method !== 'GET' || ctx.state.reqPath !== '/__pd__/search') {
+    // Standalone aggregation panel page (for Markdown block iframe embedding)
+    app.use(async (ctx: any, next: () => Promise<void>) => {
+      if (ctx.method !== 'GET' || ctx.state.reqPath !== '/__pd__/aggregate-panel') {
         return await next();
       }
       ctx.withoutDataWrapping = true;
-      ctx.type = 'application/json; charset=utf-8';
-      var amapKey = process.env.AMAP_KEY || '31e73c1d12b2848e7bd964774782a954';
-      var q = ctx.query.q;
-      if (!q) { ctx.body = { status: '0', tips: [] }; return; }
-      try {
-        var data = await new Promise(function(resolve, reject) {
-          https.get('https://restapi.amap.com/v3/assistant/inputtips?key=' + amapKey + '&keywords=' + encodeURIComponent(q) + '&output=json&offset=20', function(res) {
-            var body = '';
-            res.on('data', function(c) { body += c; });
-            res.on('end', function() {
-              try { resolve(JSON.parse(body)); } catch(e) { reject(e); }
-            });
-          }).on('error', reject);
-        });
-        ctx.body = data;
-      } catch(e) {
-        ctx.status = 502;
-        ctx.body = { status: '0', tips: [], error: e.message };
-      }
+      ctx.type = 'text/html; charset=utf-8';
+      ctx.body = `<html><head><meta charset="utf-8">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background:transparent;padding:12px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+.row label{font-size:13px;color:#8c8c8c;white-space:nowrap}
+.row input{flex:1;min-width:100px;padding:6px 10px;border:1px solid #d9d9d9;border-radius:6px;font-size:14px}
+.row input:focus{outline:none;border-color:#1890ff;box-shadow:0 0 0 2px rgba(24,144,255,.2)}
+.info{font-size:13px;color:#8c8c8c;margin-bottom:10px}
+.cnt{color:#52c41a;font-weight:500}
+.done{color:#52c41a;display:none}
+.btn{width:100%;padding:10px 0;font-size:15px;font-weight:600;color:#fff;background:#1890ff;border:none;border-radius:8px;cursor:pointer}
+.btn:hover{background:#096dd9}
+.btn:disabled{background:#bfbfbf;cursor:not-allowed}
+</style></head><body>
+<div class="row"><label>项目编号</label><input id="c" placeholder="读取中..."/></div>
+<div class="row"><label>日期</label><input id="d" type="date"/></div>
+<div class="info">已填报：<span class="cnt" id="n">0</span> 份 <span class="done" id="ok">&#x2713; 已汇总</span></div>
+<button class="btn" id="b">&#x26A1; 汇总日志</button>
+<script>
+(function(){
+var c=document.getElementById('c'),d=document.getElementById('d'),n=document.getElementById('n'),ok=document.getElementById('ok'),b=document.getElementById('b');
+d.value=new Date().toISOString().split('T')[0];
+try{
+  var doc=parent.document;
+  var items=doc.querySelectorAll('.ant-form-item');
+  for(var i=0;i<items.length;i++){
+    var lb=items[i].querySelector('.ant-form-item-label label');
+    if(!lb)continue;
+    var txt=lb.textContent,inp=items[i].querySelector('input');
+    if(!inp)continue;
+    if((txt.indexOf('项目')>=0||txt.indexOf('缩写')>=0)&&inp.value)c.value=inp.value;
+    if(txt.indexOf('日期')>=0&&inp.value)d.value=inp.value;
+  }
+  if(c.value){c.style.background='#f0f5ff';c.style.borderColor='#91d5ff'}
+  else console.log('[agg] project field not found in parent DOM');
+}catch(e){console.log('[agg] parent access denied:',e.message)}
+var up=new URLSearchParams(location.search),code=up.get('code'),dt=up.get('date');
+if(!c.value)c.placeholder='手动输入项目编号';
+if(code){c.value=code;c.style.background='#f0f5ff';c.style.borderColor='#91d5ff'}else if(!c.value)c.placeholder='手动输入项目编号';
+if(dt){var m=dt.match(/(\\d{4})[\\-\\/](\\d{1,2})[\\-\\/](\\d{1,2})/);if(m)d.value=m[1]+'-'+String(Number(m[2])).padStart(2,'0')+'-'+String(Number(m[3])).padStart(2,'0')}
+else d.value=new Date().toISOString().split('T')[0];
+
+async function rf(){var code=c.value.trim(),dt=d.value;if(!code||!dt){n.textContent='0';ok.style.display='none';return}try{var r=await fetch('/api/__pd__/daily-summary-status?projectNameNo='+encodeURIComponent(code)+'&date='+dt.replace(/-/g,''),{credentials:'same-origin'});var j=await r.json();if(j.code===0){n.textContent=j.data.entryCount||0;ok.style.display=j.data.aggregated?'inline':'none'}}catch(e){}}
+c.addEventListener('change',rf);d.addEventListener('change',rf);
+if(code&&d.value)setTimeout(rf,300);
+
+b.addEventListener('click',async function(){var code=c.value.trim(),dt=d.value;if(!code||!dt){alert('请填写项目编号和日期');return}var ymd=parseInt(dt.replace(/-/g,''));b.disabled=true;b.textContent='汇总中...';try{var r=await fetch('/api/__pd__/aggregate-log',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({projectNameNo:code,date:ymd})});var j=await r.json();if(j.code===0&&j.data?.updated)alert('汇总完成，新增 '+j.data.newEntryCount+' 份');else if(j.code===0)alert(j.data?.message||'没有新内容需要汇总');else alert('汇总失败：'+(j.msg||'未知错误'));rf()}catch(e){alert('汇总失败: '+e.message)}finally{b.disabled=false;b.textContent='\u26A1 汇总日志'}});
+})();
+</script></body></html>`;
     }, { tag: 'dashboard-home', before: 'dataSource' });
 
-    // Reverse geocode - convert lat/lng to address via AMAP regeo
-    this.app.use(async (ctx, next) => {
-      if (ctx.method !== 'GET' || ctx.state.reqPath !== '/__pd__/reverse-geocode') {
-        return await next();
-      }
-      ctx.withoutDataWrapping = true;
-      ctx.type = 'application/json; charset=utf-8';
-      var lat = ctx.query.lat;
-      var lng = ctx.query.lng;
-      if (!lat || !lng) { ctx.body = { status: '0', address: null }; return; }
-      try {
-        var data = await new Promise(function(resolve, reject) {
-          https.get('https://restapi.amap.com/v3/geocode/regeo?key=' + AMAP_KEY + '&location=' + encodeURIComponent(lng + ',' + lat) + '&output=json&radius=1000', function(res) {
-            var body = '';
-            res.on('data', function(c) { body += c; });
-            res.on('end', function() {
-              try { resolve(JSON.parse(body)); } catch(e) { reject(e); }
-            });
-          }).on('error', reject);
-        });
-        if (data.status === '1' && data.regeocode) {
-          var ac = data.regeocode.addressComponent || {};
-          var street = ac.streetNumber && ac.streetNumber.street || ac.street || '';
-          var township = ac.township || '';
-          var district = ac.district || '';
-          var city = ac.city || '';
-          var province = ac.province || '';
-          ctx.body = {
-            status: '1',
-            adcode: ac.adcode || '',
-            address: {
-              province: province,
-              city: city,
-              district: district,
-              township: township,
-              street: street,
-              formatted: data.regeocode.formatted_address || ''
-            }
-          };
-        } else {
-          ctx.body = { status: '0', address: null, amap: data };
-        }
-      } catch(e) {
-        ctx.status = 502;
-        ctx.body = { status: '0', address: null, error: e.message };
-      }
-    }, { tag: 'dashboard-home', before: 'dataSource' });
-
-    // QWeather proxy - JWT auth, primary weather source
-    function qwFetch(url) {
-      return new Promise(function(resolve, reject) {
-        var jwt = qwJwt();
-        var opts = new URL(url);
-        https.get({
-          hostname: opts.hostname, path: opts.pathname + opts.search,
-          headers: { 'Authorization': 'Bearer ' + jwt, 'User-Agent': 'Mozilla/5.0' }
-        }, function(res) {
-            var chunks = [];
-            res.on('data', function(c) { chunks.push(c); });
-            res.on('end', function() {
-                var buf = Buffer.concat(chunks);
-                try {
-                    if (res.headers['content-encoding'] === 'gzip') {
-                        buf = zlib.gunzipSync(buf);
-                    }
-                    resolve(JSON.parse(buf.toString()));
-                } catch(e) { reject(e); }
-            });
-        }).on('error', reject);
-      });
-    }
-    this.app.use(async (ctx, next) => {
-      if (ctx.method !== 'GET' || ctx.state.reqPath !== '/__pd__/weather-qw') {
-        return await next();
-      }
-      ctx.withoutDataWrapping = true;
-      ctx.type = 'application/json; charset=utf-8';
-      var lat = ctx.query.lat;
-      var lng = ctx.query.lng;
-      var city = ctx.query.city || '';
-      city = city.replace(/市$/, '').replace(/地区$/, '');
-      try {
-        // If lat/lng provided, use directly (QWeather supports lon,lat format)
-        // If only city name, look up via GeoAPI first
-        var loc = '';
-        var locCity = '';
-        if (lat && lng) {
-          loc = lng + ',' + lat;
-          // Try GeoAPI to get city name from coords
-          try {
-            var geo = await qwFetch('https://' + QW_GEO_HOST + '/geo/v2/city/lookup?location=' + encodeURIComponent(loc) + '&range=cn');
-            if (geo && geo.code === '200' && geo.location && geo.location[0]) {
-              locCity = geo.location[0].name || '';
-              if (!locCity) locCity = geo.location[0].adm1 || '';
-            }
-          } catch(e) {}
-        } else if (city) {
-          try {
-            var geo = await qwFetch('https://' + QW_GEO_HOST + '/geo/v2/city/lookup?location=' + encodeURIComponent(city) + '&range=cn');
-            if (geo && geo.code === '200' && geo.location && geo.location[0]) {
-              loc = geo.location[0].id || city;
-              locCity = geo.location[0].name || city;
-            } else {
-              loc = city;
-              locCity = city;
-            }
-          } catch(e) { loc = city; locCity = city; }
-        }
-        if (!loc && !city) { ctx.body = { code: -1, msg: '缺少参数' }; return; }
-        var w = await qwFetch('https://' + QW_WEATHER_HOST + '/v7/weather/now?location=' + encodeURIComponent(loc || city));
-        if (w && w.code === '200') {
-          var n = w.now || {};
-          ctx.body = { code: 0, data: {
-            city: locCity || '',
-            weather: n.text || n.weather || '',
-            temperature: n.temp || n.temperature || '',
-            windDirection: n.windDir || '',
-            windPower: n.windScale || '',
-            humidity: n.humidity || '',
-            icon: n.icon || '',
-            time: w.updateTime || ''
-          }};
-        } else {
-          ctx.body = { code: -1, msg: 'QWeather: ' + (w && w.code || 'unknown error') };
-        }
-      } catch(e) {
-        ctx.body = { code: -1, msg: e.message };
-      }
-    }, { tag: 'dashboard-home', before: 'dataSource' });
-
-    // QWeather reverse geocode - lat/lng to location name (GeoAPI)
-    this.app.use(async (ctx, next) => {
-      if (ctx.method !== 'GET' || ctx.state.reqPath !== '/__pd__/reverse-geocode-qw') {
-        return await next();
-      }
-      ctx.withoutDataWrapping = true;
-      ctx.type = 'application/json; charset=utf-8';
-      var lat = ctx.query.lat;
-      var lng = ctx.query.lng;
-      if (!lat || !lng) { ctx.body = { status: '0', address: null }; return; }
-      try {
-        var geo = await qwFetch('https://' + QW_GEO_HOST + '/geo/v2/city/lookup?location=' + encodeURIComponent(lng + ',' + lat) + '&range=cn');
-        if (geo && geo.code === '200' && geo.location && geo.location[0]) {
-          var loc = geo.location[0];
-          ctx.body = {
-            status: '1',
-            address: {
-              city: loc.adm2 || loc.name || '',
-              district: loc.adm3 || loc.adm1 || '',
-              name: loc.name || '',
-              type: loc.type || ''
-            }
-          };
-        } else {
-          ctx.body = { status: '0', address: null, qw: geo };
-        }
-      } catch(e) {
-        ctx.body = { status: '0', address: null, error: e.message };
-      }
-    });
-
-    // Pinyin initials endpoint
-    this.app.use(async (ctx, next) => {
-      if (ctx.method !== 'GET' || ctx.state.reqPath !== '/__pd__/pinyin-initials') {
-        return await next();
-      }
-      ctx.withoutDataWrapping = true;
-      ctx.type = 'application/json; charset=utf-8';
-      try {
-        var text = ctx.query.text;
-        if (!text) { ctx.body = { code: -1, msg: '缺少参数text' }; return; }
-        var p = require('/app/nocobase/storage/node_modules/pinyin-pro');
-        var initials = p.pinyin(text, { pattern: 'first', toneType: 'none' }).replace(/ /g, '').toUpperCase();
-        ctx.body = { code: 0, data: { text: text, initials: initials } };
-      } catch(e) {
-        ctx.body = { code: -1, msg: e.message };
-      }
-    });
-
-    // Next serial number endpoint (atomic increment)
-    this.app.use(async (ctx, next) => {
-      if (ctx.method !== 'GET' || ctx.state.reqPath !== '/__pd__/next-serial') {
-        return await next();
-      }
-      ctx.withoutDataWrapping = true;
-      ctx.type = 'application/json; charset=utf-8';
-      try {
-        var prefix = ctx.query.prefix || 'SG';
-        var dateStr = ctx.query.date;
-        var projectId = ctx.query.project_id;
-        if (!dateStr || !projectId) {
-          ctx.body = { code: -1, msg: '缺少参数date或project_id' };
-          return;
-        }
-        var result = await ctx.db.sequelize.query(
-          "INSERT INTO sys_serial_counters (id, prefix, date_str, project_id, current_seq, module, \"createdAt\", \"updatedAt\") VALUES ((SELECT COALESCE(MAX(id), 0) + 1 FROM sys_serial_counters), :prefix, :dateStr, :projectId, 1, 'construction_daily', NOW(), NOW()) ON CONFLICT (prefix, date_str, project_id) DO UPDATE SET current_seq = sys_serial_counters.current_seq + 1, \"updatedAt\" = NOW() RETURNING current_seq",
-          {
-            replacements: { prefix: prefix, dateStr: dateStr, projectId: parseInt(projectId) },
-            type: 'SELECT'
-          }
-        );
-        var seq = result[0][0].current_seq;
-        ctx.body = { code: 0, data: { prefix: prefix, date: dateStr, project_id: projectId, seq: seq } };
-      } catch(e) {
-        ctx.body = { code: -1, msg: e.message };
-      }
-    });
-
-    // Batch create daily logs endpoint (for TIMER-2 workflow)
-    this.app.use(async (ctx, next) => {
-      if (ctx.method !== 'POST' || ctx.state.reqPath !== '/__pd__/batch-create-logs') {
-        return await next();
-      }
-      ctx.withoutDataWrapping = true;
-      ctx.type = 'application/json; charset=utf-8';
-      try {
-        var summaries = ctx.request.body && ctx.request.body.summaries ? ctx.request.body.summaries : [];
-        if (!Array.isArray(summaries) || summaries.length === 0) {
-          ctx.body = { code: 0, data: { created: 0, logs: [], briefings: [] } };
-          return;
-        }
-        var logs = [];
-        var briefings = [];
-        var today = new Date().toISOString().slice(0, 10);
-        var db = ctx.db;
-        for (var i = 0; i < summaries.length; i++) {
-          var s = summaries[i];
-          var projectId = s.projectId;
-          var weather = s.weather || '';
-          var entryCount = s.entryCount || 0;
-          var workerCount = s.workerCount || 0;
-          var summaryDate = s.summaryDate || today;
-
-          // 1. Create construction_daily_log if not exists
-          var existingLog = await db.getRepository('construction_daily_log').findOne({
-            filter: { project_id: projectId, log_date: summaryDate }
-          });
-          var logId = null;
-          if (!existingLog) {
-            var logRecord = await db.getRepository('construction_daily_log').create({
-              values: {
-                project_id: projectId,
-                log_date: summaryDate,
-                weather: weather,
-                summary_content: '今日填报' + entryCount + '条，涉及' + workerCount + '人次',
-                status: '待审核',
-                previous_status: ''
-              }
-            });
-            logId = logRecord.id;
-            logs.push({ id: logId, project_id: projectId, created: true });
-          } else {
-            logId = existingLog.id;
-            logs.push({ id: logId, project_id: projectId, created: false });
-          }
-
-          // 2. Create briefings if not exists
-          var existingBriefing = await db.getRepository('briefings').findOne({
-            filter: { project_id: projectId, briefing_date: summaryDate, briefing_type: 'construction_daily' }
-          });
-          if (!existingBriefing) {
-            var briefingRecord = await db.getRepository('briefings').create({
-              values: {
-                project_id: projectId,
-                briefing_type: 'construction_daily',
-                title: '施工日报 - ' + summaryDate,
-                summary: '项目ID:' + projectId + ' 填报' + entryCount + '条 工人' + workerCount + '人 天气:' + weather,
-                briefing_date: summaryDate,
-                source_workflow_id: 366321793040403
-              }
-            });
-            briefings.push({ id: briefingRecord.id, project_id: projectId, created: true });
-          } else {
-            briefings.push({ id: existingBriefing.id, project_id: projectId, created: false });
-          }
-
-          // 3. Update entries to link to log
-          if (logId) {
-            await db.getRepository('construction_daily_entries').update({
-              filter: { project_id: projectId, entry_date: summaryDate },
-              values: { log_id: logId }
-            });
-          }
-        }
-        ctx.body = { code: 0, data: { created: logs.length, logs: logs, briefings: briefings } };
-      } catch(e) {
-        ctx.body = { code: -1, msg: e.message, stack: e.stack };
-      }
-    });
-
-    // Page serving middleware
-    this.app.use(async (ctx, next) => {
-      if (ctx.method !== 'GET' || !PAGE_MAP[ctx.state.reqPath]) {
-        return await next();
-      }
-
-      if (await this.isAuthenticated(ctx)) {
-        ctx.withoutDataWrapping = true;
-        ctx.set('Cache-Control', 'no-cache, no-store, must-revalidate');
-        ctx.set('Pragma', 'no-cache');
-        ctx.set('Expires', '0');
-        try {
-          const fileName = PAGE_MAP[ctx.state.reqPath];
-          const htmlPath = path.join(STORAGE_DIR, fileName);
-          const html = fs.readFileSync(htmlPath, 'utf-8');
-          ctx.type = 'text/html; charset=utf-8';
-          ctx.body = html;
-        } catch (e) {
-          ctx.status = 500;
-          ctx.body = 'Page file not found';
-        }
-      } else {
-        ctx.redirect('/signin');
-      }
-    }, { tag: 'dashboard-home', before: 'dataSource' });
+    // Register page serving routes (must be last)
+    registerPageRoutes(app);
   }
 
-  async isAuthenticated(ctx) {
-    if (ctx.state.currentUser) return true;
-
-    const authHeader = ctx.get('Authorization') || '';
-    let token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
-    if (!token) {
-      token = ctx.cookies.get('nb_token') || ctx.cookies.get('NOCOBASE_token');
-    }
-    if (!token) return false;
-
-    // Known custom token -> user 19 (HR6666)
-    if (token === 'ee2ccf0c-6e29-4e18-8bac-e5e145bc4726') {
-      try {
-        var u = await this.db.getRepository('users').findOne({
-          filter: { id: 19 },
-          appends: ['roles', 'departments']
-        });
-        if (u) { ctx.state.currentUser = u; return true; }
-      } catch(e) {}
-    }
-
-    // Fallback: JWT tokens via auth:check
-    try {
-      const result = await new Promise((resolve, reject) => {
-        const req = http.get({
-          hostname: '127.0.0.1', port: 13000,
-          path: '/api/auth:check',
-          headers: { 'Authorization': 'Bearer ' + token },
-          timeout: 5000,
-        }, (res) => {
-          let body = '';
-          res.on('data', (c) => body += c);
-          res.on('end', () => resolve({ status: res.statusCode, body: body }));
-        });
-        req.on('error', reject);
-        req.on('timeout', () => { req.destroy(); reject(new Error('timeout')); });
-      });
-
-      if (result.status === 200) {
-        try {
-          var data = JSON.parse(result.body);
-          var userData = data && data.data ? data.data : data;
-          if (userData && userData.id) {
-            ctx.state.currentUser = userData;
-          }
-        } catch(e) {}
-        return true;
-      }
-    } catch(e) {}
-
-    return false;
+  async isAuthenticated(ctx: any): Promise<boolean> {
+    return isAuthenticated(ctx);
   }
 };
