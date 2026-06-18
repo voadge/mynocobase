@@ -441,12 +441,7 @@
             text-align: center;
         }
 
-<<<<<<< Updated upstream
         /* ---- 工作版块 ---- */
-=======
-        
-/* ---- 工作版块 ---- */
->>>>>>> Stashed changes
         .work-section { margin-top: 28px; }
 
         .section-header {
@@ -764,10 +759,7 @@
         }
         .camera-retry-btn:hover { background: rgba(255,107,107,0.3); }
 
-<<<<<<< Updated upstream
 
-=======
->>>>>>> Stashed changes
         .attend-submit:disabled { opacity: 0.3; cursor: not-allowed; }
         .attend-submit:hover:not(:disabled) { filter: brightness(1.15); }
         .attend-location-status {
@@ -973,12 +965,7 @@
             </div>
         </div>
 
-<<<<<<< Updated upstream
         <!-- 工作版块 -->
-=======
-        
-<!-- 工作版块 -->
->>>>>>> Stashed changes
         <div class="work-section collapsed" id="workSection">
             <div class="section-header" onclick="toggleWorks()">
                 工作版块
@@ -993,7 +980,7 @@
                <button class="footer-enter" onclick="openNocoBase()" style="display:none">开始工作</button>
                 <span id="adminLinks" style="display:none"><a href="/admin/ffw9h2yb5cp" target="_blank">管理后台</a> | <a href="/admin/lk63lo7m7ak" target="_blank">流程日志</a></span>
                <a class="footer-toolbox" href="/api/__tb__" style="display:none">百宝箱</a>
-                 <span>贵州遵大数智化平台 <span id="nb-version">v2.1.0-beta.42</span> | <img src="/dashboard/备案图标.png" class="beian-icon"> <a href="https://beian.mps.gov.cn/#/query/webSearch?code=51162302000288" rel="noreferrer" target="_blank">川公网安备51162302000288号</a> | <a href="https://beian.miit.gov.cn/" target="_blank">蜀ICP备2026030576号</a></span>
+                 <span>贵州遵大数智化平台 <span id="nb-version">v2.1.5</span> | <img src="/dashboard/备案图标.png" class="beian-icon"> <a href="https://beian.mps.gov.cn/#/query/webSearch?code=51162302000288" rel="noreferrer" target="_blank">川公网安备51162302000288号</a> | <a href="https://beian.miit.gov.cn/" target="_blank">蜀ICP备2026030576号</a></span>
             </p>
         </div>
     </div>
@@ -1194,13 +1181,7 @@
                 if (s.adminOnly && !isAdmin) return;
                 const g = document.createElement('div');
                 g.className = 'work-group';
-<<<<<<< Updated upstream
                 g.style.cssText = `background:${s.bg};border-color:${s.border}`;
-=======
-                g.style.cssText = `background:${s.bg}
-        // 简报展示
-;border-color:${s.border}`;
->>>>>>> Stashed changes
                 const t = document.createElement('div');
                 t.className = 'group-title'; t.style.color = s.color; t.textContent = s.title;
                 g.appendChild(t);
@@ -1321,35 +1302,12 @@
             const p = document.getElementById('pendingCount');
             const n = document.getElementById('notifyCount');
             try {
-<<<<<<< Updated upstream
                 const r = await fetch('/api/flow_nodes:list?filter[status]=pending&pageSize=1', { credentials:'include' });
                 p.textContent = r.ok ? ((await r.json()).meta?.total ?? '0') : '0';
             } catch { p.textContent = '0'; }
             try {
                 const r = await fetch('/api/notifications:list?filter[read]=false&pageSize=1', { credentials:'include' });
                 n.textContent = r.ok ? ((await r.json()).meta?.total ?? '0') : '0';
-=======
-                const r = await fetch('/api/workflowManualTasks:list?filter=%7B%22status%22%3A0%7D&pageSize=1', { credentials:'include' });
-                p.textContent = r.ok ? ((await r.json()).meta?.total ?? '0') : '0';
-            } catch { p.textContent = '0'; }
-            try {
-                const authR = await fetch('/api/auth:check', { credentials:'include' });
-                if (authR.ok) {
-                    const authData = await authR.json();
-                    const userId = authData?.data?.id;
-                    if (userId) {
-                        const filter = encodeURIComponent(JSON.stringify({read:false,userId:userId}));
-                        const r = await fetch('/api/notifications:list?filter=' + filter + '&pageSize=1', { credentials:'include' });
-                        n.textContent = r.ok ? ((await r.json()).meta?.total ?? '0') : '0';
-                    } else {
-                        const r = await fetch('/api/notifications:list?filter=%7B%22read%22%3Afalse%7D&pageSize=1', { credentials:'include' });
-                        n.textContent = r.ok ? ((await r.json()).meta?.total ?? '0') : '0';
-                    }
-                } else {
-                    const r = await fetch('/api/notifications:list?filter=%7B%22read%22%3Afalse%7D&pageSize=1', { credentials:'include' });
-                    n.textContent = r.ok ? ((await r.json()).meta?.total ?? '0') : '0';
-                }
->>>>>>> Stashed changes
             } catch { n.textContent = '0'; }
         }
 
@@ -2489,10 +2447,7 @@
         });
 
 
-<<<<<<< Updated upstream
 
-=======
->>>>>>> Stashed changes
         // Fetch current day status for display
         let attendState = null;
         async function fetchAttendance() {
