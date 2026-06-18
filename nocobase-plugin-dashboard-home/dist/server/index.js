@@ -17,10 +17,7 @@ const attendance_1 = require("./middleware/attendance");
 const dashboard_1 = require("./middleware/dashboard");
 const weather_1 = require("./middleware/weather");
 const people_dynamic_1 = require("./middleware/people-dynamic");
-<<<<<<< Updated upstream
-=======
 const department_acl_1 = require("./middleware/department-acl");
->>>>>>> Stashed changes
 const dept_admin_api_1 = require("./middleware/dept-admin-api");
 const dept_admin_pages_1 = require("./middleware/dept-admin-pages");
 const qw_jwt_1 = require("./utils/qw-jwt");
@@ -52,7 +49,6 @@ module.exports = class DashboardHomePlugin extends server_1.Plugin {
                 arCol.addField('workflow_status', { type: 'string', nullable: true, defaultValue: 'normal' });
             arCol.sync({ alter: true });
         }
-<<<<<<< Updated upstream
         // Register virtual computed fields on users collection (Plan B: native ACL)
         const usersCol = db.getCollection('users');
         if (usersCol) {
@@ -150,7 +146,6 @@ module.exports = class DashboardHomePlugin extends server_1.Plugin {
                 }
             });
         }
-=======
         // Register department_acl_rules collection
         db.collection({
             name: 'department_acl_rules',
@@ -186,7 +181,6 @@ module.exports = class DashboardHomePlugin extends server_1.Plugin {
             ],
         });
         await db.sync();
->>>>>>> Stashed changes
         // Normalize path — strip /api prefix for consistent path matching
         app.use(async (ctx, next) => {
             ctx.state.reqPath = ctx.path.replace(/^\/api/, '');
@@ -296,11 +290,8 @@ module.exports = class DashboardHomePlugin extends server_1.Plugin {
         (0, dashboard_1.registerDashboardRoutes)(app, pluginRef);
         (0, weather_1.registerWeatherRoutes)(app);
         (0, people_dynamic_1.registerPeopleDynamicRoutes)(app);
-<<<<<<< Updated upstream
-=======
         // Register department ACL middleware (injects into ACL pipeline before core)
         (0, department_acl_1.registerDepartmentAcl)(app, db);
->>>>>>> Stashed changes
         // Register department admin API
         (0, dept_admin_api_1.registerDeptAdminApi)(app, pluginRef);
         // Register department admin pages
@@ -570,7 +561,6 @@ module.exports = class DashboardHomePlugin extends server_1.Plugin {
             }
             ctx.withoutDataWrapping = true;
             ctx.type = 'text/html; charset=utf-8';
-<<<<<<< Updated upstream
             ctx.body = `<html><head><meta charset="utf-8">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
@@ -620,7 +610,6 @@ if(code&&d.value)setTimeout(rf,300);
 
 b.addEventListener('click',async function(){var code=c.value.trim(),dt=d.value;if(!code||!dt){alert('请填写项目编号和日期');return}var ymd=parseInt(dt.replace(/-/g,''));b.disabled=true;b.textContent='汇总中...';try{var r=await fetch('/api/__pd__/aggregate-log',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({projectNameNo:code,date:ymd})});var j=await r.json();if(j.code===0&&j.data?.updated)alert('汇总完成，新增 '+j.data.newEntryCount+' 份');else if(j.code===0)alert(j.data?.message||'没有新内容需要汇总');else alert('汇总失败：'+(j.msg||'未知错误'));rf()}catch(e){alert('汇总失败: '+e.message)}finally{b.disabled=false;b.textContent='\u26A1 汇总日志'}});
 })();
-=======
             ctx.body = `<html><head><meta charset="utf-8">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
@@ -669,7 +658,6 @@ if(code&&d.value)setTimeout(rf,300);
 
 b.addEventListener('click',async function(){var code=c.value.trim(),dt=d.value;if(!code||!dt){alert('请填写项目编号和日期');return}var ymd=parseInt(dt.replace(/-/g,''));b.disabled=true;b.textContent='汇总中...';try{var r=await fetch('/api/__pd__/aggregate-log',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({projectNameNo:code,date:ymd})});var j=await r.json();if(j.code===0&&j.data?.updated)alert('汇总完成，新增 '+j.data.newEntryCount+' 份');else if(j.code===0)alert(j.data?.message||'没有新内容需要汇总');else alert('汇总失败：'+(j.msg||'未知错误'));rf()}catch(e){alert('汇总失败: '+e.message)}finally{b.disabled=false;b.textContent='\u26A1 汇总日志'}});
 })();
->>>>>>> Stashed changes
 </script></body></html>`;
         }, { tag: 'dashboard-home', before: 'dataSource' });
         // Register page serving routes (must be last)
