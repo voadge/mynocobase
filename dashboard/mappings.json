@@ -1,0 +1,14 @@
+[
+  {
+    "briefing_type": "施工日志",
+    "source_collection": "construction_daily_log",
+    "admin_uuid": "z9k63jbjdne",
+    "serial_field": "log_no"
+  },
+  {
+    "briefing_type": "报备简报",
+    "source_collection": "temporary_additions",
+    "admin_uuid": "lrtxsi74fvr",
+    "serial_field": "addition_no"
+  }
+]
