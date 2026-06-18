@@ -48,15 +48,19 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    command: ["redis-server", "--appendonly", "yes", "--requirepass", "nocobase123"]
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        export REDIS_PASS="$$(cat /run/secrets/redis_password)"
+        redis-server --appendonly yes --requirepass "$${REDIS_PASS}"
     volumes:
       - redis-data:/data
     networks:
       - nocobase
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "sh", "-c", "export PASS=\"$$(cat /run/secrets/redis_password)\"; redis-cli -a \"$${PASS}\" ping"]
       interval: 10s
-      timeout: 3s
+      timeout: 5s
       retries: 5
       start_period: 10s
     deploy:
@@ -70,7 +74,7 @@ services:
       - redis_password
 
   app:
-    image: nocobase/nocobase:2.1.5
+    image: nocobase/nocobase:2.1.7
     restart: unless-stopped
     env_file: ./env/app.env
     entrypoint: ["/bin/sh", "/opt/noco-base/entrypoint-wrapper.sh"]

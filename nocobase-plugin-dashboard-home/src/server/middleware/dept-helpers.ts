@@ -50,16 +50,7 @@ export async function resolveApproversByRoute(
 
 /**
  * Given a user's department IDs and role names, return all levelKeys they can approve.
-<<<<<<< Updated upstream
- * Role/flag → level mapping:
- *   ProfessionalManager (专业负责人) → level1_pending
- *   is_person_in_charge OR project_manager (部门负责人) → level2_pending
- *   is_manager_in_charge (分管领导) → level3_pending
- *   GeneralManager (总经理) → level4_pending
- *   Chairman (董事长) → level5_pending
-=======
  * (Reverse of resolveApproversByRoute — used for "my pending approvals" listing.)
->>>>>>> Stashed changes
  */
 export async function getUserApprovalLevels(
   userId: number,
@@ -68,23 +59,6 @@ export async function getUserApprovalLevels(
 ): Promise<string[]> {
   const deptUsers = await db.getRepository('departmentsUsers').find({
     filter: { userId },
-<<<<<<< Updated upstream
-    fields: ['departmentId', 'isOwner', 'is_manager_in_charge'],
-  });
-  if (deptUsers.length === 0) return [];
-
-  const levels: string[] = [];
-  const isOwner = deptUsers.some((d: any) => d.isOwner);
-  const isManagerInCharge = deptUsers.some((d: any) => d.is_manager_in_charge);
-
-  if (userRoleNames.includes('ProfessionalManager')) levels.push('level1_pending');
-  if (isOwner) levels.push('level2_pending');
-  if (isManagerInCharge) levels.push('level3_pending');
-  if (userRoleNames.includes('GeneralManager')) levels.push('level4_pending');
-  if (userRoleNames.includes('Chairman')) levels.push('level5_pending');
-
-  return levels;
-=======
     appends: ['department'],
   });
   const deptIds = deptUsers.map((d: any) => d.departmentId);
@@ -104,5 +78,4 @@ export async function getUserApprovalLevels(
     }
   }
   return [...new Set(allowedLevels)];
->>>>>>> Stashed changes
 }

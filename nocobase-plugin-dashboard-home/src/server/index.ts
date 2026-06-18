@@ -1,4 +1,3 @@
-<<<<<<< Updated upstream
 /**
  * Dashboard Home Plugin - Main entry point
  * Modularized from monolithic index.js into separate middleware files
@@ -177,25 +176,6 @@ module.exports = class DashboardHomePlugin extends Plugin {
         if (!p) {
           ctx.status = 404;
           ctx.body = 'Bundle not found';
-=======
-/**
- * Dashboard Home Plugin - Main entry point
- * Modularized from monolithic index.js into separate middleware files
- */
-import { Plugin } from '@nocobase/server';
-import fs from 'fs';
-import path from 'path';
-import { isAuthenticated, authCheckHandler } from './middleware/auth';
-import { registerProxyRoutes } from './middleware/proxy';
-import { registerPageRoutes } from './middleware/pages';
-import { registerAttendanceRoutes } from './middleware/attendance';
-import { registerDashboardRoutes } from './middleware/dashboard';
-import { registerWeatherRoutes } from './middleware/weather';
-import { registerPeopleDynamicRoutes } from './middleware/people-dynamic';
-import { registerDepartmentAcl } from './middleware/department-acl';
-import { registerDeptAdminApi } from './middleware/dept-admin-api';
-import { registerDeptAdminPages } from './middleware/dept-admin-pages';
-import { qwFetch, QW_WEATHER_HOST } from './utils/qw-jwt';
 
 const STORAGE_DIR = '/app/nocobase/storage/dashboard';
 
@@ -599,7 +579,6 @@ module.exports = class DashboardHomePlugin extends Plugin {
         if (!user) {
           ctx.status = 401;
           ctx.body = { error: 'Unauthenticated' };
->>>>>>> Stashed changes
           return;
         }
         ctx.body = {
@@ -616,7 +595,6 @@ module.exports = class DashboardHomePlugin extends Plugin {
         ctx.status = 500;
         ctx.body = { error: 'Internal server error', message: e.message };
       }
-<<<<<<< Updated upstream
       await next();
     }, { before: 'dataSource' });
 
@@ -996,81 +974,4 @@ b.addEventListener('click',async function(){var code=c.value.trim(),dt=d.value;i
     return isAuthenticated(ctx);
   }
 };
-=======
-    }, { tag: 'dashboard-home', before: 'dataSource' });
 
-    // Auth-check endpoint for nginx auth_request
-    app.use(async (ctx: any, next: () => Promise<void>) => {
-      if (ctx.method !== 'GET' || ctx.state.reqPath !== '/__auth_check__') {
-        return await next();
-      }
-      await authCheckHandler(ctx);
-    }, { tag: 'dashboard-home', before: 'dataSource' });
-
-    // Standalone aggregation panel page (for Markdown block iframe embedding)
-    app.use(async (ctx: any, next: () => Promise<void>) => {
-      if (ctx.method !== 'GET' || ctx.state.reqPath !== '/__pd__/aggregate-panel') {
-        return await next();
-      }
-      ctx.withoutDataWrapping = true;
-      ctx.type = 'text/html; charset=utf-8';
-      ctx.body = `<html><head><meta charset="utf-8">
-<style>
-*{margin:0;padding:0;box-sizing:border-box}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background:transparent;padding:12px}
-.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
-.row label{font-size:13px;color:#8c8c8c;white-space:nowrap}
-.row input{flex:1;min-width:100px;padding:6px 10px;border:1px solid #d9d9d9;border-radius:6px;font-size:14px}
-.row input:focus{outline:none;border-color:#1890ff;box-shadow:0 0 0 2px rgba(24,144,255,.2)}
-.info{font-size:13px;color:#8c8c8c;margin-bottom:10px}
-.cnt{color:#52c41a;font-weight:500}
-.done{color:#52c41a;display:none}
-.btn{width:100%;padding:10px 0;font-size:15px;font-weight:600;color:#fff;background:#1890ff;border:none;border-radius:8px;cursor:pointer}
-.btn:hover{background:#096dd9}
-.btn:disabled{background:#bfbfbf;cursor:not-allowed}
-</style></head><body>
-<div class="row"><label>项目编号</label><input id="c" placeholder="读取中..."/></div>
-<div class="row"><label>日期</label><input id="d" type="date"/></div>
-<div class="info">已填报：<span class="cnt" id="n">0</span> 份 <span class="done" id="ok">&#x2713; 已汇总</span></div>
-<button class="btn" id="b">&#x26A1; 汇总日志</button>
-<script>
-(function(){
-var c=document.getElementById('c'),d=document.getElementById('d'),n=document.getElementById('n'),ok=document.getElementById('ok'),b=document.getElementById('b');
-d.value=new Date().toISOString().split('T')[0];
-try{
-  var doc=parent.document;
-  var items=doc.querySelectorAll('.ant-form-item');
-  for(var i=0;i<items.length;i++){
-    var lb=items[i].querySelector('.ant-form-item-label label');
-    if(!lb)continue;
-    var txt=lb.textContent,inp=items[i].querySelector('input');
-    if(!inp)continue;
-    if((txt.indexOf('项目')>=0||txt.indexOf('缩写')>=0)&&inp.value)c.value=inp.value;
-    if(txt.indexOf('日期')>=0&&inp.value)d.value=inp.value;
-  }
-  if(c.value){c.style.background='#f0f5ff';c.style.borderColor='#91d5ff'}
-  else console.log('[agg] project field not found in parent DOM');
-}catch(e){console.log('[agg] parent access denied:',e.message)}
-if(!c.value)c.placeholder='手动输入项目编号';
-if(code){c.value=code;c.style.background='#f0f5ff';c.style.borderColor='#91d5ff'}else{c.placeholder='手动输入项目编号'}
-if(dt){var m=dt.match(/(\\d{4})[\\-\\/](\\d{1,2})[\\-\\/](\\d{1,2})/);if(m)d.value=m[1]+'-'+String(Number(m[2])).padStart(2,'0')+'-'+String(Number(m[3])).padStart(2,'0')}
-else d.value=new Date().toISOString().split('T')[0];
-
-async function rf(){var code=c.value.trim(),dt=d.value;if(!code||!dt){n.textContent='0';ok.style.display='none';return}try{var r=await fetch('/api/__pd__/daily-summary-status?projectNameNo='+encodeURIComponent(code)+'&date='+dt.replace(/-/g,''),{credentials:'same-origin'});var j=await r.json();if(j.code===0){n.textContent=j.data.entryCount||0;ok.style.display=j.data.aggregated?'inline':'none'}}catch(e){}}
-c.addEventListener('change',rf);d.addEventListener('change',rf);
-if(code&&d.value)setTimeout(rf,300);
-
-b.addEventListener('click',async function(){var code=c.value.trim(),dt=d.value;if(!code||!dt){alert('请填写项目编号和日期');return}var ymd=parseInt(dt.replace(/-/g,''));b.disabled=true;b.textContent='汇总中...';try{var r=await fetch('/api/__pd__/aggregate-log',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({projectNameNo:code,date:ymd})});var j=await r.json();if(j.code===0&&j.data?.updated)alert('汇总完成，新增 '+j.data.newEntryCount+' 份');else if(j.code===0)alert(j.data?.message||'没有新内容需要汇总');else alert('汇总失败：'+(j.msg||'未知错误'));rf()}catch(e){alert('汇总失败: '+e.message)}finally{b.disabled=false;b.textContent='\u26A1 汇总日志'}});
-})();
-</script></body></html>`;
-    }, { tag: 'dashboard-home', before: 'dataSource' });
-
-    // Register page serving routes (must be last)
-    registerPageRoutes(app);
-  }
-
-  async isAuthenticated(ctx: any): Promise<boolean> {
-    return isAuthenticated(ctx);
-  }
-};
->>>>>>> Stashed changes

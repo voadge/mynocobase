@@ -19,6 +19,7 @@
   function setTokenAndRedirect(t) {
     if (!t) return;
     document.cookie = TOKEN_COOKIE + '=' + t + ';' + COOKIE_OPTS;
+    try { localStorage.setItem('NOCOBASE_TOKEN', t); } catch(e) {}
     window.location.replace('/');
   }
 
@@ -81,7 +82,10 @@
         var v = localStorage.getItem(keys[i]);
         if (v && v.length > 20) {
           document.cookie = TOKEN_COOKIE + '=' + v + ';' + COOKIE_OPTS;
-          window.location.replace('/');
+          // 已在看板页时不跳转，仅设 cookie
+          if (window.location.pathname !== '/') {
+            window.location.replace('/');
+          }
           return;
         }
       } catch(e) {}

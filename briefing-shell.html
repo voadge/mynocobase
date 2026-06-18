@@ -188,81 +188,99 @@ body {
   color: var(--text-secondary);
   margin-top: 24px;
 }
-.modal-overlay {
+.drawer-overlay {
   display: none;
   position: fixed;
   z-index: 1000;
   left: 0; top: 0;
   width: 100%; height: 100%;
   background: var(--modal-overlay);
-  align-items: flex-start;
-  justify-content: center;
-  padding: 60px 20px;
 }
-.modal-overlay.open { display: flex; }
-.modal {
+.drawer-overlay.open { display: block; }
+.drawer {
+  position: fixed;
+  right: 0; top: 0;
+  width: 92%; max-width: 460px;
+  height: 100%;
   background: var(--modal-bg);
-  border-radius: 8px;
-  max-width: 520px;
-  width: 100%;
-  box-shadow: 0 6px 30px rgba(0,0,0,0.15);
-  animation: modalIn 0.25s ease;
-  position: relative;
+  box-shadow: -4px 0 24px rgba(0,0,0,0.15);
+  display: flex;
+  flex-direction: column;
+  transform: translateX(100%);
+  transition: transform 0.3s ease;
 }
-@keyframes modalIn {
-  from { transform: translateY(12px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
+.drawer-overlay.open .drawer {
+  transform: translateX(0);
 }
-.modal-header {
+.drawer-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 20px 0;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
 }
-.modal-title {
-  font-size: 1em;
+.drawer-title {
+  font-size: 1.05em;
   font-weight: 600;
   color: var(--text);
 }
-.modal-close {
+.drawer-close {
   border: none;
   background: none;
-  font-size: 1.3em;
+  font-size: 1.4em;
   color: var(--text-secondary);
   cursor: pointer;
   line-height: 1;
-  padding: 0 2px;
+  padding: 0 4px;
   transition: color 0.15s;
 }
-.modal-close:hover { color: var(--text); }
-.modal-body {
-  padding: 16px 20px 20px;
+.drawer-close:hover { color: var(--text); }
+.drawer-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 20px 20px;
+  -webkit-overflow-scrolling: touch;
 }
-.modal-row {
+.drawer-body::-webkit-scrollbar { width: 4px; }
+.drawer-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+.drawer-row {
   display: flex;
-  padding: 6px 0;
+  padding: 8px 0;
   border-bottom: 1px solid var(--border);
 }
-.modal-row:last-child { border-bottom: none; }
-.modal-row-label {
+.drawer-row:last-child { border-bottom: none; }
+.drawer-row-label {
   width: 80px;
   flex-shrink: 0;
   font-size: 0.82em;
   color: var(--text-secondary);
-  padding-top: 1px;
+  padding-top: 2px;
 }
-.modal-row-value {
+.drawer-row-value {
   flex: 1;
   font-size: 0.88em;
   color: var(--text);
   line-height: 1.5;
   word-break: break-word;
 }
-.modal-divider {
-  border: none;
+.drawer-footer {
+  padding: 12px 20px;
   border-top: 1px solid var(--border);
-  margin: 8px 0;
+  flex-shrink: 0;
 }
+.drawer-link-btn {
+  display: block;
+  text-align: center;
+  padding: 10px;
+  border-radius: 6px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.9em;
+  text-decoration: none;
+  transition: opacity 0.2s;
+}
+.drawer-link-btn:hover { opacity: 0.85; }
 .loading {
   display: flex;
   align-items: center;
@@ -289,14 +307,14 @@ body {
   .cards-panel { padding: 0 10px; }
   .card { padding: 10px; }
   .cards-scroll { max-height: 360px; }
-  .modal { padding: 16px; }
+  .drawer { width: 100%; max-width: 100%; }
 }
 </style>
 </head>
 <body>
 <div id="app"></div>
-<div class="modal-overlay" id="modalOverlay">
-  <div class="modal" id="modalContent"></div>
+<div class="drawer-overlay" id="drawerOverlay">
+  <div class="drawer" id="drawerContent"></div>
 </div>
 
 <script>
@@ -341,8 +359,8 @@ body {
   }
 
   var app = document.getElementById('app');
-  var modalOverlay = document.getElementById('modalOverlay');
-  var modalContent = document.getElementById('modalContent');
+  var drawerOverlay = document.getElementById('drawerOverlay');
+  var drawerContent = document.getElementById('drawerContent');
   var currentTab = 0;
   var categories = [];
   var allBriefings = [];
@@ -491,7 +509,7 @@ body {
       var id = card.getAttribute('data-id');
       markSeen(id);
       updateBadge(id);
-      openNativeForm(card);
+      openDrawer(card);
     });
   }
 
@@ -629,81 +647,131 @@ body {
     }).then(function(r) { return r.json(); });
   }
 
-  function openNativeForm(card) {
+  function openDrawer(card) {
     var sourceId = card.getAttribute('data-source');
     var briefType = card.getAttribute('data-type');
     var serialNo = card.getAttribute('data-serial');
     var routeInfo = ROUTE_MAP[briefType];
 
-    if (routeInfo && sourceId) {
-      window.open('/admin/' + routeInfo.route + '?filterByTk=' + sourceId, '_blank');
+    if (!routeInfo) {
+      showDrawerSimple('提示', '暂无关联记录');
       return;
     }
-    if (routeInfo && serialNo) {
+
+    function doOpen(id) {
+      var recordUrl = '/api/' + routeInfo.collection + ':get?filterByTk=' + id + '&appends=projectID,createdBy,updatedBy';
+      fetch(recordUrl, { headers: { 'Authorization': 'Bearer ' + token, 'Accept': 'application/json' } })
+        .then(function(r) { return r.json(); })
+        .then(function(res) {
+          if (res && res.data) {
+            renderDrawer(res.data, routeInfo, routeInfo.collection);
+          } else if (res && res.errors) {
+            console.error('API error:', res.errors);
+            showDrawerSimple('错误', res.errors[0].message || 'API 返回错误');
+          } else {
+            showDrawerSimple('未找到', '未找到该记录');
+          }
+        })
+        .catch(function(e) {
+          console.error('Fetch error:', e);
+          showDrawerSimple('错误', '加载记录失败');
+        });
+    }
+
+    if (sourceId) {
+      doOpen(sourceId);
+    } else if (serialNo) {
       findRecordBySerial(routeInfo.collection, serialNo, routeInfo.serialField).then(function(res) {
         var found = (res && res.data && res.data[0]);
         if (found && found.id) {
-          window.open('/admin/' + routeInfo.route + '?filterByTk=' + found.id, '_blank');
+          doOpen(found.id);
         } else {
-          showModalSimple('未找到', '未找到 FormSerialNo 为 ' + esc(serialNo) + ' 的记录');
+          showDrawerSimple('未找到', '未找到编号为 ' + esc(serialNo) + ' 的记录');
         }
       });
-      return;
+    } else {
+      showDrawerSimple('提示', '暂无关联记录');
     }
-    showModalSimple('详细信息', '暂无关联的完整表单');
   }
 
-  function renderModal(d, project, reviewer, approver) {
-    var rows = [
-      { label: '项目', value: project.project_name || d.project_name || '' },
-      { label: '日期', value: d.log_date ? String(d.log_date).slice(0,10) : '' },
-      { label: '天气', value: d.weather || '' },
-      { label: '施工内容', value: d.work_content || '' },
-      { label: '设备使用', value: d.equipment_usage || '' },
-      { label: '材料使用', value: d.material_usage || '' },
-      { label: '人员', value: d.personnel_count || '' },
-      { label: '安全情况', value: d.safety_issues || '无' },
-      { label: '质量问题', value: d.quality_issues || '无' },
-      { label: '明日计划', value: d.tomorrow_plan || '' },
-      { label: '复核意见', value: d.review_opinion || '' },
-      { label: '审核意见', value: d.approve_opinion || '' }
-    ];
-    var nameOf = function(p) { return p.nickname || p.username || p.id || ''; };
-    var hasReviewer = reviewer && (reviewer.nickname || reviewer.username);
-    var hasApprover = approver && (approver.nickname || approver.username);
-
-    var html = '<div class="modal-header"><div class="modal-title">施工日志详情</div><button class="modal-close" onclick="closeModal()">&times;</button></div>';
-    html += '<div class="modal-body">';
-    rows.forEach(function(r) {
-      if (!r.value && r.label !== '安全情况' && r.label !== '质量问题') return;
-      html += '<div class="modal-row"><div class="modal-row-label">' + esc(r.label) + '</div><div class="modal-row-value">' + esc(r.value) + '</div></div>';
-    });
-    if (hasReviewer || hasApprover) {
-      html += '<div class="modal-divider"></div>';
-      if (hasReviewer) {
-        html += '<div class="modal-row"><div class="modal-row-label">复核人</div><div class="modal-row-value">' + esc(nameOf(reviewer)) + '</div></div>';
-      }
-      if (hasApprover) {
-        html += '<div class="modal-row"><div class="modal-row-label">审批人</div><div class="modal-row-value">' + esc(nameOf(approver)) + '</div></div>';
-      }
-    }
-    html += '</div>';
-    modalContent.innerHTML = html;
-  }
-
-  function showModalSimple(title, msg) {
-    var html = '<div class="modal-header"><div class="modal-title">' + esc(title) + '</div><button class="modal-close" onclick="closeModal()">&times;</button></div>';
-    html += '<div class="modal-body"><div class="modal-row-value">' + esc(msg) + '</div></div>';
-    modalContent.innerHTML = html;
-    modalOverlay.classList.add('open');
-  }
-
-  window.closeModal = function() {
-    modalOverlay.classList.remove('open');
+  var FRIENDLY_NAMES = {
+    projectID: '项目名称', log_no: '日志编号', log_date: '日期', weather: '天气',
+    work_content: '施工内容', equipment_usage: '设备使用', material_usage: '材料使用',
+    personnel_count: '人员数量', safety_issues: '安全情况', quality_issues: '质量问题',
+    tomorrow_plan: '明日计划', review_opinion: '复核意见', approve_opinion: '审核意见',
+    addition_no: '报备编号', addition_date: '日期', company_name: '单位名称',
+    work_hours: '工时', estimated_cost: '预估费用', attachments: '附件',
+    logtoname: '记录人'
   };
 
-  modalOverlay.addEventListener('click', function(e) {
-    if (e.target === modalOverlay) closeModal();
+  function getFieldLabel(name) {
+    return FRIENDLY_NAMES[name] || name;
+  }
+
+  var DISPLAY_ORDER = {
+    construction_daily_log: ['projectID','log_no','log_date','weather','work_content','equipment_usage','material_usage','personnel_count','safety_issues','quality_issues','tomorrow_plan','logtoname','review_opinion','approve_opinion'],
+    temporary_additions: ['projectID','addition_no','addition_date','company_name','work_content','personnel_count','work_hours','estimated_cost','attachments']
+  };
+
+  function formatField(val, name) {
+    if (val === null || val === undefined) return '';
+    if (Array.isArray(val)) {
+      if (name === 'attachments') {
+        return esc(String(val.length) + ' 个附件');
+      }
+      return esc(val.map(function(v) {
+        return v.title || v.name || v.filename || String(v.id);
+      }).join(', '));
+    }
+    if (typeof val === 'object') {
+      return esc(val.title || val.name || val.nickname || val.username || val.project_name || val.label || String(val.id));
+    }
+    if (name === 'log_date' || name === 'addition_date') {
+      return esc(String(val).slice(0, 10));
+    }
+    if (name === 'estimated_cost') {
+      return esc(Number(val).toLocaleString('zh-CN'));
+    }
+    return esc(String(val));
+  }
+
+  function renderDrawer(record, routeInfo, collName) {
+    var order = DISPLAY_ORDER[collName] || Object.keys(record).filter(function(k) {
+      return ['id','createdAt','createdBy','updatedAt','updatedBy','cron','exclude','sort','__index','link-projectID','FormSerialNo','briefing_date','source_workflow_id','briefing_type','title','summary'].indexOf(k) === -1 && k.indexOf('_id') === -1;
+    });
+
+    var title = collName === 'construction_daily_log' ? '施工日志详情' : '新增报备详情';
+
+    var html = '<div class="drawer-header"><div class="drawer-title">' + title + '</div><button class="drawer-close" onclick="closeDrawer()">&times;</button></div>';
+    html += '<div class="drawer-body">';
+
+    order.forEach(function(name) {
+      var val = record[name];
+      if (val === null || val === undefined || val === '') return;
+      html += '<div class="drawer-row"><div class="drawer-row-label">' + esc(getFieldLabel(name)) + '</div><div class="drawer-row-value">' + formatField(val, name) + '</div></div>';
+    });
+
+    html += '</div>';
+    html += '<div class="drawer-footer"><a href="/admin/' + routeInfo.route + '?filterByTk=' + record.id + '" target="_blank" class="drawer-link-btn">打开完整表单 →</a></div>';
+
+    drawerContent.innerHTML = html;
+    drawerOverlay.classList.add('open');
+  }
+
+  function showDrawerSimple(title, msg) {
+    var html = '<div class="drawer-header"><div class="drawer-title">' + esc(title) + '</div><button class="drawer-close" onclick="closeDrawer()">&times;</button></div>';
+    html += '<div class="drawer-body"><div class="drawer-row-value">' + esc(msg) + '</div></div>';
+    drawerContent.innerHTML = html;
+    drawerOverlay.classList.add('open');
+  }
+
+  window.closeDrawer = function() {
+    drawerOverlay.classList.remove('open');
+    drawerContent.innerHTML = '';
+  };
+
+  drawerOverlay.addEventListener('click', function(e) {
+    if (e.target === drawerOverlay) closeDrawer();
   });
 })();
 </script>
