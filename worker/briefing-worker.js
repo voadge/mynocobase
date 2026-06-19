@@ -4,8 +4,8 @@ const fs = require('fs');
 
 const BASE = process.env.NOCOBASE_BASE || 'http://localhost:80';
 const POLL_INTERVAL = parseInt(process.env.POLL_INTERVAL || '30000', 10);
-const HTML_PATH = process.env.HTML_PATH || '/opt/noco-base/dashboard/briefing-today.html';
-const SHELL_TEMPLATE = process.env.SHELL_TEMPLATE || '/opt/noco-base/dashboard/briefing-shell.html';
+const HTML_PATH = process.env.HTML_PATH || '/opt/noco-base/dashboard/briefing.html';
+const SHELL_TEMPLATE = process.env.SHELL_TEMPLATE || '/opt/noco-base/dashboard/briefing.html';
 const isHttps = BASE.startsWith('https');
 const requester = isHttps ? https : http;
 

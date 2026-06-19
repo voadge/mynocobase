@@ -327,13 +327,6 @@ body {
   var SEEN_DELAY = 30000;
   var MAX_AGE_DAYS = 7;
   var BRIEFING_API = '/api/briefings:list?pageSize=50&sort=createdAt';
-  var RECORD_API = '/api/construction_daily_log:get?filterByTk=';
-
-  var ROUTE_MAP = {
-    '施工日志': { route: 'z9k63jbjdne', collection: 'construction_daily_log', serialField: 'log_no' },
-    '新增报备': { route: 'q03hdwvntli', collection: 'temporary_additions', serialField: 'addition_no' }
-  };
-
   var token = '';
   for (var ki = 0; ki < TOKEN_KEYS.length; ki++) {
     try { var v = localStorage.getItem(TOKEN_KEYS[ki]); if (v && v.length > 20) { token = v; break; } } catch(e) {}
@@ -492,7 +485,7 @@ body {
       html += '<div class="cards-scroll">';
       groups[type].forEach(function(b) {
         var seenClass = isUnseen(b.id) ? '' : ' seen';
-        html += '<div class="card' + seenClass + '" data-id="' + b.id + '" data-source="' + esc(b.source_workflow_id || '') + '" data-serial="' + esc(b.FormSerialNo || '') + '" data-type="' + esc(b.briefing_type || '') + '">';
+        html += '<div class="card' + seenClass + '" data-id="' + b.id + '" data-source="' + esc(b.source_workflow_id || '') + '" data-source-collection="' + esc(b.source_collection || '') + '" data-serial="' + esc(b.FormSerialNo || '') + '" data-type="' + esc(b.briefing_type || '') + '">';
         html += '<div class="card-title">' + esc(b.title || '') + '</div>';
         html += '<div class="card-meta">' + formatDate(b.briefing_date) + '</div>';
         html += '<div class="card-summary">' + esc(b.summary || '') + '</div>';
@@ -638,53 +631,47 @@ body {
     }
   }
 
-  function findRecordBySerial(collection, serialNo, serialField) {
-    var filter = {};
-    filter[serialField] = serialNo;
+  function findRecordBySerial(collection, serialNo) {
+    var filter = { FormSerialNo: serialNo };
     var filterStr = encodeURIComponent(JSON.stringify(filter));
     return fetch('/api/' + collection + ':list?filter=' + filterStr + '&pageSize=1', {
       headers: { 'Authorization': 'Bearer ' + token, 'Accept': 'application/json' }
     }).then(function(r) { return r.json(); });
   }
 
+  function fetchRecordAndShow(collection, id, serialNo) {
+    var recordUrl = '/api/' + collection + ':get?filterByTk=' + id + '&appends=projectID,createdBy,updatedBy';
+    fetch(recordUrl, { headers: { 'Authorization': 'Bearer ' + token, 'Accept': 'application/json' } })
+      .then(function(r) { return r.json(); })
+      .then(function(res) {
+        if (res && res.data) {
+          renderDrawer(res.data, collection);
+        } else if (res && res.errors) {
+          console.error('API error:', res.errors);
+          showDrawerSimple('错误', res.errors[0].message || 'API 返回错误');
+        } else {
+          showDrawerSimple('未找到', '未找到该记录');
+        }
+      })
+      .catch(function(e) {
+        console.error('Fetch error:', e);
+        showDrawerSimple('错误', '加载记录失败');
+      });
+  }
+
   function openDrawer(card) {
     var sourceId = card.getAttribute('data-source');
+    var coll = card.getAttribute('data-source-collection');
     var briefType = card.getAttribute('data-type');
     var serialNo = card.getAttribute('data-serial');
-    var routeInfo = ROUTE_MAP[briefType];
 
-    if (!routeInfo) {
-      showDrawerSimple('提示', '暂无关联记录');
-      return;
-    }
-
-    function doOpen(id) {
-      var recordUrl = '/api/' + routeInfo.collection + ':get?filterByTk=' + id + '&appends=projectID,createdBy,updatedBy';
-      fetch(recordUrl, { headers: { 'Authorization': 'Bearer ' + token, 'Accept': 'application/json' } })
-        .then(function(r) { return r.json(); })
-        .then(function(res) {
-          if (res && res.data) {
-            renderDrawer(res.data, routeInfo, routeInfo.collection);
-          } else if (res && res.errors) {
-            console.error('API error:', res.errors);
-            showDrawerSimple('错误', res.errors[0].message || 'API 返回错误');
-          } else {
-            showDrawerSimple('未找到', '未找到该记录');
-          }
-        })
-        .catch(function(e) {
-          console.error('Fetch error:', e);
-          showDrawerSimple('错误', '加载记录失败');
-        });
-    }
-
-    if (sourceId) {
-      doOpen(sourceId);
-    } else if (serialNo) {
-      findRecordBySerial(routeInfo.collection, serialNo, routeInfo.serialField).then(function(res) {
+    if (sourceId && coll) {
+      fetchRecordAndShow(coll, sourceId, serialNo);
+    } else if (serialNo && coll) {
+      findRecordBySerial(coll, serialNo).then(function(res) {
         var found = (res && res.data && res.data[0]);
         if (found && found.id) {
-          doOpen(found.id);
+          fetchRecordAndShow(coll, found.id, serialNo);
         } else {
           showDrawerSimple('未找到', '未找到编号为 ' + esc(serialNo) + ' 的记录');
         }
@@ -698,10 +685,17 @@ body {
     projectID: '项目名称', log_no: '日志编号', log_date: '日期', weather: '天气',
     work_content: '施工内容', equipment_usage: '设备使用', material_usage: '材料使用',
     personnel_count: '人员数量', safety_issues: '安全情况', quality_issues: '质量问题',
-    tomorrow_plan: '明日计划', review_opinion: '复核意见', approve_opinion: '审核意见',
-    addition_no: '报备编号', addition_date: '日期', company_name: '单位名称',
-    work_hours: '工时', estimated_cost: '预估费用', attachments: '附件',
-    logtoname: '记录人'
+    others: '其他', tomorrow_plan: '明日计划', status: '状态',
+    review_opinion: '复核意见', approve_opinion: '审核意见',
+    reviewed_at: '复核时间', approved_at: '审核时间',
+    addition_no: '报备编号', addition_date: '日期', addition_type: '报备类型', trigger_reason: '触发原因',
+    company_name: '单位名称', work_hours: '工时', estimated_cost: '预估费用',
+    attachments: '附件', logtoname: '记录人',
+    approver_opinion: '审批意见',
+    fund_plan: '资金计划', material_plan: '材料计划', migrant_plan: '人员计划',
+    actual_cost: '实际费用', actual_result: '实际结果',
+    personnel_status: '人员到位', material_status: '材料到位', fund_status: '资金到位',
+    migrant_status: '人员到位'
   };
 
   function getFieldLabel(name) {
@@ -735,14 +729,12 @@ body {
     return esc(String(val));
   }
 
-  function renderDrawer(record, routeInfo, collName) {
+  function renderDrawer(record, collName) {
     var order = DISPLAY_ORDER[collName] || Object.keys(record).filter(function(k) {
-      return ['id','createdAt','createdBy','updatedAt','updatedBy','cron','exclude','sort','__index','link-projectID','FormSerialNo','briefing_date','source_workflow_id','briefing_type','title','summary'].indexOf(k) === -1 && k.indexOf('_id') === -1;
+      return ['id','createdAt','createdBy','updatedAt','updatedBy','cron','exclude','sort','__index','link-projectID','FormSerialNo','briefing_date','source_workflow_id','briefing_type','title','summary','source_collection'].indexOf(k) === -1 && k.indexOf('_id') === -1;
     });
 
-    var title = collName === 'construction_daily_log' ? '施工日志详情' : '新增报备详情';
-
-    var html = '<div class="drawer-header"><div class="drawer-title">' + title + '</div><button class="drawer-close" onclick="closeDrawer()">&times;</button></div>';
+    var html = '<div class="drawer-header"><div class="drawer-title">详情</div><button class="drawer-close" onclick="closeDrawer()">&times;</button></div>';
     html += '<div class="drawer-body">';
 
     order.forEach(function(name) {
@@ -752,7 +744,6 @@ body {
     });
 
     html += '</div>';
-    html += '<div class="drawer-footer"><a href="/admin/' + routeInfo.route + '?filterByTk=' + record.id + '" target="_blank" class="drawer-link-btn">打开完整表单 →</a></div>';
 
     drawerContent.innerHTML = html;
     drawerOverlay.classList.add('open');
