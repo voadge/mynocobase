@@ -181,11 +181,11 @@ module.exports = class DashboardHomePlugin extends server_1.Plugin {
             ],
         });
         await db.sync();
-        // Normalize path — strip /api prefix for consistent path matching
+        // Normalize path 鈥?strip /api prefix for consistent path matching
         app.use(async (ctx, next) => {
             ctx.state.reqPath = ctx.path.replace(/^\/api/, '');
             await next();
-        }, { before: 'dataSource' });
+        }, { after: 'dataWrapping', before: 'dataSource' });
         // Route: Serve patched plugin-departments bundle with manager_in_charge field injected
         let DEPT_BUNDLE_PATH = null;
         try {
@@ -203,8 +203,8 @@ module.exports = class DashboardHomePlugin extends server_1.Plugin {
             if (!DEPT_BUNDLE_PATH)
                 return null;
             let content = fs_1.default.readFileSync(DEPT_BUNDLE_PATH, 'utf8');
-            content = content.replace('owners:{title:\'{{t("Owners")}}\',"x-component":"DepartmentOwnersField","x-decorator":"FormItem"},footer:', 'owners:{title:\'{{t("Owners")}}\',"x-component":"DepartmentOwnersField","x-decorator":"FormItem"},manager_in_charge:{title:\'{{t("分管领导")}}\',"x-component":"CollectionField","x-decorator":"FormItem","x-collection-field":"departments.manager_in_charge"},footer:');
-            content = content.replace('roles:{"x-component":"CollectionField","x-decorator":"FormItem","x-collection-field":"departments.roles"},footer:', 'roles:{"x-component":"CollectionField","x-decorator":"FormItem","x-collection-field":"departments.roles"},manager_in_charge:{title:\'{{t("分管领导")}}\',"x-component":"CollectionField","x-decorator":"FormItem","x-collection-field":"departments.manager_in_charge"},footer:');
+            content = content.replace('owners:{title:\'{{t("Owners")}}\',"x-component":"DepartmentOwnersField","x-decorator":"FormItem"},footer:', 'owners:{title:\'{{t("Owners")}}\',"x-component":"DepartmentOwnersField","x-decorator":"FormItem"},manager_in_charge:{title:\'{{t("鍒嗙棰嗗")}}\',"x-component":"CollectionField","x-decorator":"FormItem","x-collection-field":"departments.manager_in_charge"},footer:');
+            content = content.replace('roles:{"x-component":"CollectionField","x-decorator":"FormItem","x-collection-field":"departments.roles"},footer:', 'roles:{"x-component":"CollectionField","x-decorator":"FormItem","x-collection-field":"departments.roles"},manager_in_charge:{title:\'{{t("鍒嗙棰嗗")}}\',"x-component":"CollectionField","x-decorator":"FormItem","x-collection-field":"departments.manager_in_charge"},footer:');
             content = content.replace('appends:["parent(recursively=true)","roles","owners"]', 'appends:["parent(recursively=true)","roles","owners","manager_in_charge"]');
             content = content.replace(/departments_manager_users/g, 'departmentsUsers');
             patchedBundle = content;
@@ -225,7 +225,7 @@ module.exports = class DashboardHomePlugin extends server_1.Plugin {
                 return;
             }
             await next();
-        }, { before: 'dataSource' });
+        }, { after: 'dataWrapping', before: 'dataSource' });
         // Resource middleware: Mirror owner pattern for manager_in_charge
         app.resourceManager.use(async (ctx, next) => {
             const action = ctx.action || {};
@@ -546,14 +546,14 @@ module.exports = class DashboardHomePlugin extends server_1.Plugin {
                 ctx.status = 500;
                 ctx.body = { error: 'Internal server error', message: e.message };
             }
-        }, { tag: 'dashboard-home', before: 'dataSource' });
+        }, { tag: 'dashboard-home', after: 'dataWrapping', before: 'dataSource' });
         // Auth-check endpoint for nginx auth_request
         app.use(async (ctx, next) => {
             if (ctx.method !== 'GET' || ctx.state.reqPath !== '/__auth_check__') {
                 return await next();
             }
             await (0, auth_1.authCheckHandler)(ctx);
-        }, { tag: 'dashboard-home', before: 'dataSource' });
+        }, { tag: 'dashboard-home', after: 'dataWrapping', before: 'dataSource' });
         // Standalone aggregation panel page (for Markdown block iframe embedding)
         app.use(async (ctx, next) => {
             if (ctx.method !== 'GET' || ctx.state.reqPath !== '/__pd__/aggregate-panel') {
@@ -577,10 +577,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Ar
 .btn:hover{background:#096dd9}
 .btn:disabled{background:#bfbfbf;cursor:not-allowed}
 </style></head><body>
-<div class="row"><label>项目编号</label><input id="c" placeholder="读取中..."/></div>
-<div class="row"><label>日期</label><input id="d" type="date"/></div>
-<div class="info">已填报：<span class="cnt" id="n">0</span> 份 <span class="done" id="ok">&#x2713; 已汇总</span></div>
-<button class="btn" id="b">&#x26A1; 汇总日志</button>
+<div class="row"><label>椤圭洰缂栧彿</label><input id="c" placeholder="璇诲彇涓?.."/></div>
+<div class="row"><label>鏃ユ湡</label><input id="d" type="date"/></div>
+<div class="info">宸插～鎶ワ細<span class="cnt" id="n">0</span> 浠?<span class="done" id="ok">&#x2713; 宸叉眹鎬?/span></div>
+<button class="btn" id="b">&#x26A1; 姹囨€绘棩蹇?/button>
 <script>
 (function(){
 var c=document.getElementById('c'),d=document.getElementById('d'),n=document.getElementById('n'),ok=document.getElementById('ok'),b=document.getElementById('b');
@@ -593,14 +593,14 @@ try{
     if(!lb)continue;
     var txt=lb.textContent,inp=items[i].querySelector('input');
     if(!inp)continue;
-    if((txt.indexOf('项目')>=0||txt.indexOf('缩写')>=0)&&inp.value)c.value=inp.value;
-    if(txt.indexOf('日期')>=0&&inp.value)d.value=inp.value;
+    if((txt.indexOf('椤圭洰')>=0||txt.indexOf('缂╁啓')>=0)&&inp.value)c.value=inp.value;
+    if(txt.indexOf('鏃ユ湡')>=0&&inp.value)d.value=inp.value;
   }
   if(c.value){c.style.background='#f0f5ff';c.style.borderColor='#91d5ff'}
   else console.log('[agg] project field not found in parent DOM');
 }catch(e){console.log('[agg] parent access denied:',e.message)}
-if(!c.value)c.placeholder='手动输入项目编号';
-if(code){c.value=code;c.style.background='#f0f5ff';c.style.borderColor='#91d5ff'}else{c.placeholder='手动输入项目编号'}
+if(!c.value)c.placeholder='鎵嬪姩杈撳叆椤圭洰缂栧彿';
+if(code){c.value=code;c.style.background='#f0f5ff';c.style.borderColor='#91d5ff'}else{c.placeholder='鎵嬪姩杈撳叆椤圭洰缂栧彿'}
 if(dt){var m=dt.match(/(\\d{4})[\\-\\/](\\d{1,2})[\\-\\/](\\d{1,2})/);if(m)d.value=m[1]+'-'+String(Number(m[2])).padStart(2,'0')+'-'+String(Number(m[3])).padStart(2,'0')}
 else d.value=new Date().toISOString().split('T')[0];
 
@@ -608,10 +608,10 @@ async function rf(){var code=c.value.trim(),dt=d.value;if(!code||!dt){n.textCont
 c.addEventListener('change',rf);d.addEventListener('change',rf);
 if(code&&d.value)setTimeout(rf,300);
 
-b.addEventListener('click',async function(){var code=c.value.trim(),dt=d.value;if(!code||!dt){alert('请填写项目编号和日期');return}var ymd=parseInt(dt.replace(/-/g,''));b.disabled=true;b.textContent='汇总中...';try{var r=await fetch('/api/__pd__/aggregate-log',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({projectNameNo:code,date:ymd})});var j=await r.json();if(j.code===0&&j.data?.updated)alert('汇总完成，新增 '+j.data.newEntryCount+' 份');else if(j.code===0)alert(j.data?.message||'没有新内容需要汇总');else alert('汇总失败：'+(j.msg||'未知错误'));rf()}catch(e){alert('汇总失败: '+e.message)}finally{b.disabled=false;b.textContent='\u26A1 汇总日志'}});
+b.addEventListener('click',async function(){var code=c.value.trim(),dt=d.value;if(!code||!dt){alert('璇峰～鍐欓」鐩紪鍙峰拰鏃ユ湡');return}var ymd=parseInt(dt.replace(/-/g,''));b.disabled=true;b.textContent='姹囨€讳腑...';try{var r=await fetch('/api/__pd__/aggregate-log',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({projectNameNo:code,date:ymd})});var j=await r.json();if(j.code===0&&j.data?.updated)alert('姹囨€诲畬鎴愶紝鏂板 '+j.data.newEntryCount+' 浠?);else if(j.code===0)alert(j.data?.message||'娌℃湁鏂板唴瀹归渶瑕佹眹鎬?);else alert('姹囨€诲け璐ワ細'+(j.msg||'鏈煡閿欒'));rf()}catch(e){alert('姹囨€诲け璐? '+e.message)}finally{b.disabled=false;b.textContent='\u26A1 姹囨€绘棩蹇?}});
 })();
 </script></body></html>`;
-        }, { tag: 'dashboard-home', before: 'dataSource' });
+        }, { tag: 'dashboard-home', after: 'dataWrapping', before: 'dataSource' });
         // Register page serving routes (must be last)
         (0, pages_1.registerPageRoutes)(app);
     }

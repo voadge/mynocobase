@@ -42,7 +42,7 @@ function registerDeptAdminApi(app, plugin) {
             ctx.status = 500;
             ctx.body = { error: e.message };
         }
-    }, { tag: 'dashboard-home', before: 'dataSource' });
+    }, { tag: 'dashboard-home', after: 'dataWrapping', before: 'dataSource' });
     app.use(async (ctx, next) => {
         const m = ctx.state.reqPath?.match(/^\/__da__\/acl-rules\/(\d+)$/);
         if (ctx.method !== 'GET' || !m)
@@ -60,7 +60,7 @@ function registerDeptAdminApi(app, plugin) {
             ctx.status = 500;
             ctx.body = { error: e.message };
         }
-    }, { tag: 'dashboard-home', before: 'dataSource' });
+    }, { tag: 'dashboard-home', after: 'dataWrapping', before: 'dataSource' });
     app.use(async (ctx, next) => {
         if (ctx.method !== 'POST' || ctx.state.reqPath !== '/__da__/acl-rules')
             return await next();
@@ -77,7 +77,7 @@ function registerDeptAdminApi(app, plugin) {
             ctx.status = 500;
             ctx.body = { error: e.message };
         }
-    }, { tag: 'dashboard-home', before: 'dataSource' });
+    }, { tag: 'dashboard-home', after: 'dataWrapping', before: 'dataSource' });
     app.use(async (ctx, next) => {
         const m = ctx.state.reqPath?.match(/^\/__da__\/acl-rules\/(\d+)$/);
         if (ctx.method !== 'PUT' || !m)
@@ -96,7 +96,7 @@ function registerDeptAdminApi(app, plugin) {
             ctx.status = 500;
             ctx.body = { error: e.message };
         }
-    }, { tag: 'dashboard-home', before: 'dataSource' });
+    }, { tag: 'dashboard-home', after: 'dataWrapping', before: 'dataSource' });
     app.use(async (ctx, next) => {
         const m = ctx.state.reqPath?.match(/^\/__da__\/acl-rules\/(\d+)$/);
         if (ctx.method !== 'DELETE' || !m)
@@ -114,7 +114,7 @@ function registerDeptAdminApi(app, plugin) {
             ctx.status = 500;
             ctx.body = { error: e.message };
         }
-    }, { tag: 'dashboard-home', before: 'dataSource' });
+    }, { tag: 'dashboard-home', after: 'dataWrapping', before: 'dataSource' });
     // === Approval Routes CRUD ===
     app.use(async (ctx, next) => {
         if (ctx.method !== 'GET' || ctx.state.reqPath !== '/__da__/approval-routes')
@@ -134,7 +134,7 @@ function registerDeptAdminApi(app, plugin) {
             ctx.status = 500;
             ctx.body = { error: e.message };
         }
-    }, { tag: 'dashboard-home', before: 'dataSource' });
+    }, { tag: 'dashboard-home', after: 'dataWrapping', before: 'dataSource' });
     app.use(async (ctx, next) => {
         const m = ctx.state.reqPath?.match(/^\/__da__\/approval-routes\/(\d+)$/);
         if (ctx.method !== 'GET' || !m)
@@ -152,7 +152,7 @@ function registerDeptAdminApi(app, plugin) {
             ctx.status = 500;
             ctx.body = { error: e.message };
         }
-    }, { tag: 'dashboard-home', before: 'dataSource' });
+    }, { tag: 'dashboard-home', after: 'dataWrapping', before: 'dataSource' });
     app.use(async (ctx, next) => {
         if (ctx.method !== 'POST' || ctx.state.reqPath !== '/__da__/approval-routes')
             return await next();
@@ -169,7 +169,7 @@ function registerDeptAdminApi(app, plugin) {
             ctx.status = 500;
             ctx.body = { error: e.message };
         }
-    }, { tag: 'dashboard-home', before: 'dataSource' });
+    }, { tag: 'dashboard-home', after: 'dataWrapping', before: 'dataSource' });
     app.use(async (ctx, next) => {
         const m = ctx.state.reqPath?.match(/^\/__da__\/approval-routes\/(\d+)$/);
         if (ctx.method !== 'PUT' || !m)
@@ -188,7 +188,7 @@ function registerDeptAdminApi(app, plugin) {
             ctx.status = 500;
             ctx.body = { error: e.message };
         }
-    }, { tag: 'dashboard-home', before: 'dataSource' });
+    }, { tag: 'dashboard-home', after: 'dataWrapping', before: 'dataSource' });
     app.use(async (ctx, next) => {
         const m = ctx.state.reqPath?.match(/^\/__da__\/approval-routes\/(\d+)$/);
         if (ctx.method !== 'DELETE' || !m)
@@ -206,7 +206,7 @@ function registerDeptAdminApi(app, plugin) {
             ctx.status = 500;
             ctx.body = { error: e.message };
         }
-    }, { tag: 'dashboard-home', before: 'dataSource' });
+    }, { tag: 'dashboard-home', after: 'dataWrapping', before: 'dataSource' });
     // === Departments & Roles for dropdowns (server-side, avoids NocoBase API auth issues) ===
     app.use(async (ctx, next) => {
         if (ctx.method !== 'GET' || ctx.state.reqPath !== '/__da__/departments')
@@ -223,7 +223,7 @@ function registerDeptAdminApi(app, plugin) {
             ctx.status = 500;
             ctx.body = { error: e.message };
         }
-    }, { tag: 'dashboard-home', before: 'dataSource' });
+    }, { tag: 'dashboard-home', after: 'dataWrapping', before: 'dataSource' });
     app.use(async (ctx, next) => {
         if (ctx.method !== 'GET' || ctx.state.reqPath !== '/__da__/roles')
             return await next();
@@ -239,7 +239,7 @@ function registerDeptAdminApi(app, plugin) {
             ctx.status = 500;
             ctx.body = { error: e.message };
         }
-    }, { tag: 'dashboard-home', before: 'dataSource' });
+    }, { tag: 'dashboard-home', after: 'dataWrapping', before: 'dataSource' });
     // === Collections & actions for dropdowns ===
     app.use(async (ctx, next) => {
         if (ctx.method !== 'GET' || ctx.state.reqPath !== '/__da__/collections')
@@ -296,7 +296,7 @@ function registerDeptAdminApi(app, plugin) {
             ctx.status = 500;
             ctx.body = { error: e.message };
         }
-    }, { tag: 'dashboard-home', before: 'dataSource' });
+    }, { tag: 'dashboard-home', after: 'dataWrapping', before: 'dataSource' });
     // === Resolve approvers by route (forward mapping) ===
     app.use(async (ctx, next) => {
         if (ctx.method !== 'GET' || ctx.state.reqPath !== '/__da__/resolve-approvers')
@@ -320,5 +320,5 @@ function registerDeptAdminApi(app, plugin) {
             ctx.status = 500;
             ctx.body = { error: e.message };
         }
-    }, { tag: 'dashboard-home', before: 'dataSource' });
+    }, { tag: 'dashboard-home', after: 'dataWrapping', before: 'dataSource' });
 }

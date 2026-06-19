@@ -43,7 +43,7 @@ function registerAttendanceRoutes(app, plugin) {
             ctx.status = 500;
             ctx.body = { status: 'error', message: e.message };
         }
-    }, { tag: 'dashboard-home', before: 'dataSource' });
+    }, { tag: 'dashboard-home', after: 'dataWrapping', before: 'dataSource' });
     // Leave/Travel approval pending list
     app.use(async (ctx, next) => {
         if (ctx.method !== 'GET' || ctx.state.reqPath !== '/__pd__/approvals/pending') {
@@ -94,7 +94,7 @@ function registerAttendanceRoutes(app, plugin) {
             ctx.status = 500;
             ctx.body = { data: [], error: e.message };
         }
-    }, { tag: 'dashboard-home', before: 'dataSource' });
+    }, { tag: 'dashboard-home', after: 'dataWrapping', before: 'dataSource' });
     // Approval process endpoint
     app.use(async (ctx, next) => {
         if (ctx.method !== 'POST' || ctx.state.reqPath !== '/__pd__/approvals/process') {
@@ -181,7 +181,7 @@ function registerAttendanceRoutes(app, plugin) {
             ctx.status = 500;
             ctx.body = { status: 'error', message: e.message };
         }
-    }, { tag: 'dashboard-home', before: 'dataSource' });
+    }, { tag: 'dashboard-home', after: 'dataWrapping', before: 'dataSource' });
     // Attendance CSV export
     app.use(async (ctx, next) => {
         if (ctx.method !== 'GET' || ctx.state.reqPath !== '/__pd__/attendance/export') {
@@ -233,7 +233,7 @@ function registerAttendanceRoutes(app, plugin) {
             ctx.status = 500;
             ctx.body = '导出失败: ' + e.message;
         }
-    }, { tag: 'dashboard-home', before: 'dataSource' });
+    }, { tag: 'dashboard-home', after: 'dataWrapping', before: 'dataSource' });
     // Archive monthly summary export (CSV)
     app.use(async (ctx, next) => {
         if (ctx.method !== 'GET' || ctx.state.reqPath !== '/__pd__/archive/export') {
@@ -277,5 +277,5 @@ function registerAttendanceRoutes(app, plugin) {
             ctx.status = 500;
             ctx.body = '导出失败: ' + e.message;
         }
-    }, { tag: 'dashboard-home', before: 'dataSource' });
+    }, { tag: 'dashboard-home', after: 'dataWrapping', before: 'dataSource' });
 }

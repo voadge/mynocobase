@@ -85,7 +85,7 @@ function registerWeatherRoutes(app) {
         catch (e) {
             ctx.body = { code: -1, msg: e.message };
         }
-    }, { tag: 'dashboard-home', before: 'dataSource' });
+    }, { tag: 'dashboard-home', after: 'dataWrapping', before: 'dataSource' });
     // QWeather reverse geocode - lat/lng to location name (GeoAPI)
     app.use(async (ctx, next) => {
         if (ctx.method !== 'GET' || ctx.state.reqPath !== '/__pd__/reverse-geocode-qw') {

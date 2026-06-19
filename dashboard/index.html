@@ -858,6 +858,20 @@
         .finger-confirm-btns .btn-cancel:hover { background: rgba(255,255,255,0.1); }
 
     </style>
+<script src="/dashboard/assets/auth-sync.js"></script>
+<script>
+// 过滤外部服务的非关键错误
+window.addEventListener("error", function(e) {
+  if (e.target && e.target.src && e.target.src.indexOf("road.xiangsu.work") > -1) {
+    e.preventDefault();
+  }
+});
+window.addEventListener("unhandledrejection", function(e) {
+  if (e.reason && e.reason.message && e.reason.message.indexOf("road.xiangsu.work") > -1) {
+    e.preventDefault();
+  }
+});
+</script>
 </head>
 <body>
     <div class="dashboard">
@@ -1160,7 +1174,7 @@
         let isAdmin = false;
         async function checkAdmin() {
             try {
-                const resp = await fetch('/api/users:check', { credentials: 'include' });
+                const resp = await fetch('/api/auth:check', { credentials: 'include' });
                 if (resp.ok) {
                     const data = await resp.json();
                     const roles = data.data?.roles || [];

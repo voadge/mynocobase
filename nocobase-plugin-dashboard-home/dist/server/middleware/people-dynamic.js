@@ -22,7 +22,7 @@ function registerPeopleDynamicRoutes(app) {
         catch (e) {
             ctx.body = { code: -1, msg: e.message };
         }
-    }, { tag: 'dashboard-home', before: 'dataSource' });
+    }, { tag: 'dashboard-home', after: 'dataWrapping', before: 'dataSource' });
     // Next serial number endpoint (atomic increment via PostgreSQL UPSERT)
     app.use(async (ctx, next) => {
         if (ctx.method !== 'GET' || ctx.state.reqPath !== '/__pd__/next-serial') {
@@ -48,5 +48,5 @@ function registerPeopleDynamicRoutes(app) {
         catch (e) {
             ctx.body = { code: -1, msg: e.message };
         }
-    }, { tag: 'dashboard-home', before: 'dataSource' });
+    }, { tag: 'dashboard-home', after: 'dataWrapping', before: 'dataSource' });
 }

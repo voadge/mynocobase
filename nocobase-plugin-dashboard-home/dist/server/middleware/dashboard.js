@@ -40,7 +40,7 @@ function registerDashboardRoutes(app, plugin) {
             ctx.status = 500;
             ctx.body = { data: [], error: e.message };
         }
-    }, { tag: 'dashboard-home', before: 'dataSource' });
+    }, { tag: 'dashboard-home', after: 'dataWrapping', before: 'dataSource' });
     // Batch collect - server-side location history filling (called by cron)
     app.use(async (ctx, next) => {
         if (ctx.method !== 'GET' || ctx.state.reqPath !== '/__pd__/batch-collect') {
@@ -123,7 +123,7 @@ function registerDashboardRoutes(app, plugin) {
             ctx.status = 500;
             ctx.body = { data: null, error: e.message };
         }
-    }, { tag: 'dashboard-home', before: 'dataSource' });
+    }, { tag: 'dashboard-home', after: 'dataWrapping', before: 'dataSource' });
     // Dashboard snapshot - aggregated data for people dynamic page
     app.use(async (ctx, next) => {
         if (ctx.method !== 'GET' || ctx.state.reqPath !== '/__pd__/dashboard-snapshot') {
@@ -225,7 +225,7 @@ function registerDashboardRoutes(app, plugin) {
             ctx.status = 500;
             ctx.body = { error: e.message };
         }
-    });
+    }, { tag: 'dashboard-home', after: 'dataWrapping', before: 'dataSource' });
     // Batch create daily logs endpoint (for TIMER-2 workflow)
     app.use(async (ctx, next) => {
         if (ctx.method !== 'POST' || ctx.state.reqPath !== '/__pd__/batch-create-logs') {
@@ -290,7 +290,8 @@ function registerDashboardRoutes(app, plugin) {
                             title: '施工日报 - ' + summaryDate,
                             summary: '项目ID:' + projectId + ' 填报' + entryCount + '条 工人' + workerCount + '人 天气:' + weather,
                             briefing_date: summaryDate,
-                            source_workflow_id: 366321793040403
+                            source_workflow_id: 366321793040403,
+                            source_collection: 'construction_daily'
                         }
                     });
                     briefings.push({ id: briefingRecord.id, project_id: projectId, created: true });
@@ -310,7 +311,7 @@ function registerDashboardRoutes(app, plugin) {
         catch (e) {
             ctx.body = { code: -1, msg: e.message, stack: e.stack };
         }
-    }, { tag: 'dashboard-home', before: 'dataSource' });
+    }, { tag: 'dashboard-home', after: 'dataWrapping', before: 'dataSource' });
     // Daily summary status endpoint
     app.use(async (ctx, next) => {
         if (ctx.method !== 'GET' || ctx.state.reqPath !== '/__pd__/daily-summary-status') {
@@ -367,7 +368,7 @@ function registerDashboardRoutes(app, plugin) {
         catch (e) {
             ctx.body = { code: -1, msg: e.message, stack: e.stack };
         }
-    }, { tag: 'dashboard-home', before: 'dataSource' });
+    }, { tag: 'dashboard-home', after: 'dataWrapping', before: 'dataSource' });
     // Aggregation endpoint — aggregates entry data into the log record
     app.use(async (ctx, next) => {
         if (ctx.method !== 'POST' || ctx.state.reqPath !== '/__pd__/aggregate-log') {
@@ -491,5 +492,5 @@ function registerDashboardRoutes(app, plugin) {
         catch (e) {
             ctx.body = { code: -1, msg: e.message, stack: e.stack };
         }
-    }, { tag: 'dashboard-home', before: 'dataSource' });
+    }, { tag: 'dashboard-home', after: 'dataWrapping', before: 'dataSource' });
 }
