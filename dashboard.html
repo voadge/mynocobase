@@ -108,8 +108,8 @@
         </div>
 
         <div class="footer">
-            <p>贵州遵大数智化平台 v2.0.58 | 
-               <a href="/" target="_blank">管理后台</a> | 
+            <p>贵州遵大数智化平台 <span id="nb-version"></span> | 
+               <a href="/" target="_blank">管理后台</a>
                <img src="/dashboard/备案图标.png" style="height:16px;vertical-align:middle;margin-right:2px"> <a href="https://beian.mps.gov.cn/#/query/webSearch?code=51162302000288" rel="noreferrer" target="_blank">川公网安备51162302000288号</a> | 
                <a href="https://beian.miit.gov.cn/" target="_blank">蜀ICP备2026030576号</a>
             </p>
@@ -120,6 +120,7 @@
     <script src="/dashboard/assets/config.js?v=5" defer></script>
     <script src="/dashboard/assets/core.js?v=21" defer></script>
     <script src="/dashboard/assets/drawer.js?v=5" defer></script>
+    <script>fetch('/dashboard/nb-version.json').then(function(r){return r.json()}).then(function(d){var e=document.getElementById('nb-version');if(e&&d.version)e.textContent='v'+d.version}).catch(function(){})</script>
 
 <!-- 抽屉面板 -->
 <div class="drawer-overlay" id="adminDrawer">

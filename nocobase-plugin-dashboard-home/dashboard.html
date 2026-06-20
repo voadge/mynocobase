@@ -760,8 +760,9 @@
 
         let isAdmin = false;
         async function checkAdmin() {
+            var _tk = getToken();
             try {
-                const resp = await fetch('/api/users:check', { credentials: 'include' });
+                const resp = await fetch('/api/auth:check', _tk ? { headers: { 'Authorization': 'Bearer ' + _tk } } : {});
                 if (resp.ok) {
                     const data = await resp.json();
                     const roles = data.data?.roles || [];
@@ -769,6 +770,7 @@
                 }
             } catch {}
             renderWorks();
+            try{fetchTodos();}catch(e){console.warn('[b]fetchTodos',e)}
         }
 
         function renderWorks() {
@@ -795,17 +797,27 @@
             });
         }
 
+        function getToken() { try { return localStorage.getItem("NOCOBASE_TOKEN") || localStorage.getItem("nocobase_token") || ''; } catch(e) { return ''; } }
+
         // 待办
         async function fetchTodos() {
             const p = document.getElementById('pendingCount');
             const n = document.getElementById('notifyCount');
+            const _tk = getToken();
+            const _opt = _tk ? { headers: { 'Authorization': 'Bearer ' + _tk } } : {};
+            let totalPending = 0;
             try {
-                const r = await fetch('/api/flow_nodes:list?filter[status]=pending&pageSize=1', { credentials:'include' });
-                p.textContent = r.ok ? ((await r.json()).meta?.total ?? '0') : '0';
-            } catch { p.textContent = '0'; }
+                const r = await fetch('/api/workflowCcTasks:listMine?filter[status]=0&pageSize=50', _opt);
+                if (r.ok) totalPending += ((await r.json()).data || []).length;
+            } catch {}
             try {
-                const r = await fetch('/api/notifications:list?filter[read]=false&pageSize=1', { credentials:'include' });
-                n.textContent = r.ok ? ((await r.json()).meta?.total ?? '0') : '0';
+                const r = await fetch('/api/workflowManualTasks:listMine?filter[status]=0&pageSize=50', _opt);
+                if (r.ok) totalPending += ((await r.json()).data || []).length;
+            } catch {}
+            p.textContent = totalPending;
+            try {
+                const r = await fetch('/api/notifications:list?filter[read]=false&pageSize=1', _opt);
+                n.textContent = r.ok ? ((await r.json()).meta?.count ?? '0') : '0';
             } catch { n.textContent = '0'; }
         }
 
@@ -1043,7 +1055,6 @@
 
         loadSource(0);
         checkAdmin();
-        fetchTodos();
         fetchAnnouncements();
         fetchAttendance();
         fetchWeather();
