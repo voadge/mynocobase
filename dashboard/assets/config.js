@@ -82,14 +82,5 @@ const workSections = [
             { label: '案例库', url: '/admin/zzfuii6gzbm' }, { label: '资质库', url: '/admin/1tp44re032v' },
             { label: '模板库', url: '/admin/n637goaseda' }
         ]
-    },
-    {
-        title: 'G 系统管理', adminOnly: true, // ⚠ 仅前端隐藏，无后端鉴权
-        bg: '#1a1a1a', border: '#5a5a5a', color: '#a0a0a0',
-        btnBg: '#2a2a2a', btnBorder: '#5a5a5a', btnColor: '#c0c0c0',
-        items: [
-            { label: '流程日志', url: '/admin/lk63lo7m7ak' }, { label: '审批记录', url: '/admin/iw8mm62qjqc' },
-            { label: '自动计数器', url: '/admin/imnv1lw5bkb' }
-        ]
     }
 ];
