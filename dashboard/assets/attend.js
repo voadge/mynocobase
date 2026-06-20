@@ -194,7 +194,8 @@
             el.classList.add('selected');
             if (type === '请假') el.classList.add('leave');
             if (type === '出差') el.classList.add('trip');
-            var isLeave = (type === '请假' || type === '出差');
+            if (type === '调休') el.classList.add('extra');
+            var isLeave = (type === '请假' || type === '出差' || type === '调休');
             document.getElementById('attendNormalSection').style.display = isLeave ? 'none' : '';
             document.getElementById('attendLeaveSection').classList.toggle('visible', isLeave);
             document.getElementById('attendLeaveStatus').className = 'attend-leave-status';
@@ -207,7 +208,7 @@
                 document.getElementById('attendSubmit').textContent = '提交' + type;
                 document.getElementById('attendLocation').textContent = attendLocation ? attendLocationText : '（可选，获取中...）';
                 if (!document.getElementById('leaveStartDate').value) {
-                    var todayStr = new Date().toISOString().substring(0, 10);
+                    var todayStr = new Date().toISOString().substring(0, 16);
                     document.getElementById('leaveStartDate').value = todayStr;
                     document.getElementById('leaveEndDate').value = todayStr;
                 }
@@ -294,7 +295,7 @@
             if (presetType) {
                 attendType = presetType;
             } else if (attendState && attendState.leaveRejected) {
-                attendType = attendState.leaveRec.check_type === '出差' ? '出差' : '请假';
+                attendType = attendState.leaveRec.check_type === '出差' ? '出差' : (attendState.leaveRec.check_type === '调休' ? '调休' : '请假');
             } else if (attendState && attendState.checkIn && !attendState.checkOut && !attendState.leavePending && !attendState.leaveApproved) {
                 attendType = '下班';
             } else {
@@ -308,7 +309,7 @@
                     t.classList.add('selected');
                 }
             });
-            var isLeaveTab = (attendType === '请假' || attendType === '出差');
+            var isLeaveTab = (attendType === '请假' || attendType === '出差' || attendType === '调休');
             document.getElementById('attendNormalSection').style.display = isLeaveTab ? 'none' : '';
             document.getElementById('attendLeaveSection').classList.toggle('visible', isLeaveTab);
             document.getElementById('attendLeaveStatus').className = 'attend-leave-status';
@@ -653,7 +654,7 @@
             var vFinger = document.getElementById('vFinger');
             var vFence = document.getElementById('vFence');
 
-            var isLeave = (attendType === '请假' || attendType === '出差');
+            var isLeave = (attendType === '请假' || attendType === '出差' || attendType === '调休');
             if (isLeave) {
                 bar.style.display = 'none';
                 btn.textContent = '提交' + attendType;
@@ -835,11 +836,12 @@
             btn.textContent = '提交中...';
             try {
                 var now = new Date();
-                var isLeave = (attendType === '请假' || attendType === '出差');
+                var isLeave = (attendType === '请假' || attendType === '出差' || attendType === '调休');
                 var body = {
                     check_type: attendType,
-                    check_time: now.toISOString(),
-                    gps_state: gpsState
+                    check_time: now.toISOString().slice(0, 10),
+                    gps_state: gpsState,
+                    workflow_status: isLeave ? 'pending' : 'normal'
                 };
 
                 // 地理围栏信息
@@ -897,7 +899,7 @@
                         body.device_fingerprint = _deviceFp;
                     }
                     if (_fingerVerifiedAt) {
-                        body.fingerprint_verified_at = new Date(_fingerVerifiedAt).toISOString();
+                        body.fingerprint_verified_at = new Date(_fingerVerifiedAt).toISOString().slice(0, 10);
                     }
                     // Photo hash (always)
                     if (attendPhoto) {
@@ -913,23 +915,20 @@
                 var _headers = { 'Content-Type': 'application/json' };
                 if (_token) _headers['Authorization'] = 'Bearer ' + _token;
                 
-                var r = await fetch('/api/__pd__/attendance/submit', {
+                var r = await fetch('/api/attendance_records:create', {
                     method: 'POST', credentials: 'include',
                     headers: _headers,
                     body: JSON.stringify(body)
                 });
                 if (r.ok) {
-                    var _j = await r.json().catch(function(){ return null; });
-                    var _attResultData = (_j && _j.data) ? _j.data : null;
-                    var msg = (_j && _j.message) || '提交成功';
                     if (isLeave) {
-                        btn.textContent = '✅ ' + msg;
+                        btn.textContent = '✅ 已提交审批';
                         btn.style.background = 'linear-gradient(135deg, #ffd93d, #f39c12)';
                         btn.disabled = true;
-                        document.getElementById('attendLeaveStatus').textContent = '✅ ' + msg;
+                        document.getElementById('attendLeaveStatus').textContent = '✅ 已提交审批';
                         document.getElementById('attendLeaveStatus').className = 'attend-leave-status pending';
                     } else {
-                        btn.textContent = '✓ ' + msg;
+                        btn.textContent = '✓ 打卡成功';
                         btn.style.background = 'linear-gradient(135deg, #00ff88, #00b86b)';
                         setTimeout(closeAttendModal, 1200);
                     }
@@ -960,7 +959,7 @@
             var reasonInput = document.getElementById('leaveReason');
             if (reasonInput) {
                 reasonInput.addEventListener('input', function(){
-                    if (attendType === '请假' || attendType === '出差') {
+                    if (attendType === '请假' || attendType === '出差' || attendType === '调休') {
                         document.getElementById('attendSubmit').disabled = this.value.trim().length === 0;
                     }
                 });

@@ -782,8 +782,9 @@
         .attend-type-tab.selected { border-color: #00d4ff; background: rgba(0,212,255,0.12); color: #00d4ff; font-weight: 600; }
         .attend-type-tab.selected.leave { border-color: #ffd93d; background: rgba(255,217,61,0.12); color: #ffd93d; }
         .attend-type-tab.selected.trip { border-color: #ff9f43; background: rgba(255,159,67,0.12); color: #ff9f43; }
+        .attend-type-tab.selected.extra { border-color: #a29bfe; background: rgba(162,155,254,0.12); color: #a29bfe; }
 
-        /* 请假/出差区域 */
+        /* 请假/出差/调休区域 */
         .attend-leave-section { display: none; margin-bottom: 12px; }
         .attend-leave-section.visible { display: block; }
         .attend-leave-section .date-row {
@@ -942,6 +943,7 @@ window.addEventListener("unhandledrejection", function(e) {
                     <div class="attend-quick-types">
                         <span onclick="openAttendModal()">✅ 打卡</span>
                         <span onclick="openAttendModal('请假')">📋 请假</span>
+                        <span onclick="openAttendModal('调休')">📅 调休</span>
                         <span onclick="openAttendModal('出差')">🚗 出差</span>
                     </div>
                 </div>
@@ -1017,12 +1019,6 @@ window.addEventListener("unhandledrejection", function(e) {
 </div>
 
 <script>
-        // ============================================================
-        //  Capacitor / App 检测 — 用于所有原生功能分支
-        // ============================================================
-        var _isCapacitor = typeof Capacitor !== 'undefined' && Capacitor.isNative;
-        var _isHarmony = typeof window.appBridge !== 'undefined';
-        var _isApp = _isCapacitor || _isHarmony;
         var _urlParams = new URLSearchParams(window.location.search);
         if (_urlParams.get('app') === '1') {
             document.getElementById('workSection').style.display = 'none';
@@ -1563,7 +1559,8 @@ window.addEventListener("unhandledrejection", function(e) {
             el.classList.add('selected');
             if (type === '请假') el.classList.add('leave');
             if (type === '出差') el.classList.add('trip');
-            var isLeave = (type === '请假' || type === '出差');
+            if (type === '调休') el.classList.add('extra');
+            var isLeave = (type === '请假' || type === '出差' || type === '调休');
             document.getElementById('attendNormalSection').style.display = isLeave ? 'none' : '';
             document.getElementById('attendLeaveSection').classList.toggle('visible', isLeave);
             document.getElementById('attendLeaveStatus').className = 'attend-leave-status';
@@ -1576,7 +1573,7 @@ window.addEventListener("unhandledrejection", function(e) {
                 document.getElementById('attendSubmit').textContent = '提交' + type;
                 document.getElementById('attendLocation').textContent = attendLocation ? attendLocationText : '（可选，获取中...）';
                 if (!document.getElementById('leaveStartDate').value) {
-                    var todayStr = new Date().toISOString().substring(0, 10);
+                    var todayStr = new Date().toISOString().substring(0, 16);
                     document.getElementById('leaveStartDate').value = todayStr;
                     document.getElementById('leaveEndDate').value = todayStr;
                 }
@@ -1589,10 +1586,6 @@ window.addEventListener("unhandledrejection", function(e) {
         }
 
         async function preCheckPermissions() {
-            // HarmonyOS: WebView navigator.permissions 不反映 HAP 已授权状态，跳过
-            if (_isHarmony) {
-                return {camera: 'granted', geolocation: 'granted'};
-            }
             var result = {camera: 'prompt', geolocation: 'prompt'};
             if (navigator.permissions) {
                 try {
@@ -1667,7 +1660,7 @@ window.addEventListener("unhandledrejection", function(e) {
             if (presetType) {
                 attendType = presetType;
             } else if (attendState && attendState.leaveRejected) {
-                attendType = attendState.leaveRec.check_type === '出差' ? '出差' : '请假';
+                attendType = attendState.leaveRec.check_type === '出差' ? '出差' : (attendState.leaveRec.check_type === '调休' ? '调休' : '请假');
             } else if (attendState && attendState.checkIn && !attendState.checkOut && !attendState.leavePending && !attendState.leaveApproved) {
                 attendType = '下班';
             } else {
@@ -1681,7 +1674,7 @@ window.addEventListener("unhandledrejection", function(e) {
                     t.classList.add('selected');
                 }
             });
-            var isLeaveTab = (attendType === '请假' || attendType === '出差');
+            var isLeaveTab = (attendType === '请假' || attendType === '出差' || attendType === '调休');
             document.getElementById('attendNormalSection').style.display = isLeaveTab ? 'none' : '';
             document.getElementById('attendLeaveSection').classList.toggle('visible', isLeaveTab);
             document.getElementById('attendLeaveStatus').className = 'attend-leave-status';
@@ -1750,18 +1743,6 @@ window.addEventListener("unhandledrejection", function(e) {
         ];
 
         function startCamera() {
-            // HarmonyOS: 使用原生 bridge 拍照，不走 WebRTC
-            if (_isHarmony && window.appBridge.takePhoto) {
-                _cameraFallbackMode = true;
-                document.getElementById('faceStatus').textContent = '📷 点击下方按钮调用系统相机';
-                document.getElementById('faceStatus').className = 'face-status';
-                document.getElementById('captureBtn').disabled = false;
-                document.getElementById('captureBtn').textContent = '📷 拍照';
-                document.getElementById('cameraSwitchBtn').disabled = true;
-                var v = document.getElementById('attendVideo');
-                if (v) v.style.display = 'none';
-                return;
-            }
             _cameraZoom = 0.8;
             var v = document.getElementById('attendVideo');
             if (v) v.style.transform = 'scale(1)';
@@ -1948,29 +1929,6 @@ window.addEventListener("unhandledrejection", function(e) {
         }
 
         function _getLocationOnce(highAccuracy) {
-            // Capacitor native geolocation
-            if (_isCapacitor && Capacitor.Plugins && Capacitor.Plugins.Geolocation) {
-                Capacitor.Plugins.Geolocation.getCurrentPosition({ enableHighAccuracy: highAccuracy, timeout: 15000 })
-                    .then(function(pos){ _onLocationSuccess(pos); })
-                    .catch(function(err){
-                        attendLocation = null; gpsState = 'fail';
-                        document.getElementById('attendLocation').innerHTML = (err.message || '获取失败') + ' <a href="javascript:void(0)" onclick="getLocation()" style="color:#00d4ff;font-size:0.82em">重试</a>';
-                        _getLocationByIP();
-                    });
-                return;
-            }
-            // HarmonyOS native bridge
-            if (_isHarmony && window.appBridge.getLocation) {
-                window.appBridge.getLocation(
-                    function(lat, lng, acc){ _onLocationSuccess({ coords: { latitude: lat, longitude: lng, accuracy: acc } }); },
-                    function(err){
-                        attendLocation = null; gpsState = 'fail';
-                        document.getElementById('attendLocation').innerHTML = (err || '获取失败') + ' <a href="javascript:void(0)" onclick="getLocation()" style="color:#00d4ff;font-size:0.82em">重试</a>';
-                        _getLocationByIP();
-                    }
-                );
-                return;
-            }
             // Browser geolocation
             navigator.geolocation.getCurrentPosition(
                 _onLocationSuccess,
@@ -1995,33 +1953,6 @@ window.addEventListener("unhandledrejection", function(e) {
         }
 
         function capturePhoto() {
-            // HarmonyOS: 调用原生相机拍照
-            if (_isHarmony && window.appBridge.takePhoto) {
-                window.appBridge.takePhoto(function(dataUrl) {
-                    if (!dataUrl) {
-                        document.getElementById('faceStatus').textContent = '⚠ 拍照取消或失败';
-                        document.getElementById('faceStatus').className = 'face-status unverified';
-                        return;
-                    }
-                    attendPhoto = dataUrl;
-                    document.getElementById('captureBtn').textContent = '✓';
-                    var c = document.getElementById('attendCanvas');
-                    var img = new Image();
-                    img.onload = function() {
-                        c.width = img.width;
-                        c.height = img.height;
-                        var ctx = c.getContext('2d');
-                        ctx.drawImage(img, 0, 0);
-                        detectFace(c);
-                    };
-                    img.onerror = function() {
-                        document.getElementById('faceStatus').textContent = '⚠ 照片处理失败';
-                        document.getElementById('faceStatus').className = 'face-status unverified';
-                    };
-                    img.src = dataUrl;
-                });
-                return;
-            }
             var v = document.getElementById('attendVideo');
             var c = document.getElementById('attendCanvas');
             if (!v || !v.videoWidth) {
@@ -2112,7 +2043,7 @@ window.addEventListener("unhandledrejection", function(e) {
             var vFinger = document.getElementById('vFinger');
             var vFence = document.getElementById('vFence');
 
-            var isLeave = (attendType === '请假' || attendType === '出差');
+            var isLeave = (attendType === '请假' || attendType === '出差' || attendType === '调休');
             if (isLeave) {
                 bar.style.display = 'none';
                 btn.textContent = '提交' + attendType;
@@ -2255,43 +2186,7 @@ window.addEventListener("unhandledrejection", function(e) {
                 return;
             }
 
-            // Capacitor native biometric
-            if (_isCapacitor && Capacitor.Plugins && Capacitor.Plugins.BiometricAuth) {
-                try {
-                    var avail = await Capacitor.Plugins.BiometricAuth.checkBiometry();
-                    if (avail && avail.isAvailable) {
-                        await Capacitor.Plugins.BiometricAuth.authenticate({ reason: '验证指纹以完成打卡' });
-                        _fingerVerified = true;
-                        _fingerVerifiedAt = Date.now();
-                        s.textContent = '✓ 本机已验证（生物识别）';
-                        s.className = 'attend-finger-status verified';
-                        b.textContent = '✓ 已验证';
-                        b.className = 'attend-finger-btn verified';
-                        localStorage.setItem('_attendDeviceId', _deviceFp);
-                        localStorage.setItem('_attendDeviceId_time', String(Date.now()));
-                        updateSubmitState();
-                        return;
-                    }
-                } catch(e) {}
-            }
-            // HarmonyOS native biometric
-            if (_isHarmony && window.appBridge.biometricAuth) {
-                try {
-                    var hResult = await window.appBridge.biometricAuth();
-                    if (hResult) {
-                        _fingerVerified = true;
-                        _fingerVerifiedAt = Date.now();
-                        s.textContent = '✓ 本机已验证（生物识别）';
-                        s.className = 'attend-finger-status verified';
-                        b.textContent = '✓ 已验证';
-                        b.className = 'attend-finger-btn verified';
-                        localStorage.setItem('_attendDeviceId', _deviceFp);
-                        localStorage.setItem('_attendDeviceId_time', String(Date.now()));
-                        updateSubmitState();
-                        return;
-                    }
-                } catch(e) {}
-            }
+
 
             // Show custom confirm dialog
             b.textContent = '请确认';
@@ -2343,11 +2238,12 @@ window.addEventListener("unhandledrejection", function(e) {
             btn.textContent = '提交中...';
             try {
                 var now = new Date();
-                var isLeave = (attendType === '请假' || attendType === '出差');
+                var isLeave = (attendType === '请假' || attendType === '出差' || attendType === '调休');
                 var body = {
                     check_type: attendType,
                     check_time: now.toISOString(),
-                    gps_state: gpsState
+                    gps_state: gpsState,
+                    workflow_status: isLeave ? 'pending' : 'normal'
                 };
 
                 // 地理围栏信息
@@ -2410,22 +2306,20 @@ window.addEventListener("unhandledrejection", function(e) {
                 var _token = localStorage.getItem("NOCOBASE_TOKEN") || localStorage.getItem("nocobase_token");
                 var _headers = { 'Content-Type': 'application/json' };
                 if (_token) _headers['Authorization'] = 'Bearer ' + _token;
-                var r = await fetch('/api/__pd__/attendance/submit', {
+                var r = await fetch('/api/attendance_records:create', {
                     method: 'POST', credentials: 'include',
                     headers: _headers,
                     body: JSON.stringify(body)
                 });
                 if (r.ok) {
-                    var _j = await r.json().catch(function(){ return null; });
-                    var msg = (_j && _j.message) || '提交成功';
                     if (isLeave) {
-                        btn.textContent = '✅ ' + msg;
+                        btn.textContent = '✅ 已提交审批';
                         btn.style.background = 'linear-gradient(135deg, #ffd93d, #f39c12)';
                         btn.disabled = true;
-                        document.getElementById('attendLeaveStatus').textContent = '✅ ' + msg;
+                        document.getElementById('attendLeaveStatus').textContent = '✅ 已提交审批';
                         document.getElementById('attendLeaveStatus').className = 'attend-leave-status pending';
                     } else {
-                        btn.textContent = '✓ ' + msg;
+                        btn.textContent = '✓ 打卡成功';
                         btn.style.background = 'linear-gradient(135deg, #00ff88, #00b86b)';
                         setTimeout(closeAttendModal, 1200);
                     }
@@ -2456,7 +2350,7 @@ window.addEventListener("unhandledrejection", function(e) {
             var reasonInput = document.getElementById('leaveReason');
             if (reasonInput) {
                 reasonInput.addEventListener('input', function(){
-                    if (attendType === '请假' || attendType === '出差') {
+                    if (attendType === '请假' || attendType === '出差' || attendType === '调休') {
                         document.getElementById('attendSubmit').disabled = this.value.trim().length === 0;
                     }
                 });
@@ -2490,28 +2384,27 @@ window.addEventListener("unhandledrejection", function(e) {
                         var t = recs[i];
                         if (t.check_type === '上班' && !checkIn) checkIn = t;
                         if (t.check_type === '下班' && !checkOut) checkOut = t;
-                        if ((t.check_type === '请假' || t.check_type === '出差') && !leaveRec) leaveRec = t;
+                        if ((t.check_type === '请假' || t.check_type === '出差' || t.check_type === '调休') && !leaveRec) leaveRec = t;
                     }
                     attendState = {
                         checkIn: !!checkIn, checkOut: !!checkOut,
                         leaveRec: leaveRec,
                         leavePending: leaveRec && leaveRec.workflow_status === 'pending',
-                        leaveLevel1: leaveRec && leaveRec.workflow_status === 'level1_approved',
-                        leaveApproved: leaveRec && leaveRec.workflow_status === 'approved',
-                        leaveRejected: leaveRec && leaveRec.workflow_status === 'rejected'
+                        leaveApproved: leaveRec && leaveRec.approval === '通过',
+                        leaveRejected: leaveRec && leaveRec.approval === '驳回'
                     };
                     var st = document.getElementById('attendStatus');
                     var btn = document.getElementById('attendBtn');
-                    if (leaveRec && (leaveRec.workflow_status === 'pending' || leaveRec.workflow_status === 'level1_approved')) {
-                        var label = leaveRec.check_type === '请假' ? '请假' : '出差';
+                    if (leaveRec && leaveRec.workflow_status === 'pending') {
+                        var label = leaveRec.check_type === '请假' ? '请假' : (leaveRec.check_type === '调休' ? '调休' : '出差');
                         st.textContent = '⏳' + label + '待审批'; st.className = 'attend-status pending';
                         btn.textContent = '⏳' + label + '审批中'; btn.className = 'attend-btn pending';
-                    } else if (leaveRec && leaveRec.workflow_status === 'approved') {
-                        var label2 = leaveRec.check_type === '请假' ? '已请假' : '已出差';
+                    } else if (leaveRec && leaveRec.approval === '通过') {
+                        var label2 = leaveRec.check_type === '请假' ? '已请假' : (leaveRec.check_type === '调休' ? '已调休' : '已出差');
                         st.textContent = '✅' + label2; st.className = 'attend-status approved';
                         btn.textContent = label2; btn.className = 'attend-btn checked';
-                    } else if (leaveRec && leaveRec.workflow_status === 'rejected') {
-                        var label3 = leaveRec.check_type === '请假' ? '请假' : '出差';
+                    } else if (leaveRec && leaveRec.approval === '驳回') {
+                        var label3 = leaveRec.check_type === '请假' ? '请假' : (leaveRec.check_type === '调休' ? '调休' : '出差');
                         st.textContent = '❌' + label3 + '被驳回'; st.className = 'attend-status rejected';
                         btn.textContent = label3 + '被驳回，点击重试'; btn.className = 'attend-btn';
                     } else if (checkOut) {
@@ -2736,16 +2629,7 @@ window.addEventListener("unhandledrejection", function(e) {
                     .catch(function(){ fetchQwWeather(DEFAULT_CITY); });
             }
 
-            if (_isCapacitor && Capacitor.Plugins && Capacitor.Plugins.Geolocation) {
-                Capacitor.Plugins.Geolocation.getCurrentPosition({ enableHighAccuracy: true, timeout: 6000 })
-                    .then(function(pos){ _fetchWeatherByCoords(pos.coords.latitude, pos.coords.longitude); })
-                    .catch(function(){ fetchByIP(); });
-            } else if (_isHarmony && window.appBridge.getLocation) {
-                window.appBridge.getLocation(
-                    function(lat, lng){ _fetchWeatherByCoords(lat, lng); },
-                    function(){ fetchByIP(); }
-                );
-            } else if (navigator.geolocation) {
+            if (navigator.geolocation) {
                 var timer = setTimeout(function(){ fetchByIP(); }, 6000);
                 navigator.geolocation.getCurrentPosition(
                     function(pos){ clearTimeout(timer); _fetchWeatherByCoords(pos.coords.latitude, pos.coords.longitude); },
@@ -2848,6 +2732,7 @@ window.addEventListener("unhandledrejection", function(e) {
                 <div class="attend-type-tab selected" data-type="上班" onclick="onAttendTypeChange('上班',this)">✅ 上班</div>
                 <div class="attend-type-tab" data-type="下班" onclick="onAttendTypeChange('下班',this)">🏠 下班</div>
                 <div class="attend-type-tab" data-type="请假" onclick="onAttendTypeChange('请假',this)">📋 请假</div>
+                <div class="attend-type-tab" data-type="调休" onclick="onAttendTypeChange('调休',this)">📅 调休</div>
                 <div class="attend-type-tab" data-type="出差" onclick="onAttendTypeChange('出差',this)">🚗 出差</div>
             </div>
             <!-- 正常打卡区域（上班/下班） -->
@@ -2868,21 +2753,21 @@ window.addEventListener("unhandledrejection", function(e) {
                     <button class="attend-finger-btn" id="fingerBtn" disabled onclick="verifyFingerprint()">本机指纹</button>
                 </div>
             </div>
-            <!-- 请假/出差区域 -->
+            <!-- 请假/出差/调休区域 -->
             <div class="attend-leave-section" id="attendLeaveSection">
                 <div class="date-row">
                     <div class="date-field">
-                        <label>开始日期</label>
-                        <input type="date" id="leaveStartDate">
+                        <label>开始时间</label>
+                        <input type="datetime-local" id="leaveStartDate">
                     </div>
                     <div class="date-field">
-                        <label>结束日期</label>
-                        <input type="date" id="leaveEndDate">
+                        <label>结束时间</label>
+                        <input type="datetime-local" id="leaveEndDate">
                     </div>
                 </div>
                 <textarea id="leaveReason" placeholder="请输入事由说明..."></textarea>
             </div>
-            <!-- 请假/出差提交后状态 -->
+            <!-- 请假/出差/调休提交后状态 -->
             <div class="attend-leave-status" id="attendLeaveStatus"></div>
             <!-- 验证状态栏 -->
             <div class="attend-verify-bar" id="verifyBar" style="display:none">
