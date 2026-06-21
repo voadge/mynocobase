@@ -6,7 +6,7 @@ async function main(context) {
         // 更新请假归档统计
         try {
             var record = context.data;
-            if (record.check_type === '请假' || record.check_type === '出差') {
+            if (record.check_type === '请假' || record.check_type === '出差' || record.check_type === '调休') {
                 var year = new Date().getFullYear().toString();
                 var userId = record.createdById || record.createdBy;
                 
