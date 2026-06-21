@@ -8,7 +8,8 @@ import path from 'path';
 import { isAuthenticated, authCheckHandler } from './middleware/auth';
 import { registerProxyRoutes } from './middleware/proxy';
 import { registerPageRoutes } from './middleware/pages';
-import { registerAttendanceRoutes } from './middleware/attendance';
+
+
 import { registerDashboardRoutes } from './middleware/dashboard';
 import { registerWeatherRoutes } from './middleware/weather';
 import { registerPeopleDynamicRoutes } from './middleware/people-dynamic';
@@ -346,7 +347,6 @@ module.exports = class DashboardHomePlugin extends Plugin {
     // Register all route modules
     const pluginRef = { db, isAuthenticated: isAuthenticated.bind(this) };
     registerProxyRoutes(app);
-    registerAttendanceRoutes(app, pluginRef);
     registerDashboardRoutes(app, pluginRef);
     registerWeatherRoutes(app);
     registerPeopleDynamicRoutes(app);
@@ -655,7 +655,6 @@ module.exports = class DashboardHomePlugin extends Plugin {
     // Register all route modules
     const pluginRef = { db, isAuthenticated: isAuthenticated.bind(this) };
     registerProxyRoutes(app);
-    registerAttendanceRoutes(app, pluginRef);
     registerDashboardRoutes(app, pluginRef);
     registerWeatherRoutes(app);
     registerPeopleDynamicRoutes(app);
