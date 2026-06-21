@@ -52,7 +52,7 @@ services:
     command:
       - |
         export REDIS_PASS="$$(cat /run/secrets/redis_password)"
-        redis-server --appendonly yes --requirepass "$${REDIS_PASS}"
+        redis-server --appendonly yes --maxmemory-policy allkeys-lru --maxmemory 200mb --requirepass "$${REDIS_PASS}"
     volumes:
       - redis-data:/data
     networks:
