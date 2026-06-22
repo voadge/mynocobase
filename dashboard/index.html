@@ -1556,11 +1556,28 @@ window.addEventListener("unhandledrejection", function(e) {
         function onAttendTypeChange(type, el) {
             attendType = type;
             document.querySelectorAll('.attend-type-tab').forEach(function(t){ t.classList.remove('selected','leave','trip','extra'); });
-            el.classList.add('selected');
-            if (type === '请假') el.classList.add('leave');
-            if (type === '出差') el.classList.add('trip');
-            if (type === '调休') el.classList.add('extra');
-            var isLeave = (type === '请假' || type === '出差' || type === '调休');
+            var setLeaveExpanded = function(show) {
+                document.querySelectorAll('.attend-type-tab.leave-sub').forEach(function(t){ t.style.display = show ? '' : 'none'; });
+                var mainTab = document.querySelector('.attend-type-tab[data-type="leave"]');
+                if (mainTab) mainTab.style.display = show ? 'none' : '';
+            };
+            if (type === 'leave') {
+                setLeaveExpanded(true);
+                var def = document.querySelector('.attend-type-tab.leave-sub[data-type="请假"]');
+                if (def) def.classList.add('selected','leave');
+                attendType = '请假';
+                type = '请假';
+            } else if (type === '请假' || type === '调休' || type === '出差') {
+                setLeaveExpanded(true);
+                el.classList.add('selected');
+                if (type === '请假') el.classList.add('leave');
+                else if (type === '调休') el.classList.add('extra');
+                else if (type === '出差') el.classList.add('trip');
+            } else {
+                setLeaveExpanded(false);
+                el.classList.add('selected');
+            }
+            var isLeave = (type === '请假' || type === '调休' || type === '出差');
             document.getElementById('attendNormalSection').style.display = isLeave ? 'none' : '';
             document.getElementById('attendLeaveSection').classList.toggle('visible', isLeave);
             document.getElementById('attendLeaveStatus').className = 'attend-leave-status';
@@ -1667,13 +1684,18 @@ window.addEventListener("unhandledrejection", function(e) {
                 attendType = '上班';
             }
             // Reset UI
-            var tabs = document.querySelectorAll('.attend-type-tab');
-            tabs.forEach(function(t){ t.classList.remove('selected','leave','trip'); });
-            tabs.forEach(function(t){
-                if (t.getAttribute('data-type') === attendType) {
-                    t.classList.add('selected');
-                }
-            });
+            document.querySelectorAll('.attend-type-tab').forEach(function(t){ t.classList.remove('selected','leave','trip','extra'); });
+            var isLv = (attendType === '请假' || attendType === '调休' || attendType === '出差');
+            document.querySelectorAll('.attend-type-tab.leave-sub').forEach(function(t){ t.style.display = isLv ? '' : 'none'; });
+            var lMain = document.querySelector('.attend-type-tab[data-type="leave"]');
+            if (lMain) lMain.style.display = isLv ? 'none' : '';
+            if (isLv) {
+                var m = document.querySelector('.attend-type-tab.leave-sub[data-type="' + attendType + '"]');
+                if (m) { m.classList.add('selected'); if (attendType === '请假') m.classList.add('leave'); else if (attendType === '调休') m.classList.add('extra'); else if (attendType === '出差') m.classList.add('trip'); }
+            } else {
+                var m = document.querySelector('.attend-type-tab[data-type="' + attendType + '"]');
+                if (m) m.classList.add('selected');
+            }
             var isLeaveTab = (attendType === '请假' || attendType === '出差' || attendType === '调休');
             document.getElementById('attendNormalSection').style.display = isLeaveTab ? 'none' : '';
             document.getElementById('attendLeaveSection').classList.toggle('visible', isLeaveTab);
@@ -2729,9 +2751,10 @@ window.addEventListener("unhandledrejection", function(e) {
             <div class="attend-type-tabs" id="attendTypeTabs">
                 <div class="attend-type-tab selected" data-type="上班" onclick="onAttendTypeChange('上班',this)">✅ 上班</div>
                 <div class="attend-type-tab" data-type="下班" onclick="onAttendTypeChange('下班',this)">🏠 下班</div>
-                <div class="attend-type-tab" data-type="请假" onclick="onAttendTypeChange('请假',this)">📋 请假</div>
-                <div class="attend-type-tab" data-type="调休" onclick="onAttendTypeChange('调休',this)">📅 调休</div>
-                <div class="attend-type-tab" data-type="出差" onclick="onAttendTypeChange('出差',this)">🚗 出差</div>
+                <div class="attend-type-tab" data-type="leave" onclick="onAttendTypeChange('leave',this)">📋 假勤</div>
+                <div class="attend-type-tab leave-sub" data-type="请假" onclick="onAttendTypeChange('请假',this)" style="display:none">📋 请假</div>
+                <div class="attend-type-tab leave-sub" data-type="调休" onclick="onAttendTypeChange('调休',this)" style="display:none">📅 调休</div>
+                <div class="attend-type-tab leave-sub" data-type="出差" onclick="onAttendTypeChange('出差',this)" style="display:none">🚗 出差</div>
             </div>
             <!-- 正常打卡区域（上班/下班） -->
             <div id="attendNormalSection">
