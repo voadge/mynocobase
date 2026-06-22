@@ -1558,6 +1558,7 @@ window.addEventListener("unhandledrejection", function(e) {
             document.querySelectorAll('.attend-type-tab').forEach(function(t){ t.classList.remove('selected','leave','trip','extra'); });
             var setLeaveExpanded = function(show) {
                 document.querySelectorAll('.attend-type-tab.leave-sub').forEach(function(t){ t.style.display = show ? '' : 'none'; });
+                document.querySelectorAll('.attend-type-tab[data-type="上班"],.attend-type-tab[data-type="下班"]').forEach(function(t){ t.style.display = show ? 'none' : ''; });
                 var mainTab = document.querySelector('.attend-type-tab[data-type="leave"]');
                 if (mainTab) mainTab.style.display = show ? 'none' : '';
             };
@@ -1687,6 +1688,7 @@ window.addEventListener("unhandledrejection", function(e) {
             document.querySelectorAll('.attend-type-tab').forEach(function(t){ t.classList.remove('selected','leave','trip','extra'); });
             var isLv = (attendType === '请假' || attendType === '调休' || attendType === '出差');
             document.querySelectorAll('.attend-type-tab.leave-sub').forEach(function(t){ t.style.display = isLv ? '' : 'none'; });
+            document.querySelectorAll('.attend-type-tab[data-type="上班"],.attend-type-tab[data-type="下班"]').forEach(function(t){ t.style.display = isLv ? 'none' : ''; });
             var lMain = document.querySelector('.attend-type-tab[data-type="leave"]');
             if (lMain) lMain.style.display = isLv ? 'none' : '';
             if (isLv) {
