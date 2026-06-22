@@ -942,9 +942,7 @@ window.addEventListener("unhandledrejection", function(e) {
                     <button class="attend-btn" id="attendBtn" onclick="openAttendModal()">打卡</button>
                     <div class="attend-quick-types">
                         <span onclick="openAttendModal()">✅ 打卡</span>
-                        <span onclick="openAttendModal('请假')">📋 请假</span>
-                        <span onclick="openAttendModal('调休')">📅 调休</span>
-                        <span onclick="openAttendModal('出差')">🚗 出差</span>
+                        <span onclick="openAttendModal('leave')">📋 假勤</span>
                     </div>
                 </div>
                 <div class="panel-card toolbox-card">
@@ -1675,7 +1673,9 @@ window.addEventListener("unhandledrejection", function(e) {
             document.getElementById('locationStatus').innerHTML = locGetting;
             document.getElementById('locationStatus').setAttribute('data-base', locGetting);
             // Determine attendType from attendState
-            if (presetType) {
+            if (presetType === 'leave') {
+                attendType = '请假';
+            } else if (presetType) {
                 attendType = presetType;
             } else if (attendState && attendState.leaveRejected) {
                 attendType = attendState.leaveRec.check_type === '出差' ? '出差' : (attendState.leaveRec.check_type === '调休' ? '调休' : '请假');
