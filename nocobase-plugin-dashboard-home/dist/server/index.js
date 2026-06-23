@@ -20,7 +20,6 @@ const dept_admin_api_1 = require("./middleware/dept-admin-api");
 const dept_admin_pages_1 = require("./middleware/dept-admin-pages");
 const department_acl_1 = require("./middleware/department-acl");
 const qw_jwt_1 = require("./utils/qw-jwt");
-const STORAGE_DIR = '/app/nocobase/storage/dashboard';
 module.exports = class DashboardHomePlugin extends server_1.Plugin {
     async load() {
         const app = this.app;
@@ -201,21 +200,23 @@ module.exports = class DashboardHomePlugin extends server_1.Plugin {
         app.resourceManager.use(async (ctx, next) => {
             const action = ctx.action || {};
             const params = action.params || {};
+            console.log('[weather-mw] ENTRY', { resourceName: ctx.action?.params?.resourceName, actionName: ctx.action?.params?.actionName, filterByTk: ctx.action?.params?.filterByTk });
             if (params.resourceName === 'construction_daily_log' && !params.filterByTk &&
                 (params.actionName === 'create' || params.actionName === 'trigger')) {
                 const values = params.values || {};
+                console.log('[weather-mw] CONDITION MET', { actionName: params.actionName, fk: values['link-projectID'], pid: values.project_id, pno: values.project_name_NO });
                 if (!values.weather) {
-                    console.log('[weather-mw] firing', params.actionName, 'fk=', values['link-projectID'], 'pid=', values.project_id, 'pno=', values.project_name_NO);
+                    console.log('[weather-mw] filling weather...', values['link-projectID']);
                     try {
                         let proj = null;
                         const fk = values['link-projectID'];
                         if (fk)
-                            proj = await db.getRepository('projects').findByPk(fk);
+                            proj = await db.getRepository('projects').findOne({ filter: { id: fk } });
                         else {
                             const pid = values.project_id;
                             const pno = values.project_name_NO;
                             if (pid)
-                                proj = await db.getRepository('projects').findByPk(pid);
+                                proj = await db.getRepository('projects').findOne({ filter: { id: pid } });
                             else if (pno)
                                 proj = await db.getRepository('projects').findOne({ filter: { project_code: pno } });
                         }
@@ -256,65 +257,6 @@ module.exports = class DashboardHomePlugin extends server_1.Plugin {
             }
             await next();
         });
-        // Middleware: copy attachments from entries to log after log creation
-        app.resourceManager.use(async (ctx, next) => {
-            const action = ctx.action || {};
-            const params = action.params || {};
-            const isCreate = params.resourceName === 'construction_daily_log' && params.actionName === 'create';
-            const values = params.values || {};
-            // Capture before next() since values may change
-            const fk = values['link-projectID'] || values.project_id;
-            const lDate = values.log_date;
-            await next();
-            if (isCreate && fk && lDate) {
-                try {
-                    // Wait a bit for DB commit
-                    await new Promise(r => setTimeout(r, 500));
-                    const logRecord = await db.getRepository('construction_daily_log').findOne({
-                        filter: { 'link-projectID': fk, log_date: lDate },
-                        sort: ['-id']
-                    });
-                    if (!logRecord) {
-                        console.log('[log-attach-mw] log not found for fk=' + fk + ' date=' + lDate);
-                        return;
-                    }
-                    const logId = logRecord.get('id');
-                    const entries = await db.getRepository('construction_daily_entries').find({
-                        filter: { projectID: fk, entry_date: lDate }
-                    });
-                    console.log('[log-attach-mw] log#' + logId + ' entries=' + entries.length);
-                    if (!entries || entries.length === 0)
-                        return;
-                    const entryIds = entries.map((e) => e.get('id')).filter(Boolean);
-                    if (entryIds.length === 0)
-                        return;
-                    const sequelize = db.sequelize;
-                    const placeholders = entryIds.map((_, i) => ':eid' + i).join(',');
-                    const replacements = {};
-                    entryIds.forEach((id, i) => { replacements['eid' + i] = id; });
-                    const links = await sequelize.query('SELECT DISTINCT attachment_id FROM entry_attachments WHERE entry_id IN (' + placeholders + ')', { replacements, type: sequelize.QueryTypes.SELECT });
-                    console.log('[log-attach-mw] links=' + (links ? links.length : 0));
-                    if (!links || links.length === 0)
-                        return;
-                    await sequelize.query('DELETE FROM log_attachments WHERE log_id = :logId', { replacements: { logId }, type: sequelize.QueryTypes.DELETE });
-                    let copied = 0;
-                    for (const link of links) {
-                        const attId = link.attachment_id;
-                        if (!attId)
-                            continue;
-                        try {
-                            await sequelize.query("INSERT INTO log_attachments (log_id, attachment_id, \"createdAt\", \"updatedAt\") VALUES (:logId, :attId, NOW(), NOW()) ON CONFLICT DO NOTHING", { replacements: { logId, attId }, type: sequelize.QueryTypes.INSERT });
-                            copied++;
-                        }
-                        catch (_e) { }
-                    }
-                    console.log('[log-attach-mw] log#' + logId + ' copied ' + copied + ' attachments');
-                }
-                catch (e) {
-                    console.log('[log-attach-mw] error:', e.message);
-                }
-            }
-        }, { tag: 'dashboard-home-attach', after: 'dataSource' });
         // Middleware: enrich auth:check response with departments (for linkage rules)
         app.resourceManager.use(async (ctx, next) => {
             await next();
@@ -447,7 +389,7 @@ module.exports = class DashboardHomePlugin extends server_1.Plugin {
                         if (!attId)
                             continue;
                         try {
-                            await sequelize.query("INSERT INTO log_attachments (log_id, attachment_id, \"createdAt\", \"updatedAt\") VALUES (:logId, :attId, NOW(), NOW()) ON CONFLICT DO NOTHING", { replacements: { logId, attId }, type: sequelize.QueryTypes.INSERT });
+                            await sequelize.query("INSERT INTO log_attachments (log_id, attachment_id, project_id, log_date, \"createdAt\", \"updatedAt\") VALUES (:logId, :attId, :pid, :ldt, NOW(), NOW()) ON CONFLICT DO NOTHING", { replacements: { logId, attId, pid: projectId, ldt: logDate }, type: sequelize.QueryTypes.INSERT });
                             copied++;
                         }
                         catch (_e) { }
