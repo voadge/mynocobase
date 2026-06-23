@@ -205,11 +205,13 @@ module.exports = class DashboardHomePlugin extends Plugin {
     app.resourceManager.use(async (ctx: any, next: () => Promise<void>) => {
       const action = ctx.action || {};
       const params = action.params || {};
+      console.log('[weather-mw] ENTRY', { resourceName: ctx.action?.params?.resourceName, actionName: ctx.action?.params?.actionName, filterByTk: ctx.action?.params?.filterByTk });
       if (params.resourceName === 'construction_daily_log' && !params.filterByTk &&
           (params.actionName === 'create' || params.actionName === 'trigger')) {
         const values = params.values || {};
+        console.log('[weather-mw] CONDITION MET', { actionName: params.actionName, fk: values['link-projectID'], pid: values.project_id, pno: values.project_name_NO });
         if (!values.weather) {
-          console.log('[weather-mw] firing', params.actionName, 'fk=', values['link-projectID'], 'pid=', values.project_id, 'pno=', values.project_name_NO);
+          console.log('[weather-mw] filling weather...', values['link-projectID']);
           try {
             let proj: any = null;
             const fk = values['link-projectID'];
@@ -303,8 +305,8 @@ module.exports = class DashboardHomePlugin extends Plugin {
             if (!attId) continue;
             try {
               await sequelize.query(
-                "INSERT INTO log_attachments (log_id, attachment_id, \"createdAt\", \"updatedAt\") VALUES (:logId, :attId, NOW(), NOW()) ON CONFLICT DO NOTHING",
-                { replacements: { logId, attId }, type: sequelize.QueryTypes.INSERT }
+                "INSERT INTO log_attachments (log_id, attachment_id, project_id, log_date, \"createdAt\", \"updatedAt\") VALUES (:logId, :attId, :pid, :ldt, NOW(), NOW()) ON CONFLICT DO NOTHING",
+                { replacements: { logId, attId, pid: fk, ldt: lDate }, type: sequelize.QueryTypes.INSERT }
               );
               copied++;
             } catch (_e) {}
@@ -448,8 +450,8 @@ module.exports = class DashboardHomePlugin extends Plugin {
             if (!attId) continue;
             try {
               await sequelize.query(
-                "INSERT INTO log_attachments (log_id, attachment_id, \"createdAt\", \"updatedAt\") VALUES (:logId, :attId, NOW(), NOW()) ON CONFLICT DO NOTHING",
-                { replacements: { logId, attId }, type: sequelize.QueryTypes.INSERT }
+                "INSERT INTO log_attachments (log_id, attachment_id, project_id, log_date, \"createdAt\", \"updatedAt\") VALUES (:logId, :attId, :pid, :ldt, NOW(), NOW()) ON CONFLICT DO NOTHING",
+                { replacements: { logId, attId, pid: projectId, ldt: logDate }, type: sequelize.QueryTypes.INSERT }
               );
               copied++;
             } catch (_e) {}
