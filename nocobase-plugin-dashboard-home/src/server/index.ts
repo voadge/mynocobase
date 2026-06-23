@@ -201,61 +201,118 @@ module.exports = class DashboardHomePlugin extends Plugin {
     // Register department admin pages
     registerDeptAdminPages(app);
 
-    // Middleware: auto-fill weather & pre-create for construction_daily_log
+    // Middleware: auto-fill weather for construction_daily_log create/trigger
     app.resourceManager.use(async (ctx: any, next: () => Promise<void>) => {
       const action = ctx.action || {};
       const params = action.params || {};
       if (params.resourceName === 'construction_daily_log' && !params.filterByTk &&
           (params.actionName === 'create' || params.actionName === 'trigger')) {
         const values = params.values || {};
-        console.log('[weather-mw] firing', params.actionName, 'fk=', values['link-projectID'], 'pid=', values.project_id, 'pno=', values.project_name_NO, 'weather=', values.weather);
         if (!values.weather) {
+          console.log('[weather-mw] firing', params.actionName, 'fk=', values['link-projectID'], 'pid=', values.project_id, 'pno=', values.project_name_NO);
           try {
             let proj: any = null;
             const fk = values['link-projectID'];
-            if (fk) {
-              proj = await db.getRepository('projects').findByPk(fk);
-            } else {
+            if (fk) proj = await db.getRepository('projects').findByPk(fk);
+            else {
               const pid = values.project_id;
               const pno = values.project_name_NO;
               if (pid) proj = await db.getRepository('projects').findByPk(pid);
               else if (pno) proj = await db.getRepository('projects').findOne({ filter: { project_code: pno } });
             }
-            if (proj) {
-              console.log('[weather-mw] project found', proj.id, 'lat=', proj.location_lat, 'lon=', proj.location_lon);
-              if (proj.location_lat && proj.location_lon) {
-                const weather = await qwFetch('https://' + QW_WEATHER_HOST + '/v7/weather/now?location=' + encodeURIComponent(proj.location_lon + ',' + proj.location_lat));
-                console.log('[weather-mw] qw response code=', weather?.code, 'hasNow=', !!weather?.now);
-                if (weather && weather.code === '200' && weather.now) {
-                  const n = weather.now;
-                  values.weather = n.text + ' ' + (n.temp || '') + 'C ' + (n.windDir || '');
-                  console.log('[weather-mw] set weather to', values.weather);
-                }
-              } else {
-                console.log('[weather-mw] project missing lat/lon');
+            if (proj && proj.location_lat && proj.location_lon) {
+              const weather = await qwFetch('https://' + QW_WEATHER_HOST + '/v7/weather/now?location=' + encodeURIComponent(proj.location_lon + ',' + proj.location_lat));
+              if (weather && weather.code === '200' && weather.now) {
+                values.weather = weather.now.text + ' ' + (weather.now.temp || '') + 'C ' + (weather.now.windDir || '');
               }
-            } else {
-              console.log('[weather-mw] project not found');
             }
           } catch (e) {
             console.log('[weather-mw] fetch failed:', e.message);
           }
         }
-        if (params.actionName === 'trigger') {
-          if (values['link-projectID'] || values.project_id || values.project_name_NO) {
-            try {
-              const repo = db.getRepository('construction_daily_log');
-              const created = await repo.create({ values });
-              ctx.action.params.filterByTk = created.id;
-              ctx.action.params.values = { ...values, id: created.id };
-            } catch (e) {
-              console.log('[trigger-mw] create failed:', e.message);
-            }
+      }
+      await next();
+    });
+
+    // Middleware: pre-create for construction_daily_log trigger action
+    app.resourceManager.use(async (ctx: any, next: () => Promise<void>) => {
+      const action = ctx.action || {};
+      const params = action.params || {};
+      if (params.resourceName === 'construction_daily_log' && params.actionName === 'trigger' && !params.filterByTk) {
+        const values = params.values || {};
+        if (values['link-projectID'] || values.project_id || values.project_name_NO) {
+          try {
+            const repo = db.getRepository('construction_daily_log');
+            const created = await repo.create({ values });
+            ctx.action.params.filterByTk = created.id;
+            ctx.action.params.values = { ...values, id: created.id };
+          } catch (e) {
+            console.log('[trigger-mw] create failed:', e.message);
           }
         }
       }
       await next();
-    }, { tag: 'dashboard-home', after: 'dataSource' });
+    });
+
+    // Middleware: copy attachments from entries to log after log creation
+    app.resourceManager.use(async (ctx: any, next: () => Promise<void>) => {
+      const action = ctx.action || {};
+      const params = action.params || {};
+      const isCreate = params.resourceName === 'construction_daily_log' && params.actionName === 'create';
+      const values = params.values || {};
+      // Capture before next() since values may change
+      const fk = values['link-projectID'] || values.project_id;
+      const lDate = values.log_date;
+      await next();
+      if (isCreate && fk && lDate) {
+        try {
+          // Wait a bit for DB commit
+          await new Promise(r => setTimeout(r, 500));
+          const logRecord = await db.getRepository('construction_daily_log').findOne({
+            filter: { 'link-projectID': fk, log_date: lDate },
+            sort: ['-id']
+          });
+          if (!logRecord) { console.log('[log-attach-mw] log not found for fk=' + fk + ' date=' + lDate); return; }
+          const logId = logRecord.get('id');
+          const entries = await db.getRepository('construction_daily_entries').find({
+            filter: { projectID: fk, entry_date: lDate }
+          });
+          console.log('[log-attach-mw] log#' + logId + ' entries=' + entries.length);
+          if (!entries || entries.length === 0) return;
+          const entryIds = entries.map((e: any) => e.get('id')).filter(Boolean);
+          if (entryIds.length === 0) return;
+          const sequelize = db.sequelize;
+          const placeholders = entryIds.map((_: any, i: number) => ':eid' + i).join(',');
+          const replacements: Record<string, any> = {};
+          entryIds.forEach((id: any, i: number) => { replacements['eid' + i] = id; });
+          const links = await sequelize.query(
+            'SELECT DISTINCT attachment_id FROM entry_attachments WHERE entry_id IN (' + placeholders + ')',
+            { replacements, type: sequelize.QueryTypes.SELECT }
+          );
+          console.log('[log-attach-mw] links=' + (links ? links.length : 0));
+          if (!links || links.length === 0) return;
+          await sequelize.query(
+            'DELETE FROM log_attachments WHERE log_id = :logId',
+            { replacements: { logId }, type: sequelize.QueryTypes.DELETE }
+          );
+          let copied = 0;
+          for (const link of links) {
+            const attId = (link as any).attachment_id;
+            if (!attId) continue;
+            try {
+              await sequelize.query(
+                "INSERT INTO log_attachments (log_id, attachment_id, \"createdAt\", \"updatedAt\") VALUES (:logId, :attId, NOW(), NOW()) ON CONFLICT DO NOTHING",
+                { replacements: { logId, attId }, type: sequelize.QueryTypes.INSERT }
+              );
+              copied++;
+            } catch (_e) {}
+          }
+          console.log('[log-attach-mw] log#' + logId + ' copied ' + copied + ' attachments');
+        } catch (e) {
+          console.log('[log-attach-mw] error:', e.message);
+        }
+      }
+    }, { tag: 'dashboard-home-attach', after: 'dataSource' });
 
     // Middleware: enrich auth:check response with departments (for linkage rules)
     app.resourceManager.use(async (ctx: any, next: () => Promise<void>) => {
@@ -347,6 +404,57 @@ module.exports = class DashboardHomePlugin extends Plugin {
           } catch (e) {
             console.log('[entry-hook] copy project_name_NO on update failed:', e.message);
           }
+        }
+      });
+    }
+
+    // Auto-copy attachments from entries to log after log creation
+    if (logCol) {
+      logCol.model.addHook('afterCreate', async (record: any, options: any) => {
+        const logId = record.get('id');
+        const projectId = record.get('link-projectID') || record.get('project_id');
+        let logDate: any = record.get('log_date');
+        if (!logId || !projectId || !logDate) return;
+        try {
+          if (typeof logDate === 'number' || /^\d{8}$/.test(String(logDate))) {
+            const s = String(logDate);
+            logDate = s.slice(0, 4) + '-' + s.slice(4, 6) + '-' + s.slice(6, 8);
+          }
+          const entries = await record.sequelize.model('construction_daily_entries').findAll({
+            where: { projectID: projectId, entry_date: logDate }
+          });
+          if (!entries || entries.length === 0) return;
+          const entryIds = entries.map((e: any) => e.get('id')).filter(Boolean);
+          if (entryIds.length === 0) return;
+          const sequelize = record.sequelize;
+          const placeholders = entryIds.map((_: any, i: number) => ':eid' + i).join(',');
+          const replacements: Record<string, any> = {};
+          entryIds.forEach((id: any, i: number) => { replacements['eid' + i] = id; });
+          const links = await sequelize.query(
+            'SELECT DISTINCT attachment_id FROM entry_attachments WHERE entry_id IN (' + placeholders + ')',
+            { replacements, type: sequelize.QueryTypes.SELECT }
+          );
+          if (!links || links.length === 0) return;
+          // Delete existing log_attachments for idempotent re-aggregate
+          await sequelize.query(
+            'DELETE FROM log_attachments WHERE log_id = :logId',
+            { replacements: { logId }, type: sequelize.QueryTypes.DELETE }
+          );
+          let copied = 0;
+          for (const link of links) {
+            const attId = (link as any).attachment_id;
+            if (!attId) continue;
+            try {
+              await sequelize.query(
+                "INSERT INTO log_attachments (log_id, attachment_id, \"createdAt\", \"updatedAt\") VALUES (:logId, :attId, NOW(), NOW()) ON CONFLICT DO NOTHING",
+                { replacements: { logId, attId }, type: sequelize.QueryTypes.INSERT }
+              );
+              copied++;
+            } catch (_e) {}
+          }
+          console.log('[log-attachment-hook] log#' + logId + ' copied ' + copied + ' attachments from ' + entryIds.length + ' entries');
+        } catch (e) {
+          console.log('[log-attachment-hook] error:', e.message);
         }
       });
     }

@@ -16,21 +16,21 @@ define(function(){
   DashboardHomePlugin.prototype.load = function() {
     initAggregateButton(this.app);
     watchLogDetailPage(this.app);
-    initWeatherAutoFill();
+    initWeatherAutoFill(this.app);
   };
   return DashboardHomePlugin;
 });
 
-function initWeatherAutoFill() {
+function initWeatherAutoFill(app) {
   var filledForms = {};
   var obs = new MutationObserver(function() {
-    autoFillWeather(filledForms);
+    autoFillWeather(filledForms, app);
   });
   obs.observe(document.body, { childList: true, subtree: true });
-  setTimeout(function() { autoFillWeather(filledForms); }, 1500);
+  setTimeout(function() { autoFillWeather(filledForms, app); }, 1500);
 }
 
-function autoFillWeather(filledForms) {
+function autoFillWeather(filledForms, app) {
   var forms = document.querySelectorAll('.ant-form, .nb-form, form');
   for (var i = 0; i < forms.length; i++) {
     var form = forms[i];
@@ -41,7 +41,7 @@ function autoFillWeather(filledForms) {
     if (!formKey) continue;
     filledForms[formKey] = true;
     weatherInput.dataset.weatherFilled = '1';
-    doFetchWeather(form, weatherInput);
+    doFetchWeather(form, weatherInput, app);
   }
 }
 
@@ -72,8 +72,7 @@ function getFormKey(form) {
   } catch(e) { return '' + Date.now(); }
 }
 
-function doFetchWeather(form, weatherInput) {
-  // Priority 1: project location coordinates (from dataset.coords on project field)
+function doFetchWeather(form, weatherInput, app) {
   var projectField = findProjectField(form);
   if (projectField && projectField.dataset && projectField.dataset.coords) {
     var parts = projectField.dataset.coords.split(',');
@@ -83,6 +82,11 @@ function doFetchWeather(form, weatherInput) {
       fetchWeatherByCoords(lat, lng, weatherInput);
       return;
     }
+  }
+  // Priority 1b: get coords from selected project via API
+  if (projectField && app) {
+    fetchProjectCoords(projectField, weatherInput, app);
+    return;
   }
   // Priority 2: browser GPS
   if (navigator.geolocation) {
@@ -96,6 +100,34 @@ function doFetchWeather(form, weatherInput) {
   } else {
     fetchWeatherByIP(weatherInput);
   }
+}
+
+function fetchProjectCoords(projectField, weatherInput, app) {
+  var selectRoot = projectField.closest('.ant-select');
+  if (!selectRoot) { fetchWeatherByIP(weatherInput); return; }
+  var selectionEl = selectRoot.querySelector('.ant-select-selection-item');
+  if (!selectionEl || !selectionEl.textContent) { fetchWeatherByIP(weatherInput); return; }
+  var token = '';
+  try {
+    token = localStorage.getItem('NOCOBASE_TOKEN') || localStorage.getItem('nocobase_token') || '';
+  } catch(e) {}
+  var projectText = selectionEl.textContent.trim();
+  if (!projectText) { fetchWeatherByIP(weatherInput); return; }
+  var filter = JSON.stringify({ $or: [{ project_name: projectText }, { project_code: projectText }] });
+  fetch('/api/projects:list?filter=' + encodeURIComponent(filter) + '&fields=location_lat,location_lon,id&pageSize=1', {
+    headers: token ? { 'Authorization': 'Bearer ' + token } : {}
+  })
+    .then(function(r) { return r.json(); })
+    .then(function(res) {
+      var d = res && res.data && res.data[0];
+      if (d && d.location_lat && d.location_lon) {
+        projectField.dataset.coords = d.location_lat + ',' + d.location_lon;
+        fetchWeatherByCoords(d.location_lat, d.location_lon, weatherInput);
+      } else {
+        fetchWeatherByIP(weatherInput);
+      }
+    })
+    .catch(function() { fetchWeatherByIP(weatherInput); });
 }
 
 function findProjectField(form) {
