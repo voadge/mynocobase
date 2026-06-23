@@ -39,8 +39,12 @@ function autoFillWeather(filledForms, app) {
     if (!weatherInput) continue;
     var formKey = getFormKey(form);
     if (!formKey) continue;
-    filledForms[formKey] = true;
-    weatherInput.dataset.weatherFilled = '1';
+    var projectField = findProjectField(form);
+    var hasProject = projectField && projectField.querySelector('.ant-select-selection-item');
+    if (hasProject) {
+      filledForms[formKey] = true;
+      weatherInput.dataset.weatherFilled = '1';
+    }
     doFetchWeather(form, weatherInput, app);
   }
 }
