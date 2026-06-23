@@ -223,7 +223,9 @@ module.exports = class DashboardHomePlugin extends Plugin {
             if (proj && proj.location_lat && proj.location_lon) {
               const weather = await qwFetch('https://' + QW_WEATHER_HOST + '/v7/weather/now?location=' + encodeURIComponent(proj.location_lon + ',' + proj.location_lat));
               if (weather && weather.code === '200' && weather.now) {
-                values.weather = weather.now.text + ' ' + (weather.now.temp || '') + 'C ' + (weather.now.windDir || '');
+                const weatherStr = weather.now.text + ' ' + (weather.now.temp || '') + 'C ' + (weather.now.windDir || '');
+                params.values.weather = weatherStr;
+                if (ctx.request.body) ctx.request.body.weather = weatherStr;
               }
             }
           } catch (e) {
