@@ -57,7 +57,7 @@ function setupContainer(root, app) {
     var id = root.dataset.logId;
     btn.disabled = true;
     setStatus(statusEl, '汇总中...');
-    var payload = id ? { logId: parseInt(id) } : { projectId: parseInt(pid), date: date };
+    var payload = id ? { logId: parseInt(id) } : { projectID: parseInt(pid), date: date };
     callApi(app, '/api/__pd__/aggregate-log', 'POST', null, payload)
       .then(function(res) {
         var body = res && res.data ? res.data : res;
@@ -81,7 +81,7 @@ function setupContainer(root, app) {
 
 function fetchStatus(app, root, projectId, logDate) {
   var statusEl = root.querySelector('.agg-status');
-  callApi(app, '/api/__pd__/daily-summary-status', 'GET', { projectId: projectId, date: logDate })
+  callApi(app, '/api/__pd__/daily-summary-status', 'GET', { projectID: projectId, date: logDate })
     .then(function(res) {
       var body = res && res.data ? res.data : res;
       if (body && body.code === 0 && body.data) {

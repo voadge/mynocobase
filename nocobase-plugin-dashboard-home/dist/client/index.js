@@ -167,24 +167,24 @@ function setupContainer(root, app) {
   var statusEl = root.querySelector('.agg-status');
   if (!btn) return;
 
-  var projectNameNo = root.dataset.projectNameNo;
+  var projectId = root.dataset.projectId;
   var logDate = root.dataset.logDate || getTodayNum();
 
-  if (projectNameNo) {
-    fetchStatus(app, root, projectNameNo, logDate);
+  if (projectId) {
+    fetchStatus(app, root, projectId, logDate);
   }
 
   btn.addEventListener('click', function() {
-    var projectNameNo = root.dataset.projectNameNo;
+    var projectId = root.dataset.projectId;
     var date = root.dataset.logDate || getTodayNum();
-    if (!projectNameNo) {
+    if (!projectId) {
       setStatus(statusEl, '请先选择项目');
       return;
     }
     var id = root.dataset.logId;
     btn.disabled = true;
     setStatus(statusEl, '汇总中...');
-    var payload = id ? { logId: parseInt(id) } : { projectNameNo: projectNameNo, date: parseInt(date) };
+    var payload = id ? { logId: parseInt(id) } : { projectID: parseInt(projectId), date: parseInt(date) };
     callApi(app, '/api/__pd__/aggregate-log', 'POST', null, payload)
       .then(function(res) {
         var body = res && res.data ? res.data : res;
@@ -206,9 +206,9 @@ function setupContainer(root, app) {
   });
 }
 
-function fetchStatus(app, root, projectNameNo, logDate) {
+function fetchStatus(app, root, projectId, logDate) {
   var statusEl = root.querySelector('.agg-status');
-  callApi(app, '/api/__pd__/daily-summary-status', 'GET', { projectNameNo: projectNameNo, date: logDate })
+  callApi(app, '/api/__pd__/daily-summary-status', 'GET', { projectID: projectId, date: logDate })
     .then(function(res) {
       var body = res && res.data ? res.data : res;
       if (body && body.code === 0 && body.data) {
@@ -307,6 +307,7 @@ function createAggregateRoot(app, log) {
   var root = document.createElement('div');
   root.dataset.role = 'aggregate-root';
   root.dataset.projectNameNo = log.project_name_NO || '';
+  root.dataset.projectId = log['link-projectID'] || '';
   root.dataset.logDate = log.log_date || getTodayNum();
   root.dataset.logId = log.id;
   root.style.cssText = 'margin:8px 24px 0;padding:12px 16px;border:1px solid #d9d9d9;border-radius:8px;background:#fafafa;display:flex;align-items:center;gap:12px;clear:both;';
