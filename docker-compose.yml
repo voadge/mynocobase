@@ -6,11 +6,11 @@ services:
     command:
       - postgres
       - -c
-      - shared_buffers=256MB
+      - shared_buffers=64MB
       - -c
-      - effective_cache_size=768MB
+      - effective_cache_size=256MB
       - -c
-      - work_mem=16MB
+      - work_mem=4MB
       - -c
       - maintenance_work_mem=64MB
       - -c
@@ -23,6 +23,10 @@ services:
       - checkpoint_completion_target=0.9
       - -c
       - log_min_duration_statement=1000
+      - -c
+      - autovacuum_vacuum_scale_factor=0.01
+      - -c
+      - autovacuum_analyze_scale_factor=0.01
     volumes:
       - postgres-data:/var/lib/postgresql/data
     networks:
@@ -37,9 +41,9 @@ services:
       resources:
         limits:
           cpus: "1.0"
-          memory: 1.5G
+          memory: 256M
         reservations:
-          memory: 128M
+          memory: 64M
     secrets:
       - db_password
     environment:
@@ -52,7 +56,7 @@ services:
     command:
       - |
         export REDIS_PASS="$$(cat /run/secrets/redis_password)"
-        redis-server --appendonly yes --maxmemory-policy allkeys-lru --maxmemory 200mb --requirepass "$${REDIS_PASS}"
+        redis-server --appendonly yes --maxmemory-policy allkeys-lru --maxmemory 50mb --requirepass "$${REDIS_PASS}"
     volumes:
       - redis-data:/data
     networks:
@@ -67,14 +71,14 @@ services:
       resources:
         limits:
           cpus: "0.5"
-          memory: 256M
+          memory: 128M
         reservations:
-          memory: 64M
+          memory: 32M
     secrets:
       - redis_password
 
   app:
-    image: nocobase/nocobase:2.1.7
+    image: nocobase/nocobase:2.1.14
     restart: unless-stopped
     env_file: ./env/app.env
     entrypoint: ["/bin/sh", "/opt/noco-base/entrypoint-wrapper.sh"]
@@ -82,6 +86,7 @@ services:
       - ./storage:/app/nocobase/storage
       - ./dashboard:/app/nocobase/storage/dashboard:ro
       - ./nocobase-plugin-dashboard-home:/app/nocobase/node_modules/@nocobase/plugin-dashboard-home:ro
+      - ./nocobase-plugin-print-template:/app/nocobase/node_modules/@nocobase/plugin-print-template:ro
       - ./entrypoint-wrapper.sh:/opt/noco-base/entrypoint-wrapper.sh:ro
     networks:
       - nocobase
@@ -100,9 +105,9 @@ services:
       resources:
         limits:
           cpus: "2.0"
-          memory: 1G
+          memory: 1.5G
         reservations:
-          memory: 256M
+          memory: 512M
     secrets:
       - app_key
       - db_password

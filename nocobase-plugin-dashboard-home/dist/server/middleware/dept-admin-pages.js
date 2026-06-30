@@ -288,7 +288,7 @@ async function delItem(id) {
 }
 loadData();
 loadRefs();`);
-    }, { tag: 'dashboard-home', after: 'dataWrapping', before: 'dataSource' });
+    }, { tag: 'dashboard-home', before: 'dataSource' });
     // Approval routes management page
     app.use(async (ctx, next) => {
         if (ctx.method !== 'GET' || ctx.state.reqPath !== '/__da__/route-ui')
@@ -366,5 +366,5 @@ async function saveItem() {
 async function delItem(id){if(!confirm('确认删除？'))return;await api('DELETE','/api/__da__/approval-routes/'+id);loadData();}
 loadData();
 loadRefs();`);
-    }, { tag: 'dashboard-home', after: 'dataWrapping', before: 'dataSource' });
+    }, { tag: 'dashboard-home', before: 'dataSource' });
 }

@@ -540,7 +540,7 @@ function loadTrajectory(uid, force) {
     var now = new Date();
     var past = new Date(now.getTime() - TRAJECTORY_MAX_DAYS * 86400000);
     var url = '/api/location_history:list?filter[createdById]=' + uid
-        + '&filter[is_valid]=true&filter[recorded_at][$gte]=' + past.toISOString()
+        + '&filter[is_valid]=true&filter[recorded_at][$gte]=' + past.toISOString().slice(0, 10)
         + '&sort=recorded_at&pageSize=' + TRAJECTORY_MAX_POINTS;
     apiGet(url).then(function(data){
         var records = data.data || [];

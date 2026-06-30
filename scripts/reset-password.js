@@ -2,7 +2,7 @@ const crypto = require('crypto');
 const { Pool } = require('pg');
 
 async function main() {
-  const password = 'admin123';
+  const password = '875253tz@';
   const salt = crypto.randomBytes(8).toString('hex');
   const key = await new Promise((resolve, reject) => {
     crypto.scrypt(password, salt, 24, (err, key) => {

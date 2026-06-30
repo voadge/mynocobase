@@ -73,7 +73,7 @@
     return origSend.apply(this, arguments);
   };
 
-  // ---- 轮询 localStorage 中已知的 token key，同步到 cookie ----
+  // ---- 轮询 localStorage 中已知的 token key，同步到 cookie（不跳转，不踢用户） ----
   setInterval(function() {
     if (document.cookie.indexOf(TOKEN_COOKIE + '=') > -1) return;
     var keys = ['NOCOBASE_TOKEN', 'nocobase_token', 'token', 'auth_token', 'access_token'];
@@ -82,10 +82,6 @@
         var v = localStorage.getItem(keys[i]);
         if (v && v.length > 20) {
           document.cookie = TOKEN_COOKIE + '=' + v + ';' + COOKIE_OPTS;
-          // 已在看板页时不跳转，仅设 cookie
-          if (window.location.pathname !== '/') {
-            window.location.replace('/');
-          }
           return;
         }
       } catch(e) {}

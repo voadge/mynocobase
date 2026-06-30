@@ -636,22 +636,23 @@ body {
 
   function fetchRecordAndShow(collection, id, serialNo) {
     var recordUrl = '/api/' + collection + ':get?filterByTk=' + id + '&appends=projectID,createdBy,updatedBy';
-    fetch(recordUrl, { headers: { 'Authorization': 'Bearer ' + token, 'Accept': 'application/json' } })
-      .then(function(r) { return r.json(); })
-      .then(function(res) {
-        if (res && res.data) {
-          renderDrawer(res.data, collection);
-        } else if (res && res.errors) {
-          console.error('API error:', res.errors);
-          showDrawerSimple('错误', res.errors[0].message || 'API 返回错误');
-        } else {
-          showDrawerSimple('未找到', '未找到该记录');
-        }
-      })
-      .catch(function(e) {
-        console.error('Fetch error:', e);
-        showDrawerSimple('错误', '加载记录失败');
-      });
+    Promise.all([
+      fetch(recordUrl, { headers: { 'Authorization': 'Bearer ' + token, 'Accept': 'application/json' } }).then(function(r) { return r.json(); }),
+      loadFieldNames(collection)
+    ]).then(function(results) {
+      var res = results[0];
+      if (res && res.data) {
+        renderDrawer(res.data, collection);
+      } else if (res && res.errors) {
+        console.error('API error:', res.errors);
+        showDrawerSimple('错误', res.errors[0].message || 'API 返回错误');
+      } else {
+        showDrawerSimple('未找到', '未找到该记录');
+      }
+    }).catch(function(e) {
+      console.error('Fetch error:', e);
+      showDrawerSimple('错误', '加载记录失败');
+    });
   }
 
   function openDrawer(card) {
@@ -669,25 +670,25 @@ body {
     }
   }
 
-  var FRIENDLY_NAMES = {
-    projectID: '项目名称', log_no: '日志编号', log_date: '日期', weather: '天气',
-    work_content: '施工内容', equipment_usage: '设备使用', material_usage: '材料使用',
-    personnel_count: '人员数量', safety_issues: '安全情况', quality_issues: '质量问题',
-    others: '其他', tomorrow_plan: '明日计划', status: '状态',
-    review_opinion: '复核意见', approve_opinion: '审核意见',
-    reviewed_at: '复核时间', approved_at: '审核时间',
-    addition_no: '报备编号', addition_date: '日期', addition_type: '报备类型', trigger_reason: '触发原因',
-    company_name: '单位名称', work_hours: '工时', estimated_cost: '预估费用',
-    attachments: '附件', logtoname: '记录人',
-    approver_opinion: '审批意见',
-    fund_plan: '资金计划', material_plan: '材料计划', migrant_plan: '人员计划',
-    actual_cost: '实际费用', actual_result: '实际结果',
-    personnel_status: '人员到位', material_status: '材料到位', fund_status: '资金到位',
-    migrant_status: '人员到位'
-  };
+  var fieldLabelCache = {};
 
-  function getFieldLabel(name) {
-    return FRIENDLY_NAMES[name] || name;
+  function loadFieldNames(collection) {
+    if (fieldLabelCache[collection]) return Promise.resolve(fieldLabelCache[collection]);
+    return fetch('/api/collections/' + collection + '/fields:list', {
+      headers: { 'Authorization': 'Bearer ' + token, 'Accept': 'application/json' }
+    }).then(function(r) { return r.json(); }).then(function(res) {
+      var map = {};
+      if (res && res.data) {
+        res.data.forEach(function(f) { map[f.name] = f.title || f.name; });
+      }
+      fieldLabelCache[collection] = map;
+      return map;
+    }).catch(function() { fieldLabelCache[collection] = {}; return {}; });
+  }
+
+  function getFieldLabel(name, collection) {
+    var map = fieldLabelCache[collection];
+    return (map && map[name]) || name;
   }
 
   var DISPLAY_ORDER = {
@@ -728,7 +729,7 @@ body {
     order.forEach(function(name) {
       var val = record[name];
       if (val === null || val === undefined || val === '') return;
-      html += '<div class="drawer-row"><div class="drawer-row-label">' + esc(getFieldLabel(name)) + '</div><div class="drawer-row-value">' + formatField(val, name) + '</div></div>';
+      html += '<div class="drawer-row"><div class="drawer-row-label">' + esc(getFieldLabel(name, collName)) + '</div><div class="drawer-row-value">' + formatField(val, name) + '</div></div>';
     });
 
     html += '</div>';

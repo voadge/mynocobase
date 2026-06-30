@@ -346,12 +346,12 @@
         accuracy: Math.round(accuracy) || null,
         source: position.source || 'gps',
         trigger: _state.isMoving ? 'movement' : 'scheduled',
-        recorded_at: new Date().toISOString(),
+        recorded_at: new Date().toISOString().slice(0, 10),
         township: addr.township || '',
         street: addr.street || '',
         district: addr.district || '',
         is_valid: true,
-        consent_at: consentAt ? new Date(parseInt(consentAt)).toISOString() : null,
+        consent_at: consentAt ? new Date(parseInt(consentAt)).toISOString().slice(0, 10) : null,
         metadata: {}
       };
       queueLocation(data);

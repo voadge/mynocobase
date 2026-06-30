@@ -396,7 +396,8 @@ body {
     return !seenMap[id];
   }
 
-  var todayStr = new Date().toISOString().slice(0, 10);
+  var _d = new Date();
+  var todayStr = _d.getFullYear() + '-' + String(_d.getMonth() + 1).padStart(2, '0') + '-' + String(_d.getDate()).padStart(2, '0');
   var filter = JSON.stringify({ 'briefing_date.$dateOn': todayStr });
   var url = BRIEFING_API + '&filter=' + encodeURIComponent(filter);
 

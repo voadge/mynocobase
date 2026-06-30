@@ -75,7 +75,7 @@ function registerProxyRoutes(app) {
                 ctx.body = { status: '0', rectangle: null, city: null, province: null, error: e.message };
             }
         }
-    }, { tag: 'dashboard-home', after: 'dataWrapping', before: 'dataSource' });
+    }, { tag: 'dashboard-home', before: 'dataSource' });
     // Search API - AMAP inputtips proxy
     app.use(async (ctx, next) => {
         if (ctx.method !== 'GET' || ctx.state.reqPath !== '/__pd__/search') {
@@ -96,7 +96,7 @@ function registerProxyRoutes(app) {
             ctx.status = 502;
             ctx.body = { status: '0', tips: [], error: e.message };
         }
-    }, { tag: 'dashboard-home', after: 'dataWrapping', before: 'dataSource' });
+    }, { tag: 'dashboard-home', before: 'dataSource' });
     // Reverse geocode via AMAP
     app.use(async (ctx, next) => {
         if (ctx.method !== 'GET' || ctx.state.reqPath !== '/__pd__/reverse-geocode') {
@@ -136,5 +136,5 @@ function registerProxyRoutes(app) {
             ctx.status = 502;
             ctx.body = { status: '0', address: null, error: e.message };
         }
-    }, { tag: 'dashboard-home', after: 'dataWrapping', before: 'dataSource' });
+    }, { tag: 'dashboard-home', before: 'dataSource' });
 }

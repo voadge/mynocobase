@@ -1,0 +1,23 @@
+{
+  "name": "@nocobase/plugin-print-template",
+  "version": "1.0.0",
+  "main": "dist/server/index.js",
+  "displayName": "打印模板",
+  "displayName.zh-CN": "打印模板",
+  "peerDependencies": {
+    "@nocobase/server": "2.x"
+  },
+  "dependencies": {
+    "handlebars": "^4.7.8",
+    "xlsx": "^0.18.5",
+    "isomorphic-dompurify": "^1.0.0",
+    "dayjs": "^1.11.10"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "scripts": {
+    "build": "tsc && tsc -p tsconfig.client.json && tsc -p tsconfig.client-v2.json",
+    "watch": "tsc --watch"
+  }
+}

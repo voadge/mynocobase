@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "amd",
+    "lib": ["ES2020"],
+    "outDir": "./dist/client-v2",
+    "rootDir": "./src/client-v2",
+    "strict": false,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "moduleResolution": "node"
+  },
+  "include": ["src/client-v2/**/*"],
+  "exclude": ["node_modules", "dist"]
+}

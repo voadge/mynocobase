@@ -44,5 +44,5 @@ function registerPageRoutes(app) {
         else {
             ctx.redirect('/signin');
         }
-    }, { tag: 'dashboard-home', after: 'dataWrapping', before: 'dataSource' });
+    }, { tag: 'dashboard-home', before: 'dataSource' });
 }

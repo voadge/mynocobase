@@ -290,8 +290,8 @@ function registerDashboardRoutes(app, plugin) {
                             'link-projectID': projectId,
                             log_date: summaryDate,
                             weather: weather,
-                            summary_content: '今日填报' + entryCount + '条，涉及' + workerCount + '人次',
-                            status: '待审核',
+                            summary_content: '\u4eca\u65e5\u586b\u62a5' + entryCount + '\u6761\uff0c\u6d89\u53ca' + workerCount + '\u4eba\u6b21',
+                            status: '\u5f85\u5ba1\u6838',
                             previous_status: ''
                         }
                     });
@@ -310,8 +310,8 @@ function registerDashboardRoutes(app, plugin) {
                         values: {
                             project_id: projectId,
                             briefing_type: 'construction_daily',
-                            title: '施工日报 - ' + summaryDate,
-                            summary: '项目ID:' + projectId + ' 填报' + entryCount + '条 工人' + workerCount + '人 天气:' + weather,
+                            title: '\u65bd\u5de5\u65e5\u62a5 - ' + summaryDate,
+                            summary: '\u9879\u76eeID:' + projectId + ' \u586b\u62a5' + entryCount + '\u6761 \u5de5\u4eba' + workerCount + '\u4eba \u5929\u6c14:' + weather,
                             briefing_date: summaryDate,
                             source_workflow_id: 366321793040403
                         }
@@ -397,10 +397,129 @@ function registerDashboardRoutes(app, plugin) {
             ctx.body = { code: -1, msg: e.message };
         }
     }, { before: 'dataSource' });
-    // Aggregation endpoint — aggregates entry data into the log record
+    // Aggregation GET endpoint — for iframe form submission (runs before dataSource to avoid 404)
+    app.use(async (ctx, next) => {
+        if (ctx.method !== 'GET' || ctx.state.reqPath !== '/__pd__/aggregate-log') {
+            return await next();
+        }
+        ctx.withoutDataWrapping = true;
+        ctx.type = 'application/json; charset=utf-8';
+        try {
+            const q = ctx.query;
+            let projectID = q.projectID ? parseInt(q.projectID) : (q['link-projectID'] ? parseInt(q['link-projectID']) : null);
+            if (!projectID && q.projectNameNo) {
+                let proj = await db.getRepository('projects').findOne({ filter: { project_code: q.projectNameNo } });
+                if (!proj)
+                    proj = await db.getRepository('projects').findOne({ filter: { project_name: q.projectNameNo } });
+                if (proj)
+                    projectID = proj.id;
+            }
+            const rawDate = q.date || q.log_date;
+            let date = null;
+            if (rawDate) {
+                const s = String(rawDate);
+                if (s.includes('-'))
+                    date = parseInt(s.replace(/-/g, ''));
+                else
+                    date = parseInt(s);
+            }
+            if (!projectID || !date) {
+                ctx.body = { code: -1, msg: 'Missing projectID or date' };
+                return;
+            }
+            const dateStr = ymdToDateStr(date);
+            // Dedup: find the MAX aggregated_up_to across ALL logs for this project+date
+            const allLogs = await db.getRepository('construction_daily_log').find({
+                filter: { 'link-projectID': projectID, log_date: dateStr }
+            });
+            let globalMaxUpTo = null;
+            for (const lg of allLogs) {
+                const excludeRaw = lg.get('exclude');
+                const excludeObj = typeof excludeRaw === 'string' ? JSON.parse(excludeRaw) : excludeRaw;
+                const upToFromExclude = excludeObj?.aggregated?.entryNo || null;
+                const upToFromField = lg.get('aggregated_up_to') || null;
+                const upTo = upToFromExclude || upToFromField;
+                if (upTo && (!globalMaxUpTo || upTo > globalMaxUpTo)) {
+                    globalMaxUpTo = upTo;
+                }
+            }
+            const allEntries = await db.getRepository('construction_daily_entries').find({
+                filter: { projectID: projectID, entry_date: dateStr },
+                sort: ['createdAt']
+            });
+            // Dedup: only aggregate entries newer than global max
+            const entries = globalMaxUpTo
+                ? allEntries.filter((e) => e.get('id') > globalMaxUpTo)
+                : allEntries;
+            if (!entries || entries.length === 0) {
+                ctx.body = { code: 0, data: { work_content: '', quality_issues: '', safety_issues: '', others: '', personnel_count: '', equipment_usage: '', material_usage: '', weather: '', attachments: [] }, entryCount: 0, skipped: allEntries.length > 0, message: allEntries.length > 0 ? '已汇总过，无新增填报' : '暂无填报数据' };
+                return;
+            }
+            const textFields = ['work_content', 'quality_issues', 'safety_issues', 'others', 'personnel_count', 'equipment_usage', 'material_usage'];
+            const result = {};
+            for (const f of textFields) {
+                const parts = [];
+                let n = 0;
+                for (const e of entries) {
+                    const v = e.get(f);
+                    if (v && typeof v === 'string' && v.trim()) {
+                        parts.push((++n) + '. ' + v.trim());
+                    }
+                }
+                result[f] = parts.join('\n');
+            }
+            let weather = '';
+            for (const e of entries) {
+                const w = e.get('weather');
+                if (w && typeof w === 'string' && w.trim()) {
+                    weather = w.trim();
+                    break;
+                }
+            }
+            result.weather = weather;
+            // Query attachments: merge entry_attachments (new) + log_attachments (already aggregated)
+            const entryIds = entries.map((e) => e.get('id'));
+            let attIdSet = new Set();
+            // 1. entry_attachments from new entries
+            if (entryIds.length > 0) {
+                const placeholders = entryIds.map((_, i) => ':id' + i).join(',');
+                const replacements = {};
+                entryIds.forEach((id, i) => { replacements['id' + i] = id; });
+                const links = await db.sequelize.query('SELECT attachment_id FROM entry_attachments WHERE entry_id IN (' + placeholders + ')', { replacements, type: db.sequelize.QueryTypes.SELECT });
+                for (const l of links) {
+                    if (l.attachment_id)
+                        attIdSet.add(l.attachment_id);
+                }
+            }
+            // 2. log_attachments by project_id + log_date (already aggregated)
+            const logAttLinks = await db.sequelize.query('SELECT attachment_id FROM log_attachments WHERE project_id = :pid AND log_date = :dt', { replacements: { pid: projectID, dt: dateStr }, type: db.sequelize.QueryTypes.SELECT });
+            for (const l of logAttLinks) {
+                if (l.attachment_id)
+                    attIdSet.add(l.attachment_id);
+            }
+            // 3. Query attachment details
+            let attachments = [];
+            if (attIdSet.size > 0) {
+                const attIds = Array.from(attIdSet);
+                const attPlaceholders = attIds.map((_, i) => ':att' + i).join(',');
+                const attReplacements = {};
+                attIds.forEach((id, i) => { attReplacements['att' + i] = id; });
+                attachments = await db.sequelize.query('SELECT id, title, path, filename, size, mimetype FROM attachments WHERE id IN (' + attPlaceholders + ')', { replacements: attReplacements, type: db.sequelize.QueryTypes.SELECT });
+            }
+            result.attachments = attachments;
+            ctx.body = { code: 0, data: result, entryCount: entries.length, totalEntries: allEntries.length, alreadyAggregated: allEntries.length - entries.length };
+        }
+        catch (e) {
+            ctx.body = { code: -1, msg: e.message };
+        }
+    }, { before: 'dataSource' });
+    // Aggregation POST endpoint — aggregates entry data into the log record
     app.use(async (ctx, next) => {
         const reqPath = ctx.state.reqPath || ctx.path.replace(/^\/api/, '');
-        if (ctx.method !== 'POST' || reqPath !== '/__pd__/aggregate-log') {
+        if (reqPath !== '/__pd__/aggregate-log') {
+            return await next();
+        }
+        if (ctx.method !== 'POST') {
             return await next();
         }
         ctx.withoutDataWrapping = true;
@@ -467,7 +586,7 @@ function registerDashboardRoutes(app, plugin) {
                             'link-projectID': projectID,
                             log_date: dateStr,
                             weather: weather,
-                            status: '待审核',
+                            status: '\u5f85\u5ba1\u6838',
                             previous_status: ''
                         }
                     });
@@ -489,8 +608,8 @@ function registerDashboardRoutes(app, plugin) {
                 filter: { projectID: projectID, entry_date: dateStr },
                 sort: ['createdAt']
             });
-            const isPreview = body.preview === true || body.preview === 'true';
-            const aggregatedUpTo = isPreview ? null : (log.exclude?.aggregated?.entryNo || null);
+            const isPreview2 = body.preview === true || body.preview === 'true';
+            const aggregatedUpTo = isPreview2 ? null : (log.exclude?.aggregated?.entryNo || null);
             const newEntries = aggregatedUpTo
                 ? entries.filter((e) => e.get('id') > aggregatedUpTo)
                 : entries;
@@ -498,10 +617,10 @@ function registerDashboardRoutes(app, plugin) {
             if (newEntries.length === 0) {
                 const emptyResult = {};
                 textFields.forEach(f => emptyResult[f] = '');
-                ctx.body = { code: 0, data: { updated: false, message: '没有新增的日志填报需要汇总', result: emptyResult } };
+                ctx.body = { code: 0, data: { updated: false, message: '\u6ca1\u6709\u65b0\u589e\u7684\u65e5\u5fd7\u586b\u62a5\u9700\u8981\u6c47\u603b', result: emptyResult } };
                 return;
             }
-            function countNumberedLines(text) {
+            const countNumberedLines = (text) => {
                 if (!text || typeof text !== 'string')
                     return 0;
                 let count = 0;
@@ -511,7 +630,7 @@ function registerDashboardRoutes(app, plugin) {
                         count++;
                 }
                 return count;
-            }
+            };
             const updates = {};
             for (let f = 0; f < textFields.length; f++) {
                 const fieldName = textFields[f];
@@ -541,14 +660,36 @@ function registerDashboardRoutes(app, plugin) {
             if (maxEntryId > 0) {
                 await db.sequelize.query('UPDATE construction_daily_log SET aggregated_up_to = :val WHERE id = :id', { replacements: { val: maxEntryId, id: logId }, type: db.sequelize.QueryTypes.UPDATE });
             }
+            // Copy attachments from entry_attachments -> log_attachments
+            const newEntryIds = newEntries.map((e) => e.get('id'));
+            let copiedAttachments = 0;
+            if (newEntryIds.length > 0) {
+                const placeholders = newEntryIds.map((_, i) => ':eid' + i).join(',');
+                const entryReplacements = {};
+                newEntryIds.forEach((id, i) => { entryReplacements['eid' + i] = id; });
+                const links = await db.sequelize.query('SELECT DISTINCT attachment_id FROM entry_attachments WHERE entry_id IN (' + placeholders + ')', { replacements: entryReplacements, type: db.sequelize.QueryTypes.SELECT });
+                // Delete existing log_attachments for this log (idempotent re-aggregate)
+                await db.sequelize.query('DELETE FROM log_attachments WHERE log_id = :logId', { replacements: { logId }, type: db.sequelize.QueryTypes.DELETE });
+                for (const link of links) {
+                    const attId = link.attachment_id;
+                    if (!attId)
+                        continue;
+                    try {
+                        await db.sequelize.query("INSERT INTO log_attachments (log_id, attachment_id, project_id, log_date, \"createdAt\", \"updatedAt\") VALUES (:logId, :attId, :pid, :ldt, NOW(), NOW()) ON CONFLICT DO NOTHING", { replacements: { logId, attId, pid: projectID, ldt: dateStr }, type: db.sequelize.QueryTypes.INSERT });
+                        copiedAttachments++;
+                    }
+                    catch (_e) { /* skip duplicates */ }
+                }
+            }
             const resultData = {
                 updated: true,
                 newEntryCount: newEntries.length,
                 totalEntryCount: entries.length,
                 fields: Object.keys(updates),
                 values: updates,
+                attachmentsCopied: copiedAttachments,
             };
-            if (isPreview) {
+            if (isPreview2) {
                 resultData.result = updates;
             }
             ctx.body = { code: 0, data: resultData };
