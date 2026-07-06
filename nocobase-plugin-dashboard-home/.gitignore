@@ -1,0 +1,33 @@
+# Build output
+dist/
+
+# Temporary SQL files
+.tmp-*.sql
+
+# Backup files
+*.bak
+
+# Duplicate/backup directories
+@nocobase/
+plugin-material-number-dist/
+server-backup/
+tmp-deploy/
+
+# Empty directories
+docs/
+workflow-scripts/
+
+# Deployment scripts (use deploy_cookie_auth.sh)
+apply_dashboard.sh
+
+# Node modules
+node_modules/
+
+# Test files
+test-*.js
+test-*.sh
+
+# Patch/fix scripts
+fix-*.py
+patch-*.py
+fix-env.sh

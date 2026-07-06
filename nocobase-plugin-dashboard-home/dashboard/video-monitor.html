@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>视频监控</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0a0f1e;color:#e0e6ed;font-family:-apple-system,BlinkMacSystemFont,Microsoft YaHei,sans-serif;height:100vh;display:flex;flex-direction:column}
+#player-wrap{flex:1;display:flex;align-items:center;justify-content:center;background:#000;position:relative;min-height:0}
+#videoPlayer{width:100%;height:100%;object-fit:contain;display:block}
+#controls{display:flex;gap:8px;padding:10px 16px;background:rgba(255,255,255,0.04);border-top:1px solid rgba(255,255,255,0.06);align-items:center;flex-wrap:wrap;justify-content:center}
+#controls select,#controls button{background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12);color:#e0e6ed;padding:6px 10px;border-radius:4px;font-size:13px;outline:none}
+#controls select:focus{border-color:rgba(0,212,255,0.5)}
+#controls button{background:linear-gradient(135deg,#00d4ff,#7b2cbf);border:none;color:#fff;padding:6px 16px;cursor:pointer;font-weight:600;transition:opacity .2s}
+#controls button:hover{opacity:.85}
+#channelBtns{display:flex;gap:4px;flex-wrap:wrap}
+#channelBtns button{min-width:36px;padding:6px 8px;font-size:12px}
+#channelBtns button.active{background:linear-gradient(135deg,#00d4ff,#7b2cbf) !important;border:none !important}
+#status{font-size:12px;color:#8a9aa8;padding:4px 8px}
+#status.error{color:#ff6b6b}
+#status.connected{color:#00ff88}
+.hidden{display:none!important}
+.no-video{text-align:center;color:#5a6a7a;padding:40px;font-size:14px;line-height:1.8}
+.no-video i{font-size:48px;display:block;margin-bottom:12px;opacity:.3}
+#loading{display:none;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#5a6a7a;font-size:13px}
+</style>
+</head>
+<body>
+<div id="player-wrap">
+  <video id="videoPlayer" muted autoplay></video>
+  <div id="noVideo" class="no-video">
+    <i>📹</i>
+    <div>选择车辆开始监控</div>
+    <div style="font-size:12px;margin-top:4px;color:#3a4a5a">设备需在线才能播放</div>
+  </div>
+  <div id="loading">连接中...</div>
+</div>
+<div id="controls">
+  <select id="deviceSelect"><option value="">-- 加载设备列表 --</option></select>
+  <div id="channelBtns"></div>
+  <button id="connectBtn">连接</button>
+  <div id="status">就绪</div>
+</div>
+<script>
+var DEVICES = [
+  { label: '贵CFE8566 (002D02C81B) 5ch', terid: '002D02C81B', chl: 5 },
+  { label: '贵CFA2777 (002D03490C) 5ch', terid: '002D03490C', chl: 5 },
+  { label: '贵CF38165 (002D036DCF) 5ch', terid: '002D036DCF', chl: 5 },
+  { label: '贵CFF3860 (002D036DEB) 5ch', terid: '002D036DEB', chl: 5 }
+];
+var STREAM_HOST = 'http://124.221.242.141';
+var player = null, currentTerid = null, currentChl = 1;
+var videoEl = document.getElementById('videoPlayer');
+var statusEl = document.getElementById('status');
+var noVideoEl = document.getElementById('noVideo');
+var loadingEl = document.getElementById('loading');
+var deviceSelect = document.getElementById('deviceSelect');
+var channelBtns = document.getElementById('channelBtns');
+
+function setStatus(msg, type) {
+  statusEl.textContent = msg; statusEl.className = type || '';
+}
+
+function showLoading(v) {
+  loadingEl.style.display = v ? 'block' : 'none';
+}
+
+function stop() {
+  if (player) { try { player.unload(); player.detachMediaElement(); player.destroy(); } catch(e) {} player = null; }
+  videoEl.style.display = 'none';
+  noVideoEl.classList.remove('hidden');
+}
+
+function buildChannelBtns(count) {
+  channelBtns.innerHTML = '';
+  for (var i = 1; i <= count; i++) {
+    var btn = document.createElement('button');
+    btn.textContent = i;
+    if (i === currentChl) btn.className = 'active';
+    (function(ch) {
+      btn.addEventListener('click', function() {
+        currentChl = ch;
+        channelBtns.querySelectorAll('button').forEach(function(b) { b.className = ''; });
+        btn.className = 'active';
+      });
+    })(i);
+    channelBtns.appendChild(btn);
+  }
+}
+
+function connect() {
+  stop();
+  var terid = deviceSelect.value;
+  if (!terid) { setStatus('请选择车辆', 'error'); return; }
+  currentTerid = terid;
+  showLoading(true);
+  setStatus('连接中...');
+
+  var streamUrl = STREAM_HOST + ':12060/live.flv?devid=' + terid + '&chl=' + currentChl + '&st=0&audio=1';
+  console.log('Stream URL:', streamUrl);
+
+  if (typeof flvjs === 'undefined' || !flvjs.isSupported()) {
+    showLoading(false);
+    setStatus('浏览器不支持FLV播放', 'error'); return;
+  }
+
+  player = flvjs.createPlayer({ type: 'flv', url: streamUrl, isLive: true });
+  player.attachMediaElement(videoEl);
+  player.load();
+  player.on(flvjs.Events.ERROR, function(errType, errDetail) {
+    showLoading(false);
+    setStatus('连接失败: ' + (errDetail || errType), 'error');
+    stop();
+  });
+  player.on(flvjs.Events.PLAYING, function() {
+    showLoading(false);
+    setStatus('播放中', 'connected');
+    videoEl.style.display = 'block';
+    noVideoEl.classList.add('hidden');
+  });
+  player.on(flvjs.Events.STATISTICS_INFO, function(s) {
+    if (s && s.speed) setStatus('播放中 ' + (s.speed/1024).toFixed(1) + ' KB/s', 'connected');
+  });
+  player.play();
+}
+
+function init() {
+  DEVICES.forEach(function(d) {
+    var opt = document.createElement('option');
+    opt.value = d.terid;
+    opt.textContent = d.label;
+    deviceSelect.appendChild(opt);
+  });
+  deviceSelect.value = DEVICES[0].terid;
+  buildChannelBtns(DEVICES[0].chl);
+  setStatus('就绪 - ' + DEVICES.length + ' 台设备');
+}
+deviceSelect.addEventListener('change', function() {
+  var d = DEVICES.find(function(x) { return x.terid === deviceSelect.value; });
+  if (d) buildChannelBtns(d.chl || 5);
+});
+document.getElementById('connectBtn').addEventListener('click', connect);
+init();
+</script>
+<script src="/dashboard/assets/flv.min.js"></script>
+</body>
+</html>

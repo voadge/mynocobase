@@ -5,7 +5,7 @@ set -e
 
 CONF=/opt/noco-base/storage/nocobase.conf
 DASHBOARD_DIR=/opt/noco-base/dashboard
-CONTAINER=noco-base_app_1
+CONTAINER=noco-base-app-1
 
 if [ ! -d "$DASHBOARD_DIR" ] || [ ! -f "$DASHBOARD_DIR/index.html" ]; then
   exit 0

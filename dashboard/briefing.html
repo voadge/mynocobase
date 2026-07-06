@@ -794,7 +794,10 @@ body {
   var fieldLabelCache = {};
 
   function loadFieldNames(collection) {
-    if (fieldLabelCache[collection]) return Promise.resolve(fieldLabelCache[collection]);
+    var cached = fieldLabelCache[collection];
+    if (cached && Object.keys(cached).length > 0) return Promise.resolve(cached);
+    if (cached === 'loading') return Promise.resolve({});
+    fieldLabelCache[collection] = 'loading';
     return fetch('/api/collections/' + collection + '/fields:list', {
       headers: { 'Authorization': 'Bearer ' + token, 'Accept': 'application/json' }
     }).then(function(r) { return r.json(); }).then(function(res) {
@@ -843,8 +846,9 @@ body {
   }
 
   function renderDrawer(record, collName) {
-    var order = DISPLAY_ORDER[collName] || Object.keys(record).filter(function(k) {
-      return ['id','createdAt','createdBy','updatedAt','updatedBy','cron','exclude','sort','__index','link-projectID','FormSerialNo','briefing_date','source_workflow_id','briefing_type','title','summary','source_collection'].indexOf(k) === -1 && k.indexOf('_id') === -1;
+    var SKIP_FIELDS = ['id','createdAt','createdBy','createdById','updatedAt','updatedBy','updatedById','deletedAt','deletedBy','deletedById','cron','exclude','sort','__index','link-projectID','FormSerialNo','briefing_date','source_workflow_id','briefing_type','title','summary','source_collection'];
+    var order = (DISPLAY_ORDER[collName] || Object.keys(record)).filter(function(k) {
+      return SKIP_FIELDS.indexOf(k) === -1 && k.indexOf('_id') === -1;
     });
 
     var html = '<div class="drawer-header"><div class="drawer-title">详情</div><button class="drawer-close" onclick="closeDrawer()">&times;</button></div>';

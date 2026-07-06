@@ -9,18 +9,21 @@ export class HtmlRenderer {
       return '<div class="p-4">No print template configured</div>';
     }
 
-    // Support v2 blocks or legacy elements
+    // Support v3 grid format, v2 blocks, or legacy elements
+    const hasRows = schema.rows && schema.rows.length > 0;
     const hasBlocks = schema.blocks && schema.blocks.length > 0;
     const hasLegacy = schema.elements && schema.elements.length > 0;
 
-    if (!hasBlocks && !hasLegacy) {
+    if (!hasRows && !hasBlocks && !hasLegacy) {
       return '<div class="p-4">No print template configured</div>';
     }
 
     const page = schema.page || { size: 'A4', orientation: 'portrait', margins: { top: 20, right: 15, bottom: 20, left: 15 } };
 
     let body = '';
-    if (hasBlocks) {
+    if (hasRows) {
+      body = this.renderGridRows(schema, data);
+    } else if (hasBlocks) {
       body = schema.blocks.map(block => this.renderBlock(block, data)).join('\n');
     } else if (hasLegacy) {
       body = schema.elements!.map(el => this.renderElement(el)).join('\n');
@@ -248,6 +251,42 @@ export class HtmlRenderer {
     const c = s.borderColor ?? '#000';
     const style = s.borderStyle || 'solid';
     return '<hr class="nb-divider" style="border-top:' + w + 'px ' + style + ' ' + c + '" />';
+  }
+
+  private renderGridRows(schema: any, data: any): string {
+    var rows = schema.rows || [];
+    var h = '<table cellspacing="0" cellpadding="0" style="width:100%;border-collapse:collapse">';
+    for (var ri = 0; ri < rows.length; ri++) {
+      var row = rows[ri];
+      h += '<tr>';
+      var cells = row.cells || [];
+      for (var ci = 0; ci < cells.length; ci++) {
+        var cell = cells[ci];
+        if (cell.skip) continue;
+        var cs = cell.colspan || 1;
+        var rs = cell.rowspan || 1;
+        var bd = '';
+        if (cell.border !== false) {
+          var bw = (cell.borderWidth || 1) + 'px';
+          var bc = cell.borderColor || '#000';
+          var bs = cell.borderStyle || 'solid';
+          bd = 'border-top:' + (cell.borderTop !== false ? bw + ' ' + bs + ' ' + bc : 'none') + ';' +
+               'border-right:' + (cell.borderRight !== false ? bw + ' ' + bs + ' ' + bc : 'none') + ';' +
+               'border-bottom:' + (cell.borderBottom !== false ? bw + ' ' + bs + ' ' + bc : 'none') + ';' +
+               'border-left:' + (cell.borderLeft !== false ? bw + ' ' + bs + ' ' + bc : 'none') + ';';
+        } else {
+          bd = 'border:none;';
+        }
+        var content = '';
+        if (cell.field) { content = '{{' + cell.field + '}}'; }
+        else if (cell.text) { content = cell.text; }
+        h += '<td colspan="' + cs + '" rowspan="' + rs + '" style="text-align:' + (cell.align || 'left') + ';font-weight:' + (cell.bold ? 'bold' : 'normal') + ';font-size:' + (cell.fontSize || 12) + 'px;color:' + (cell.color || '#000') + ';background:' + (cell.bgColor || 'transparent') + ';padding:6px 8px;' + bd + '">' + content + '</td>';
+        for (var xc = 1; xc < cs; xc++) { ci++; }
+      }
+      h += '</tr>';
+    }
+    h += '</table>';
+    return h;
   }
 
   private renderGrid(el: GridElement): string {

@@ -6,19 +6,21 @@ services:
     command:
       - postgres
       - -c
-      - shared_buffers=64MB
+      - shared_buffers=96MB
       - -c
-      - effective_cache_size=256MB
+      - effective_cache_size=384MB
       - -c
       - work_mem=4MB
       - -c
       - maintenance_work_mem=64MB
       - -c
-      - random_page_cost=1.1
+      - random_page_cost=1.0
       - -c
       - max_connections=50
       - -c
-      - wal_buffers=16MB
+      - wal_buffers=32MB
+      - -c
+      - effective_io_concurrency=200
       - -c
       - checkpoint_completion_target=0.9
       - -c
@@ -41,9 +43,9 @@ services:
       resources:
         limits:
           cpus: "1.0"
-          memory: 256M
+          memory: 192M
         reservations:
-          memory: 64M
+          memory: 48M
     secrets:
       - db_password
     environment:
@@ -71,14 +73,14 @@ services:
       resources:
         limits:
           cpus: "0.5"
-          memory: 128M
+          memory: 64M
         reservations:
-          memory: 32M
+          memory: 24M
     secrets:
       - redis_password
 
   app:
-    image: nocobase/nocobase:2.1.14
+    image: nocobase/nocobase:2.1.19
     restart: unless-stopped
     env_file: ./env/app.env
     entrypoint: ["/bin/sh", "/opt/noco-base/entrypoint-wrapper.sh"]
@@ -105,9 +107,9 @@ services:
       resources:
         limits:
           cpus: "2.0"
-          memory: 1.5G
+          memory: 1.0G
         reservations:
-          memory: 512M
+          memory: 256M
     secrets:
       - app_key
       - db_password
@@ -125,6 +127,7 @@ services:
       - ./ssl:/etc/nginx/ssl:ro
       - ./acme-challenge:/var/www/acme:ro
       - ./dashboard:/usr/share/nginx/html/dashboard:ro
+      - ./storage:/opt/noco-base/storage:ro
 
     ports:
       - "80:80"

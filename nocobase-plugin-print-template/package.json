@@ -4,8 +4,13 @@
   "main": "dist/server/index.js",
   "displayName": "打印模板",
   "displayName.zh-CN": "打印模板",
+  "description": "打印模板管理插件 - 支持模板设计、导出 Excel、HTML 打印",
+  "description.zh-CN": "打印模板管理插件 - 支持模板设计、导出 Excel、HTML 打印",
+  "homepage": "",
+  "license": "MIT",
   "peerDependencies": {
-    "@nocobase/server": "2.x"
+    "@nocobase/server": "2.x",
+    "@nocobase/database": "2.x"
   },
   "dependencies": {
     "handlebars": "^4.7.8",

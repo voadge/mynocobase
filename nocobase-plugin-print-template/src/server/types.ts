@@ -31,12 +31,29 @@ export interface ExtraDataSource {
  * TemplateSchema v2.0
  * Block-based layout: each Block binds to a Collection, contains Fields
  * ================================================================= */
+export interface GridCell {
+  id: string; text?: string; field?: string; fieldLabel?: string;
+  colspan?: number; rowspan?: number;
+  border?: boolean; borderWidth?: number; borderColor?: string; borderStyle?: string;
+  borderTop?: boolean; borderRight?: boolean; borderBottom?: boolean; borderLeft?: boolean;
+  align?: string; bold?: boolean; fontSize?: number; color?: string; bgColor?: string; skip?: boolean;
+}
+
+export interface GridRow {
+  id: string; height?: number; cells: GridCell[];
+  separator?: { width?: number; color?: string; style?: string };
+}
+
 export interface TemplateSchema {
   version?: string;
   page: PageConfig;
   blocks: Block[];
   /** @deprecated legacy elements */
   elements?: Element[];
+  /** v3 grid format */
+  mainCollection?: string;
+  columnCount?: number;
+  rows?: GridRow[];
 }
 
 export interface PageConfig {

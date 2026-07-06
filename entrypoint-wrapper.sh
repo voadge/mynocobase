@@ -9,9 +9,7 @@ if [ -n "$DB_PASSWORD_FILE" ] && [ -f "$DB_PASSWORD_FILE" ]; then
 fi
 if [ -n "$REDIS_PASSWORD_FILE" ] && [ -f "$REDIS_PASSWORD_FILE" ]; then
   REDIS_PASSWORD=$(cat "$REDIS_PASSWORD_FILE"); export REDIS_PASSWORD
-  if [ -z "$REDIS_URL" ]; then
-    REDIS_URL="redis://:${REDIS_PASSWORD}@redis:6379/0"; export REDIS_URL
-  fi
+  REDIS_URL="redis://:${REDIS_PASSWORD}@redis:6379/0"; export REDIS_URL
 fi
 
 if [ $# -eq 0 ]; then

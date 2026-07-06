@@ -205,10 +205,8 @@
                 bufferLayer = L.geoJSON(buffered, {
                     color: '#00d4ff', weight: 1, fillColor: '#00d4ff', fillOpacity: 0.15
                 }).addTo(map);
-                map.fitBounds(bufferLayer.getBounds().pad(0.1));
-            } catch(e) {
-                map.fitBounds(polylineLayer.getBounds().pad(0.1));
-            }
+            } catch(e) {}
+
 
             document.getElementById('coordCount').textContent = '节点数: ' + currentPoints.length;
         }
@@ -405,6 +403,9 @@
             document.getElementById('deleteBtn').style.display = '';
             document.getElementById('coordCount').textContent = '节点数: ' + currentPoints.length;
             redraw();
+            if (currentPoints.length >= 2) {
+                map.fitBounds(polylineLayer.getBounds().pad(0.1));
+            }
             renderFenceList();
         }
 

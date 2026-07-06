@@ -1,13 +1,7 @@
-declare const define: (factory: (...args: any[]) => any) => void;
+export default class PrintTemplateClientPlugin {
+  constructor(protected app: any) {}
 
-define(function(){
-  function PrintTemplateClientPlugin(options: any, app: any) {
-    this.options = options;
-    this.app = app;
+  async load() {
+    // v1 client plugin - minimal
   }
-  PrintTemplateClientPlugin.prototype.afterAdd = function() {};
-  PrintTemplateClientPlugin.prototype.beforeLoad = function() {};
-  PrintTemplateClientPlugin.prototype.load = function() {
-  };
-  return PrintTemplateClientPlugin;
-});
+}

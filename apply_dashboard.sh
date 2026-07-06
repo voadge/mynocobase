@@ -64,5 +64,5 @@ awk '
 ' "$CONF" > "${CONF}.tmp" && mv "${CONF}.tmp" "$CONF"
 
 # Test and reload
-docker exec noco-base_app_1 nginx -t && docker exec noco-base_app_1 nginx -s reload
+docker exec noco-base-app-1 nginx -t && docker exec noco-base-app-1 nginx -s reload
 echo "=== Done ==="

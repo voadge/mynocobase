@@ -74,17 +74,21 @@
   };
 
   // ---- 轮询 localStorage 中已知的 token key，同步到 cookie（不跳转，不踢用户） ----
-  setInterval(function() {
-    if (document.cookie.indexOf(TOKEN_COOKIE + '=') > -1) return;
+  var _tokenCheckInterval = setInterval(function() {
+    if (document.cookie.indexOf(TOKEN_COOKIE + '=') > -1) {
+      clearInterval(_tokenCheckInterval);
+      return;
+    }
     var keys = ['NOCOBASE_TOKEN', 'nocobase_token', 'token', 'auth_token', 'access_token'];
     for (var i = 0; i < keys.length; i++) {
       try {
         var v = localStorage.getItem(keys[i]);
         if (v && v.length > 20) {
           document.cookie = TOKEN_COOKIE + '=' + v + ';' + COOKIE_OPTS;
+          clearInterval(_tokenCheckInterval);
           return;
         }
       } catch(e) {}
     }
-  }, 500);
+  }, 5000);
 })();
