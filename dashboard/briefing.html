@@ -367,14 +367,6 @@ body {
 }
 .loading-dot:nth-child(2) { animation-delay: 0.2s; }
 .loading-dot:nth-child(3) { animation-delay: 0.4s; }
-@media (max-width: 768px) {
-  .tabs { padding: 10px 12px 0; }
-  .tab { padding: 7px 14px; font-size: 0.82em; }
-  .cards-stage { padding: 6px 12px 10px; }
-  .cards-panel { padding: 0 12px; }
-  .card { padding: 10px 12px; }
-  .drawer { max-width: 400px; }
-}
 @media (max-width: 600px) {
   .tabs { padding: 8px 10px 0; }
   .tab { padding: 6px 12px; font-size: 0.8em; }
@@ -431,7 +423,6 @@ body {
   var drawerContent = document.getElementById('drawerContent');
   var currentTab = 0;
   var categories = [];
-  var allBriefings = [];
   var seenMap = {};
   var userId = '';
   var scrollAnimId = null;
@@ -471,8 +462,7 @@ body {
     return !seenMap[id];
   }
 
-  var _d = new Date();
-  var todayStr = _d.getFullYear() + '-' + String(_d.getMonth() + 1).padStart(2, '0') + '-' + String(_d.getDate()).padStart(2, '0');
+  var todayStr = new Date().toISOString().slice(0, 10);
   var filter = JSON.stringify({ 'briefing_date.$dateOn': todayStr });
   var url = BRIEFING_API + '&filter=' + encodeURIComponent(filter);
 
@@ -485,8 +475,6 @@ body {
       var payload = jwtDecode(token);
       userId = String(payload.userId || payload.id || '');
       loadSeen();
-
-      allBriefings = briefings;
 
       if (briefings.length === 0) {
         renderEmpty();
@@ -568,6 +556,9 @@ body {
 
   function renderCards(groups) {
     var stage = document.getElementById('cardsStage');
+    stage.classList.remove('overlay-mode');
+    var overlay = stage.querySelector('.overlay-done');
+    if (overlay) overlay.remove();
     var html = '';
     var first = true;
     for (var type in groups) {
@@ -577,7 +568,7 @@ body {
       var seenHtml = '';
       groups[type].forEach(function(b) {
         var isSeen = !isUnseen(b.id);
-        var cardHtml = '<div class="card' + (isSeen ? ' seen' : '') + '" data-id="' + b.id + '" data-source="' + esc(b.source_workflow_id || '') + '" data-source-collection="' + esc(b.source_collection || '') + '" data-serial="' + esc(b.FormSerialNo || '') + '" data-type="' + esc(b.briefing_type || '') + '">';
+        var cardHtml = '<div class="card' + (isSeen ? ' seen' : '') + '" data-id="' + b.id + '" data-source="' + esc(b.source_workflow_id || '') + '" data-source-collection="' + esc(b.source_collection || '') + '" data-serial="' + esc(b.FormSerialNo || '') + '" data-type="' + esc(b.briefing_type || '') + '" data-title="' + esc(b.title || '') + '">';
         cardHtml += '<div class="card-title">' + esc(b.title || '') + '</div>';
         cardHtml += '<div class="card-meta">' + formatDate(b.briefing_date) + '</div>';
         cardHtml += '<div class="card-summary">' + esc(b.summary || '') + '</div>';
@@ -592,7 +583,7 @@ body {
         html += '<div class="unseen-area">' + unseenHtml + '</div>';
       }
       if (unseenHtml && seenHtml) {
-        html += '<div class="seen-divider"><span>-- 已读 --</span></div>';
+        html += '<div class="seen-divider"><span>—— 已读 ——</span></div>';
       }
       html += seenHtml;
       html += '</div></div>';
@@ -734,10 +725,11 @@ body {
         break;
       }
     }
-    checkAllDone();
   }
 
-  function fetchRecordAndShow(collection, id, serialNo) {
+
+
+  function fetchRecordAndShow(collection, id, serialNo, title) {
     var recordUrl = '/api/' + collection + ':get?filterByTk=' + id;
     Promise.all([
       fetch(recordUrl, { headers: { 'Authorization': 'Bearer ' + token, 'Accept': 'application/json' } }).then(function(r) { return r.json(); }),
@@ -745,12 +737,11 @@ body {
     ]).then(function(results) {
       var res = results[0];
       if (res && res.data) {
-        renderDrawer(res.data, collection);
+        renderDrawer(res.data, collection, title);
       } else if (res && res.errors) {
         console.error('API error:', res.errors);
         showDrawerSimple('错误', res.errors[0].message || 'API 返回错误');
       } else {
-        console.error('fetchRecordAndShow: no data', { collection: collection, id: id, serialNo: serialNo, res: res });
         showDrawerSimple('未找到', '未找到该记录');
       }
     }).catch(function(e) {
@@ -762,66 +753,45 @@ body {
   function openDrawer(card) {
     var sourceId = card.getAttribute('data-source');
     var coll = card.getAttribute('data-source-collection');
-    var briefType = card.getAttribute('data-type');
     var serialNo = card.getAttribute('data-serial');
+    var recordTitle = card.getAttribute('data-title');
 
     if (sourceId && coll) {
-      fetchRecordAndShow(coll, sourceId, serialNo);
+      fetchRecordAndShow(coll, sourceId, serialNo, recordTitle);
     } else if (serialNo && coll) {
-      fetchRecordAndShow(coll, serialNo, serialNo);
+      fetchRecordAndShow(coll, serialNo, serialNo, recordTitle);
     } else {
       showDrawerSimple('提示', '暂无关联记录');
     }
+    checkAllDone();
   }
 
-  var LABEL_FALLBACK = {
-    projectID: '项目名称', log_no: '日志编号', log_date: '日期', weather: '天气',
-    work_content: '施工内容', equipment_usage: '设备使用', material_usage: '材料使用',
-    personnel_count: '人员数量', safety_issues: '安全情况', quality_issues: '质量问题',
-    others: '其他', tomorrow_plan: '明日计划', status: '状态',
-    review_opinion: '复核意见', approve_opinion: '审核意见',
-    reviewed_at: '复核时间', approved_at: '审核时间',
-    addition_no: '报备编号', addition_date: '日期', addition_type: '报备类型', trigger_reason: '触发原因',
-    company_name: '单位名称', work_hours: '工时', estimated_cost: '预估费用',
-    attachments: '附件', logtoname: '记录人',
-    approver_opinion: '审批意见',
-    fund_plan: '资金计划', material_plan: '材料计划', migrant_plan: '人员计划',
-    actual_cost: '实际费用', actual_result: '实际结果',
-    personnel_status: '人员到位', material_status: '材料到位', fund_status: '资金到位',
-    migrant_status: '人员到位'
-  };
+  var SYSTEM_FALLBACK = { id:1, createdAt:1, createdBy:1, updatedAt:1, updatedBy:1, sort:1, cron:1, exclude:1, __index:1 };
+  var fieldMetaCache = {};
 
-  var fieldLabelCache = {};
+  function getFieldLabel(name, collection) {
+    var map = fieldMetaCache[collection];
+    var entry = map && map[name];
+    return (entry && entry.label) || name;
+  }
 
   function loadFieldNames(collection) {
-    var cached = fieldLabelCache[collection];
-    if (cached && Object.keys(cached).length > 0) return Promise.resolve(cached);
-    if (cached === 'loading') return Promise.resolve({});
-    fieldLabelCache[collection] = 'loading';
-    return fetch('/api/collections/' + collection + '/fields:list', {
-      headers: { 'Authorization': 'Bearer ' + token, 'Accept': 'application/json' }
+    if (fieldMetaCache[collection]) return Promise.resolve(fieldMetaCache[collection]);
+    return fetch("/api/collections/" + collection + "/fields?pageSize=200", {
+      headers: { "Authorization": "Bearer " + token, "Accept": "application/json" }
     }).then(function(r) { return r.json(); }).then(function(res) {
       var map = {};
       if (res && res.data) {
         res.data.forEach(function(f) {
-          var title = f.title || (f.uiSchema && f.uiSchema.title) || f.name;
-          map[f.name] = title;
+          var title = (f.uiSchema && f.uiSchema.title) || f.title || f.name;
+          map[f.name] = { label: title, system: !!f.system };
         });
       }
-      fieldLabelCache[collection] = map;
+      fieldMetaCache[collection] = map;
       return map;
-    }).catch(function(e) { console.error('loadFieldNames error:', e); fieldLabelCache[collection] = {}; return {}; });
+    }).catch(function(e) { console.error("loadFieldNames error:", e); fieldMetaCache[collection] = {}; return {}; });
   }
 
-  function getFieldLabel(name, collection) {
-    var map = fieldLabelCache[collection];
-    return (map && map[name]) || LABEL_FALLBACK[name] || name;
-  }
-
-  var DISPLAY_ORDER = {
-    construction_daily_log: ['projectID','log_no','log_date','weather','work_content','equipment_usage','material_usage','personnel_count','safety_issues','quality_issues','tomorrow_plan','logtoname','review_opinion','approve_opinion'],
-    temporary_additions: ['projectID','addition_no','addition_date','company_name','work_content','personnel_count','work_hours','estimated_cost','attachments']
-  };
 
   function formatField(val, name) {
     if (val === null || val === undefined) return '';
@@ -845,13 +815,13 @@ body {
     return esc(String(val));
   }
 
-  function renderDrawer(record, collName) {
-    var SKIP_FIELDS = ['id','createdAt','createdBy','createdById','updatedAt','updatedBy','updatedById','deletedAt','deletedBy','deletedById','cron','exclude','sort','__index','link-projectID','FormSerialNo','briefing_date','source_workflow_id','briefing_type','title','summary','source_collection'];
-    var order = (DISPLAY_ORDER[collName] || Object.keys(record)).filter(function(k) {
-      return SKIP_FIELDS.indexOf(k) === -1 && k.indexOf('_id') === -1;
+  function renderDrawer(record, collName, drawerTitle) {
+    var order = Object.keys(record).filter(function(k) {
+      var meta = (fieldMetaCache[collName] || {})[k];
+      return (!meta || !meta.system) && !/Id$/i.test(k) && !SYSTEM_FALLBACK[k];
     });
 
-    var html = '<div class="drawer-header"><div class="drawer-title">详情</div><button class="drawer-close" onclick="closeDrawer()">&times;</button></div>';
+    var html = '<div class="drawer-header"><div class="drawer-title">' + esc(drawerTitle || '详情') + '</div><button class="drawer-close" onclick="closeDrawer()">&times;</button></div>';
     html += '<div class="drawer-body">';
 
     order.forEach(function(name) {
