@@ -789,7 +789,7 @@ body {
       }
       fieldMetaCache[collection] = map;
       return map;
-    }).catch(function(e) { console.error("loadFieldNames error:", e); fieldMetaCache[collection] = {}; return {}; });
+    }).catch(function(e) { console.error("loadFieldNames error:", e); return {}; });
   }
 
 
