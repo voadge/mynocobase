@@ -118,7 +118,7 @@ body {
   position: relative;
 }
 .cards-scroll {
-  max-height: 480px;
+  max-height: calc(100vh - 140px);
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
 }
@@ -139,20 +139,38 @@ body {
   transform: translateY(-1px);
 }
 .card-title {
-  font-size: 1em;
+  font-size: 0.95em;
   font-weight: 600;
   color: var(--text);
-  margin-bottom: 2px;
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .card-meta {
-  font-size: 0.75em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.72em;
   color: var(--text-secondary);
   margin-bottom: 6px;
 }
+.card-meta .type-tag {
+  background: var(--accent-light);
+  color: var(--accent);
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 0.9em;
+  white-space: nowrap;
+}
 .card-summary {
-  font-size: 0.85em;
+  font-size: 0.82em;
   color: var(--summary-color);
   line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 .card.seen {
   opacity: 0.45;
@@ -568,10 +586,13 @@ body {
       var seenHtml = '';
       groups[type].forEach(function(b) {
         var isSeen = !isUnseen(b.id);
-        var cardHtml = '<div class="card' + (isSeen ? ' seen' : '') + '" data-id="' + b.id + '" data-source="' + esc(b.source_workflow_id || '') + '" data-source-collection="' + esc(b.source_collection || '') + '" data-serial="' + esc(b.FormSerialNo || '') + '" data-type="' + esc(b.briefing_type || '') + '" data-title="' + esc(b.title || '') + '">';
-        cardHtml += '<div class="card-title">' + esc(b.title || '') + '</div>';
-        cardHtml += '<div class="card-meta">' + formatDate(b.briefing_date) + '</div>';
-        cardHtml += '<div class="card-summary">' + esc(b.summary || '') + '</div>';
+        var cardHtml = '<div class="card' + (isSeen ? ' seen' : '') + '" data-id="' + b.id + '" data-type="' + esc(b.briefing_type || '') + '" data-title="' + esc(b.title || '') + '">';
+        cardHtml += '<div class="card-title" title="' + esc(b.title || '') + '">' + esc(b.title || '') + '</div>';
+        cardHtml += '<div class="card-meta">';
+        cardHtml += '<span class="type-tag">' + esc(b.briefing_type || '其他') + '</span>';
+        cardHtml += '<span>' + formatRelativeTime(b.briefing_date || b.createdAt) + '</span>';
+        cardHtml += '</div>';
+        cardHtml += '<div class="card-summary">' + esc(b.summary || '暂无摘要') + '</div>';
         cardHtml += '</div>';
         if (isSeen) {
           seenHtml += cardHtml;
@@ -604,6 +625,24 @@ body {
   function formatDate(d) {
     if (!d) return '';
     return String(d).slice(0, 10);
+  }
+
+  function formatRelativeTime(dateStr) {
+    if (!dateStr) return '';
+    var now = new Date();
+    var d = new Date(dateStr);
+    if (isNaN(d.getTime())) return String(dateStr).slice(0, 10);
+    var diff = now - d;
+    var mins = Math.floor(diff / 60000);
+    if (mins < 1) return '刚刚';
+    if (mins < 60) return mins + '分钟前';
+    var hours = Math.floor(mins / 60);
+    if (hours < 24) return hours + '小时前';
+    var days = Math.floor(hours / 24);
+    if (days < 1) return '今天';
+    if (days < 2) return '昨天';
+    if (days < 7) return days + '天前';
+    return String(dateStr).slice(0, 10);
   }
 
   function switchTab(idx) {
@@ -751,18 +790,8 @@ body {
   }
 
   function openDrawer(card) {
-    var sourceId = card.getAttribute('data-source');
-    var coll = card.getAttribute('data-source-collection');
-    var serialNo = card.getAttribute('data-serial');
     var recordTitle = card.getAttribute('data-title');
-
-    if (sourceId && coll) {
-      fetchRecordAndShow(coll, sourceId, serialNo, recordTitle);
-    } else if (serialNo && coll) {
-      fetchRecordAndShow(coll, serialNo, serialNo, recordTitle);
-    } else {
-      showDrawerSimple('提示', '暂无关联记录');
-    }
+    showDrawerSimple(recordTitle || '简报详情', '暂无关联记录');
     checkAllDone();
   }
 
