@@ -586,7 +586,7 @@ body {
       var seenHtml = '';
       groups[type].forEach(function(b) {
         var isSeen = !isUnseen(b.id);
-        var cardHtml = '<div class="card' + (isSeen ? ' seen' : '') + '" data-id="' + b.id + '" data-type="' + esc(b.briefing_type || '') + '" data-title="' + esc(b.title || '') + '">';
+        var cardHtml = '<div class="card' + (isSeen ? ' seen' : '') + '" data-id="' + b.id + '" data-source="' + esc(b.source_workflow_id || '') + '" data-source-collection="' + esc(b.source_collection || '') + '" data-serial="' + esc(b.FormSerialNo || '') + '" data-type="' + esc(b.briefing_type || '') + '" data-title="' + esc(b.title || '') + '">';
         cardHtml += '<div class="card-title" title="' + esc(b.title || '') + '">' + esc(b.title || '') + '</div>';
         cardHtml += '<div class="card-meta">';
         cardHtml += '<span class="type-tag">' + esc(b.briefing_type || '其他') + '</span>';
@@ -790,8 +790,18 @@ body {
   }
 
   function openDrawer(card) {
+    var sourceId = card.getAttribute('data-source');
+    var coll = card.getAttribute('data-source-collection');
+    var serialNo = card.getAttribute('data-serial');
     var recordTitle = card.getAttribute('data-title');
-    showDrawerSimple(recordTitle || '简报详情', '暂无关联记录');
+
+    if (sourceId && coll) {
+      fetchRecordAndShow(coll, sourceId, serialNo, recordTitle);
+    } else if (serialNo && coll) {
+      fetchRecordAndShow(coll, serialNo, serialNo, recordTitle);
+    } else {
+      showDrawerSimple('提示', '暂无关联记录');
+    }
     checkAllDone();
   }
 

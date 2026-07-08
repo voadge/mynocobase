@@ -67,13 +67,13 @@ module.exports = class DashboardHomePlugin extends server_1.Plugin {
                         let proj = null;
                         const fk = values['link-projectID'];
                         if (fk) {
-                            proj = await db.getRepository('projects').findByPk(fk);
+                            proj = await db.getRepository('projects').findOne({ filterByTk: fk });
                         }
                         else {
                             const pid = values.project_id;
                             const pno = values.project_name_NO;
                             if (pid)
-                                proj = await db.getRepository('projects').findByPk(pid);
+                                proj = await db.getRepository('projects').findOne({ filterByTk: pid });
                             else if (pno)
                                 proj = await db.getRepository('projects').findOne({ filter: { project_code: pno } });
                         }
