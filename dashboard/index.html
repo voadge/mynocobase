@@ -500,8 +500,7 @@ window.addEventListener("unhandledrejection", function(e) {
                 var _ROW_H = 30;
                 var _slideTimer = null;
                 function _renderSlide() {
-                    var slice = _allItems.slice(_curIdx, _curIdx + _ROWS);
-                    if (slice.length === 0) { _curIdx = 0; slice = _allItems.slice(0, _ROWS); }
+                    var slice = _allItems.slice(0, _ROWS);
                     track.innerHTML = '';
                     slice.forEach(function(item) {
                         var div = document.createElement('div');
@@ -509,26 +508,32 @@ window.addEventListener("unhandledrejection", function(e) {
                         var ts = item.publishedAt || item.createdAt || '';
                         var date = ts ? new Date(ts).toLocaleDateString('zh-CN', { month:'2-digit', day:'2-digit' }) : '';
                         var inner = document.createElement('span');
+                        inner.className = 'announce-text';
                         inner.textContent = item.title || item.name || '(无标题)';
                         div.innerHTML = '<span class="a-time">' + date + '</span>';
                         div.appendChild(inner);
                         track.appendChild(div);
-                        requestAnimationFrame(function() {
-                            if (inner.scrollWidth > div.clientWidth) {
-                                var excess = inner.scrollWidth - div.clientWidth;
+                    });
+                    track.style.transform = 'translateY(0)';
+                    track.style.transition = 'none';
+                    requestAnimationFrame(function() {
+                        document.querySelectorAll('.announce-text').forEach(function(el) {
+                            var parent = el.parentElement;
+                            if (el.scrollWidth > parent.clientWidth) {
+                                var excess = el.scrollWidth - parent.clientWidth;
                                 var duration = Math.max(4, Math.min(15, excess / 40));
-                                inner.animate([
+                                el.animate([
                                     { transform: 'translateX(0)' },
                                     { transform: 'translateX(-' + excess + 'px)' }
                                 ], { duration: duration * 1000, iterations: Infinity });
                             }
                         });
                     });
-                    track.style.transform = 'translateY(0)';
-                    track.style.transition = 'none';
                 }
                 function _slideNext() {
-                    _curIdx = (_curIdx + 1) % _allItems.length;
+                    if (_allItems.length <= 1) return;
+                    var first = _allItems.shift();
+                    _allItems.push(first);
                     track.style.transition = 'transform 0.4s ease';
                     track.style.transform = 'translateY(-' + _ROW_H + 'px)';
                     track.addEventListener('transitionend', function _handler() {

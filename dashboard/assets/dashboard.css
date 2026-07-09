@@ -264,6 +264,12 @@ body {
     line-height: 1.4;
 }
 
+
+
+.announce-text {
+    display: inline-block;
+    white-space: nowrap;
+}
 .announce-item .a-time {
     color: #5a6a7a;
     font-size: 0.85em;
