@@ -234,7 +234,7 @@ body {
     letter-spacing: 1px;
 }
 
-".announce-container {
+.announce-container {
     height: auto;
     max-height: 210px;
     overflow: hidden;
@@ -245,14 +245,15 @@ body {
     display: flex;
     flex-direction: column;
     gap: 4px;
+    width: 100%;
 }
 
-".announce-track.scrolling {
+.announce-track.scrolling {
     transition: transform 0.4s ease;
 }
 
 
-".announce-item {
+.announce-item {
     font-size: 0.7em;
     color: #c8d0d8;
     padding: 5px 8px;
@@ -262,6 +263,8 @@ body {
     white-space: nowrap;
     overflow: hidden;
     line-height: 1.4;
+    width: 100%;
+    box-sizing: border-box;
 }
 
 
