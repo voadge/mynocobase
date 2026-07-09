@@ -482,7 +482,7 @@ window.addEventListener("unhandledrejection", function(e) {
                 const _opt = { credentials: 'include' };
                 if (_tk) _opt.headers = { 'Authorization': 'Bearer ' + _tk };
                 const r = await fetch(
-                    '/api/company_announcements:list?filter[status]=已发布&sort=-publishedAt,-createdAt&pageSize=8',
+                    '/api/company_announcements:list?filter[status]=已发布&sort=-publishDate,-createdAt&pageSize=8',
                     _opt
                 );
                 if (!r.ok) throw Error();
