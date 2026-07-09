@@ -40,6 +40,7 @@ node_modules/
 .vscode/
 
 # Temp / backup
+tmp/
 *.bak
 *.bak.*
 *.save
