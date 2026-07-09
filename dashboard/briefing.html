@@ -481,7 +481,10 @@ body {
   }
 
   var todayStr = new Date().toISOString().slice(0, 10);
-  var filter = JSON.stringify({ 'briefing_date.$dateOn': todayStr });
+  var d = new Date();
+  d.setDate(d.getDate() - 2);
+  var threeDaysAgoStr = d.toISOString().slice(0, 10);
+  var filter = JSON.stringify({ 'briefing_date.$dateBetween': [threeDaysAgoStr, todayStr] });
   var url = BRIEFING_API + '&filter=' + encodeURIComponent(filter);
 
   app.innerHTML = '<div class="loading"><span class="loading-dot"></span><span class="loading-dot"></span><span class="loading-dot"></span></div>';
