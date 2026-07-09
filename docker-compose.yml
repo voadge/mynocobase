@@ -86,8 +86,8 @@ services:
     entrypoint: ["/bin/sh", "/opt/noco-base/entrypoint-wrapper.sh"]
     volumes:
       - ./storage:/app/nocobase/storage
-      - ./dashboard:/app/nocobase/storage/dashboard:ro
       - ./nocobase-plugin-dashboard-home:/app/nocobase/node_modules/@nocobase/plugin-dashboard-home:ro
+      - ./dashboard:/app/nocobase/storage/dashboard:ro
       - ./nocobase-plugin-print-template:/app/nocobase/node_modules/@nocobase/plugin-print-template:ro
       - ./entrypoint-wrapper.sh:/opt/noco-base/entrypoint-wrapper.sh:ro
     networks:
