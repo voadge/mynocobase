@@ -478,9 +478,12 @@ window.addEventListener("unhandledrejection", function(e) {
         async function fetchAnnouncements() {
             const track = document.getElementById('announceTrack');
             try {
+                const _tk = getToken();
+                const _opt = { credentials: 'include' };
+                if (_tk) _opt.headers = { 'Authorization': 'Bearer ' + _tk };
                 const r = await fetch(
-                    '/api/company_announcements:list?filter[status]=published&sort=-publishedAt,-createdAt&pageSize=8',
-                    { credentials: 'include' }
+                    '/api/company_announcements:list?filter[status]=已发布&sort=-publishedAt,-createdAt&pageSize=8',
+                    _opt
                 );
                 if (!r.ok) throw Error();
                 const data = await r.json();
