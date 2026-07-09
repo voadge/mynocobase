@@ -852,6 +852,15 @@ body {
     if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
       return esc(s.slice(0, 10));
     }
+    if (/^[A-Z][a-z]{2} [A-Z][a-z]{2} \d{2} \d{4}/.test(s)) {
+      var d = new Date(s);
+      if (!isNaN(d.getTime())) {
+        var y = d.getFullYear();
+        var m = String(d.getMonth() + 1).padStart(2, '0');
+        var day = String(d.getDate()).padStart(2, '0');
+        return esc(y + '-' + m + '-' + day);
+      }
+    }
     if (name === 'estimated_cost') {
       return esc(Number(val).toLocaleString('zh-CN'));
     }
