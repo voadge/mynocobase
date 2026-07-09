@@ -234,8 +234,9 @@ body {
     letter-spacing: 1px;
 }
 
-.announce-container {
-    height: 188px;
+".announce-container {
+    height: auto;
+    max-height: 210px;
     overflow: hidden;
     position: relative;
 }
@@ -246,20 +247,12 @@ body {
     gap: 4px;
 }
 
-.announce-track.scrolling {
-    animation: scrollUp 40s linear infinite;
+".announce-track.scrolling {
+    transition: transform 0.4s ease;
 }
 
-.announce-track.paused {
-    animation-play-state: paused;
-}
 
-@keyframes scrollUp {
-    0% { transform: translateY(0); }
-    100% { transform: translateY(-50%); }
-}
-
-.announce-item {
+".announce-item {
     font-size: 0.7em;
     color: #c8d0d8;
     padding: 5px 8px;
@@ -268,7 +261,6 @@ body {
     border-left: 2px solid rgba(255, 217, 61, 0.4);
     white-space: nowrap;
     overflow: hidden;
-    text-overflow: ellipsis;
     line-height: 1.4;
 }
 

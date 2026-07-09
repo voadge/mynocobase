@@ -494,17 +494,51 @@ window.addEventListener("unhandledrejection", function(e) {
                     track.classList.remove('scrolling');
                     return;
                 }
-                const render = (list) => list.forEach(item => {
-                    const div = document.createElement('div');
-                    div.className = 'announce-item';
-                    const ts = item.publishedAt || item.createdAt || '';
-                    const date = ts ? new Date(ts).toLocaleDateString('zh-CN', { month:'2-digit', day:'2-digit' }) : '';
-                    div.innerHTML = `<span class="a-time">${date}</span>${item.title || item.name || '(无标题)'}`;
-                    track.appendChild(div);
-                });
-                render(items);
-                render(items); // 副本，实现无缝循环
-                track.classList.add('scrolling');
+                var _allItems = items;
+                var _curIdx = 0;
+                var _ROWS = 7;
+                var _ROW_H = 30;
+                var _slideTimer = null;
+                function _renderSlide() {
+                    var slice = _allItems.slice(_curIdx, _curIdx + _ROWS);
+                    if (slice.length === 0) { _curIdx = 0; slice = _allItems.slice(0, _ROWS); }
+                    track.innerHTML = '';
+                    slice.forEach(function(item) {
+                        var div = document.createElement('div');
+                        div.className = 'announce-item';
+                        var ts = item.publishedAt || item.createdAt || '';
+                        var date = ts ? new Date(ts).toLocaleDateString('zh-CN', { month:'2-digit', day:'2-digit' }) : '';
+                        var inner = document.createElement('span');
+                        inner.textContent = item.title || item.name || '(无标题)';
+                        div.innerHTML = '<span class="a-time">' + date + '</span>';
+                        div.appendChild(inner);
+                        track.appendChild(div);
+                        requestAnimationFrame(function() {
+                            if (inner.scrollWidth > div.clientWidth) {
+                                var excess = inner.scrollWidth - div.clientWidth;
+                                var duration = Math.max(4, Math.min(15, excess / 40));
+                                inner.animate([
+                                    { transform: 'translateX(0)' },
+                                    { transform: 'translateX(-' + excess + 'px)' }
+                                ], { duration: duration * 1000, iterations: Infinity });
+                            }
+                        });
+                    });
+                    track.style.transform = 'translateY(0)';
+                    track.style.transition = 'none';
+                }
+                function _slideNext() {
+                    _curIdx = (_curIdx + 1) % _allItems.length;
+                    track.style.transition = 'transform 0.4s ease';
+                    track.style.transform = 'translateY(-' + _ROW_H + 'px)';
+                    track.addEventListener('transitionend', function _handler() {
+                        track.removeEventListener('transitionend', _handler);
+                        _renderSlide();
+                    });
+                }
+                _renderSlide();
+                clearInterval(_slideTimer);
+                _slideTimer = setInterval(_slideNext, 10000);
             } catch {
                 track.innerHTML = '<div class="announce-item" style="text-align:center;color:#5a6a7a;border:none;background:none;">加载失败</div>';
                 track.classList.remove('scrolling');
