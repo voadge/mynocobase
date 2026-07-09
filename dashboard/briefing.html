@@ -851,6 +851,9 @@ body {
     if (name === 'log_date' || name === 'addition_date') {
       return esc(String(val).slice(0, 10));
     }
+    if (name === 'briefing_date' || name === 'createdAt' || name === 'updatedAt') {
+      return esc(String(val).slice(0, 10));
+    }
     if (name === 'estimated_cost') {
       return esc(Number(val).toLocaleString('zh-CN'));
     }
