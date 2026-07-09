@@ -411,7 +411,7 @@ body {
   var TAB_DISPLAY_TIME = 15000;
   var SEEN_DELAY = 30000;
   var MAX_AGE_DAYS = 7;
-  var BRIEFING_API = '/api/briefings:list?pageSize=50&sort=createdAt';
+  var BRIEFING_API = '/api/briefings:list?pageSize=50&sort=-createdAt';
   var token = '';
   for (var ki = 0; ki < TOKEN_KEYS.length; ki++) {
     try { var v = localStorage.getItem(TOKEN_KEYS[ki]); if (v && v.length > 20) { token = v; break; } } catch(e) {}
