@@ -848,16 +848,14 @@ body {
     if (typeof val === 'object') {
       return esc(val.title || val.name || val.nickname || val.username || val.project_name || val.label || String(val.id));
     }
-    if (name === 'log_date' || name === 'addition_date') {
-      return esc(String(val).slice(0, 10));
-    }
-    if (name === 'briefing_date' || name === 'createdAt' || name === 'updatedAt') {
-      return esc(String(val).slice(0, 10));
+    var s = String(val);
+    if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
+      return esc(s.slice(0, 10));
     }
     if (name === 'estimated_cost') {
       return esc(Number(val).toLocaleString('zh-CN'));
     }
-    return esc(String(val));
+    return esc(s);
   }
 
   function renderDrawer(record, collName, drawerTitle) {
