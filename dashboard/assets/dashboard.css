@@ -570,8 +570,6 @@ body {
     .todo-inner .todo-count { font-size: 1.1em; white-space: nowrap; }
     .todo-inner .todo-icon { width: 28px; height: 28px; font-size: 0.9em; }
 
-    /* 公告：左列跨行 2-4，与右侧三个按钮等高 */
-    .announce-container { height: auto; }
     .side-panel .panel-card:nth-child(3) { grid-column: 1; grid-row: 2 / 5; }
 
     /* 右侧三个独立按钮卡片竖向排列 */
