@@ -499,6 +499,10 @@ window.addEventListener("unhandledrejection", function(e) {
                 var _ROWS = 7;
                 var _ROW_H = 30;
                 var _slideTimer = null;
+                function _calcRowH() {
+                    var el = track.querySelector('.announce-item');
+                    if (el) _ROW_H = el.offsetHeight + 4;
+                }
                 function _renderSlide() {
                     var slice = _allItems.slice(0, _ROWS);
                     track.innerHTML = '';
@@ -514,6 +518,7 @@ window.addEventListener("unhandledrejection", function(e) {
                         div.appendChild(inner);
                         track.appendChild(div);
                     });
+                    _calcRowH();
                     track.style.transform = 'translateY(0)';
                     track.style.transition = 'none';
                     requestAnimationFrame(function() {
