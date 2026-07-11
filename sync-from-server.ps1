@@ -23,7 +23,6 @@ Write-Host ""
 $syncItems = @(
     "docker-compose.yml"
     "nginx.conf"
-    "nocobase.conf"
     "10-dashboard.sh"
     "entrypoint-wrapper.sh"
     "dashboard/index.html"
