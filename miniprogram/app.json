@@ -1,0 +1,20 @@
+{
+  "pages": [
+    "pages/index/index",
+    "pages/bind/bind"
+  ],
+  "window": {
+    "navigationBarTitleText": "人员动态",
+    "navigationBarBackgroundColor": "#1677ff",
+    "navigationBarTextStyle": "white"
+  },
+  "requiredPrivateInfos": [
+    "getLocation"
+  ],
+  "permission": {
+    "scope.userLocation": {
+      "desc": "获取位置信息用于考勤打卡和轨迹记录"
+    }
+  },
+  "sitemapLocation": "sitemap.json"
+}

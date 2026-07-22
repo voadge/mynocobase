@@ -9,12 +9,12 @@
 <script>
 // 过滤外部服务的非关键错误
 window.addEventListener("error", function(e) {
-  if (e.target && e.target.src && e.target.src.indexOf("road.xiangsu.work") > -1) {
+  if (e.target && e.target.src && (e.target.src.indexOf("road.xiangsu.work") > -1 || e.target.src.indexOf("/road/") > -1)) {
     e.preventDefault();
   }
 });
 window.addEventListener("unhandledrejection", function(e) {
-  if (e.reason && e.reason.message && e.reason.message.indexOf("road.xiangsu.work") > -1) {
+  if (e.reason && e.reason.message && (e.reason.message.indexOf("road.xiangsu.work") > -1 || e.reason.message.indexOf("/road/") > -1)) {
     e.preventDefault();
   }
 });
@@ -170,15 +170,15 @@ window.addEventListener("unhandledrejection", function(e) {
         //  数据大屏接入源 — 增删改直接编辑此数组即可
         // ============================================================
         const EXTERN_URLS = [
-            { label: '智慧云屏', url: 'https://road.xiangsu.work/bvr/zydlxc/#/homePage' },
-            { label: '巡查管理', url: 'https://road.xiangsu.work/bvr/zydlxc/#/' },
+            { label: '智慧云屏', url: '/road/bvr/zydlxc/?isIframe=true#/homePage' },
+            { label: '巡查管理', url: '/road/bvr/zydlxc/?isIframe=true#/' },
             { label: '人员动态', url: '/peopledynamic' },
             { label: '视频监控', url: '/dashboard/video-monitor.html?v=3' }
         ];
         const NOCOBASE_HOME = 'https://voadge.top:668/admin/ffw9h2yb5cp';  // NocoBase 操作面板首页（管理员在后台搭建）
         let sourceIndex = 0;
 
-        const RP = { base: 'https://road.xiangsu.work/bvr/zydlxc', user: 'zydlxc', pass: '123456' };
+        const RP = { base: '/road/bvr/zydlxc', user: 'zydlxc', pass: '123456' };
         let rpCancel = false, rpTimer = null;
 
         function doRoadPatrol(frame) {
@@ -217,9 +217,7 @@ window.addEventListener("unhandledrejection", function(e) {
             rpCancel = true; clearTimeout(rpTimer);
             var _frame=document.getElementById('externFrame');if(!_frame)return;
             var src = EXTERN_URLS[sourceIndex];
-            _frame.setAttribute('sandbox', sourceIndex === 1
-                ? 'allow-scripts allow-forms allow-same-origin allow-popups'
-                : 'allow-scripts allow-forms allow-same-origin');
+            _frame.setAttribute('sandbox', 'allow-scripts allow-forms allow-same-origin allow-popups');
             if (sourceIndex === 0 || sourceIndex === 1) { doRoadPatrol(_frame); }
             else if (src.url) { _frame.src = src.url; }
             else {

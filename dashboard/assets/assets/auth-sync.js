@@ -91,4 +91,20 @@
       } catch(e) {}
     }
   }, 5000);
+
+  // ---- 读取 URL ?token= 参数（微信小程序 web-view 注入） ----
+  try {
+    var urlParams = new URLSearchParams(window.location.search);
+    var urlToken = urlParams.get('token');
+    if (urlToken && urlToken.length > 20) {
+      // 写入 localStorage
+      try { localStorage.setItem('NOCOBASE_TOKEN', urlToken); } catch(e) {}
+      // 写入 cookie
+      document.cookie = TOKEN_COOKIE + '=' + urlToken + ';' + COOKIE_OPTS;
+      // 清理 URL 中的 token 参数（避免泄露到后续请求）
+      urlParams.delete('token');
+      var cleanUrl = window.location.pathname + (urlParams.toString() ? '?' + urlParams.toString() : '') + window.location.hash;
+      window.history.replaceState({}, '', cleanUrl);
+    }
+  } catch(e) {}
 })();

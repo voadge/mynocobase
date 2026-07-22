@@ -16,6 +16,7 @@ import { registerPeopleDynamicRoutes } from './middleware/people-dynamic';
 import { registerDeptAdminApi } from './middleware/dept-admin-api';
 import { registerDeptAdminPages } from './middleware/dept-admin-pages';
 import { registerDepartmentAcl } from './middleware/department-acl';
+import { registerMpLoginRoutes } from './middleware/mp-login';
 import { qwFetch, QW_WEATHER_HOST } from './utils/qw-jwt';
 
 
@@ -72,6 +73,16 @@ module.exports = class DashboardHomePlugin extends Plugin {
         { type: 'text', name: 'remark', nullable: true },
         { type: 'boolean', name: 'enabled', defaultValue: true },
         { type: 'belongsTo', name: 'createdBy', target: 'users' },
+      ],
+    });
+
+    // Register user_openid collection for WeChat Mini Program mapping
+    db.collection({
+      name: 'user_openid',
+      fields: [
+        { type: 'bigInt', name: 'id', primaryKey: true, autoIncrement: true },
+        { type: 'string', name: 'openid', unique: true },
+        { type: 'belongsTo', name: 'user', target: 'users', foreignKey: 'userId' },
       ],
     });
 
@@ -189,6 +200,7 @@ module.exports = class DashboardHomePlugin extends Plugin {
     registerDashboardRoutes(app, pluginRef);
     registerWeatherRoutes(app);
     registerPeopleDynamicRoutes(app);
+    registerMpLoginRoutes(app);
 
     // Register department ACL middleware (injects into ACL pipeline before core)
     registerDepartmentAcl(app, db);

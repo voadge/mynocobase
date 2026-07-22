@@ -118,6 +118,7 @@ services:
       - APP_KEY_FILE=/run/secrets/app_key
       - DB_PASSWORD_FILE=/run/secrets/db_password
       - REDIS_PASSWORD_FILE=/run/secrets/redis_password
+      - WX_APP_SECRET=fe208fce69276a9245a86feef68e2bf6
 
   nginx-proxy:
     image: nginx:alpine
@@ -132,6 +133,7 @@ services:
     ports:
       - "80:80"
       - "668:443"
+      - "443:443"
     networks:
       - nocobase
     depends_on:
