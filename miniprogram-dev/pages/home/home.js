@@ -47,9 +47,9 @@ Page({
   },
 
   onLoad() {
-    const token = wx.getStorageSync('token') || '';
+    const token = wx.getStorageSync('token') || app.globalData.token || '';
     if (!token) {
-      wx.redirectTo({ url: '/pages/index/index' });
+      wx.reLaunch({ url: '/pages/index/index' });
       return;
     }
     this.setData({ token, workSections, nickname: app.globalData.userInfo?.nickname || '' });

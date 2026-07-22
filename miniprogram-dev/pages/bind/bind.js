@@ -83,7 +83,7 @@ Page({
         wx.setStorageSync('token', token);
         app.globalData.token = token;
         wx.showToast({ title: '绑定成功', icon: 'success' });
-        setTimeout(() => wx.navigateBack(), 1500);
+        setTimeout(() => wx.reLaunch({ url: '/pages/home/home' }), 1500);
       },
       fail: () => {
         this.setData({ submitting: false, error: '绑定请求网络失败' });

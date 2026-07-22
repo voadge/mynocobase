@@ -1,7 +1,7 @@
 {
   "pages": [
-    "pages/home/home",
     "pages/index/index",
+    "pages/home/home",
     "pages/bind/bind",
     "pages/webview/webview",
     "pages/attend/attend"

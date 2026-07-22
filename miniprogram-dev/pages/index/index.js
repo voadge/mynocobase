@@ -13,6 +13,13 @@ Page({
     this.handleLogin();
   },
 
+  onShow() {
+    const token = wx.getStorageSync('token') || app.globalData.token || '';
+    if (token && !this.data.loading && !this.data.webviewUrl) {
+      this.goHome();
+    }
+  },
+
   handleLogin() {
     const token = wx.getStorageSync('token');
     if (token) {
