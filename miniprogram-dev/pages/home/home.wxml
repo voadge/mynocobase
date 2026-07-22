@@ -1,12 +1,15 @@
-<view class="page">
+<view class="page {{theme}}">
   <view class="attend-btn-wrap">
     <button class="attend-btn" bindtap="goAttend">📌 考勤打卡</button>
   </view>
 
   <view class="section-list">
     <view class="section-group" wx:for="{{workSections}}" wx:key="title">
-      <view class="section-title">{{item.title}}</view>
-      <view class="btn-list">
+      <view class="section-header">
+        <view class="section-accent" style="background:{{item.accent}}"></view>
+        <text class="section-title">{{item.title}}</text>
+      </view>
+      <view class="btn-grid">
         <view class="btn-item"
           wx:for="{{item.items}}" wx:key="label"
           data-url="{{item.url}}"
