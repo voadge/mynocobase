@@ -4,7 +4,6 @@
   align-items: center;
   justify-content: center;
   min-height: 100vh;
-  background: #0a0e1a;
   padding: 0 40rpx;
 }
 .loading { text-align: center; }

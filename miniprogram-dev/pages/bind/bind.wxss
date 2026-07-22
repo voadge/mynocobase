@@ -1,4 +1,4 @@
-.page { min-height: 100vh; background: #0a0e1a; }
+.page { min-height: 100vh; }
 .loading-wrap { display: flex; align-items: center; justify-content: center; height: 100vh; color: #5a6a7a; font-size: 28rpx; }
 .content { padding: 20rpx; }
 .search-bar { margin-bottom: 16rpx; }
