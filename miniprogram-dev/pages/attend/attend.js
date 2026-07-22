@@ -118,15 +118,16 @@ var page = Page({
   fetchTodayStatus() {
     var token = this.data.token;
     var today = new Date();
-    var start = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString();
-    var end = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1).toISOString();
+    var startStr = today.getFullYear() + '-' + String(today.getMonth()+1).padStart(2,'0') + '-' + String(today.getDate()).padStart(2,'0');
+    var endStr = today.getFullYear() + '-' + String(today.getMonth()+1).padStart(2,'0') + '-' + String(today.getDate()+1).padStart(2,'0');
     var url = app.globalData.baseUrl + '/api/attendance_records:list?filter[check_time][$dateBetween]=' +
-      encodeURIComponent(start) + ',' + encodeURIComponent(end) + '&sort=-check_time&pageSize=10&appends=createdBy';
+      startStr + ',' + endStr + '&sort=-check_time&pageSize=10&appends=createdBy';
     wx.request({
       url: url,
       header: { 'Authorization': 'Bearer ' + token },
       success: function(res) {
-        var recs = (res.data && res.data.data) || [];
+        if (res.statusCode !== 200 || !res.data || !res.data.data) return;
+        var recs = res.data.data || [];
         var checkIn = null, checkOut = null, leaveRec = null;
         for (var i = 0; i < recs.length; i++) {
           var t = recs[i];
