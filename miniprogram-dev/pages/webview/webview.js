@@ -13,7 +13,7 @@ Page({
       return;
     }
     const sep = url.indexOf('?') > -1 ? '&' : '?';
-    const fullUrl = 'https://voadge.top' + url + sep + 'token=' + encodeURIComponent(token);
+    const fullUrl = app.globalData.baseUrl + url + sep + 'token=' + encodeURIComponent(token);
     wx.setNavigationBarTitle({ title: options.title || decodeURIComponent(options.url || '').split('/').pop() || '加载中...' });
     this.setData({ src: fullUrl });
   },

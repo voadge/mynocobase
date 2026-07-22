@@ -68,7 +68,7 @@ function fetchGeofences(token) {
   }
   return new Promise(function(resolve) {
     wx.request({
-      url: 'https://voadge.top/api/geofences:list?filter[is_active]=true&sort=sort',
+      url: app.globalData.baseUrl + '/api/geofences:list?filter[is_active]=true&sort=sort',
       header: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
       success: function(res) {
         var data = res.data || {};
@@ -120,7 +120,7 @@ var page = Page({
     var today = new Date();
     var start = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString();
     var end = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1).toISOString();
-    var url = 'https://voadge.top/api/attendance_records:list?filter[check_time][$dateBetween]=' +
+    var url = app.globalData.baseUrl + '/api/attendance_records:list?filter[check_time][$dateBetween]=' +
       encodeURIComponent(start) + ',' + encodeURIComponent(end) + '&sort=-check_time&pageSize=10&appends=createdBy';
     wx.request({
       url: url,
@@ -273,7 +273,7 @@ var page = Page({
       body.verify_status = methods.join('+');
     }
     wx.request({
-      url: 'https://voadge.top/api/attendance_records:create',
+      url: app.globalData.baseUrl + '/api/attendance_records:create',
       method: 'POST',
       header: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + this.data.token },
       data: body,
