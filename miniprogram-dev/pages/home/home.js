@@ -22,9 +22,7 @@ var workSections = [
     { label: '库存盘点', url: '/admin/5oemdodauf3' }, { label: '库存编辑', url: '/admin/d2rkuf3zrqw' },
     { label: '供应商结算', url: '/admin/d6425h7qboj' }, { label: '物资库', url: '/admin/5a3kc0fhxej' }
   ]},
-  { title: 'D 常用流程', accent: '#854F0B', items: [
-    { label: '首页', url: '/admin/ffw9h2yb5cp' }
-  ]},
+  { title: 'D 常用流程', accent: '#854F0B', items: []},
   { title: 'E 财务行政', accent: '#b86e20', items: [
     { label: '财务收支', url: '/admin/o4idskohl9s' }, { label: '印章使用', url: '/admin/39dhaxha5bk' },
     { label: '考勤打卡', url: '/admin/euq1r808ipn' }, { label: '考勤归档', url: '/admin/p12akdrns5t' },
@@ -43,23 +41,32 @@ Page({
   data: {
     workSections: [],
     token: '',
-    theme: 'light'
+    theme: 'light',
+    collapsed: {}
   },
 
   onLoad() {
     const token = wx.getStorageSync('token') || app.globalData.token || '';
     if (!token) { wx.reLaunch({ url: '/pages/index/index' }); return; }
     const sys = wx.getSystemInfoSync();
-    this.setData({ token, workSections, theme: sys.theme || 'light' });
+    var collapsed = {};
+    workSections.forEach(function(s, i) { if (s.items.length) collapsed[i] = true; });
+    this.setData({ token, workSections, theme: sys.theme || 'light', collapsed: collapsed });
   },
 
-  onThemeChange() {
-    const sys = wx.getSystemInfoSync();
-    this.setData({ theme: sys.theme || 'light' });
+  toggleSection(e) {
+    var idx = e.currentTarget.dataset.idx;
+    var collapsed = this.data.collapsed;
+    collapsed[idx] = !collapsed[idx];
+    this.setData({ collapsed: collapsed });
   },
 
   goAttend() {
     wx.navigateTo({ url: '/pages/attend/attend' });
+  },
+
+  goHomepage() {
+    wx.navigateTo({ url: '/pages/webview/webview?url=' + encodeURIComponent('/admin/ffw9h2yb5cp') });
   },
 
   goWebview(e) {

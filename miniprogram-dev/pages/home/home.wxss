@@ -35,20 +35,37 @@
   box-shadow: 0 4rpx 16rpx rgba(22,119,255,0.3);
 }
 
+.homepage-btn-wrap {
+  padding: 12rpx 24rpx 0;
+}
+.homepage-btn {
+  width: 100%;
+  height: 80rpx;
+  line-height: 80rpx;
+  background: var(--card-bg);
+  color: var(--text);
+  font-size: 30rpx;
+  font-weight: 500;
+  border-radius: 14rpx;
+  box-shadow: var(--shadow);
+  border: 1rpx solid var(--btn-bg);
+}
+
 .section-list {
   padding: 20rpx 24rpx 0;
 }
 .section-group {
   background: var(--card-bg);
   border-radius: 14rpx;
-  margin-bottom: 16rpx;
+  margin-bottom: 12rpx;
   box-shadow: var(--shadow);
   overflow: hidden;
 }
 .section-header {
   display: flex;
   align-items: center;
-  padding: 20rpx 20rpx 0;
+  padding: 24rpx 20rpx;
+  cursor: pointer;
 }
 .section-accent {
   width: 6rpx;
@@ -58,15 +75,22 @@
   flex-shrink: 0;
 }
 .section-title {
+  flex: 1;
   font-size: 28rpx;
   font-weight: 600;
   color: var(--text);
+}
+.section-arrow {
+  font-size: 20rpx;
+  color: #bbb;
+  margin-left: 12rpx;
+  transition: transform 0.2s;
 }
 .btn-grid {
   display: flex;
   flex-wrap: wrap;
   gap: 12rpx;
-  padding: 16rpx 20rpx 20rpx;
+  padding: 0 20rpx 20rpx;
 }
 .btn-item {
   padding: 16rpx 0;
