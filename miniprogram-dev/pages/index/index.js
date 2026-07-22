@@ -55,22 +55,22 @@ Page({
       data: { code },
       success: (res) => {
         const data = res.data || {};
-        console.log('[index] exchangeToken response:', JSON.stringify(data).substring(0, 200));
+        console.log('[index] exchangeToken response:', JSON.stringify(data).substring(0, 300));
         if (data.code !== 0) {
-          if (data.data && data.data.needBind) {
-            console.log('[index] needBind = true, openid:', data.data.openid);
-            this.setData({
-              loading: false,
-              needBind: true,
-              openid: data.data.openid || ''
-            });
-          } else {
-            this.setData({ loading: false, error: data.msg || '登录失败' });
-          }
+          this.setData({ loading: false, error: data.msg || '登录失败' });
+          return;
+        }
+        if (data.data && data.data.needBind) {
+          console.log('[index] needBind = true, openid:', data.data.openid);
+          this.setData({
+            loading: false,
+            needBind: true,
+            openid: data.data.openid || ''
+          });
           return;
         }
         const token = data.data.token;
-        console.log('[index] token obtained:', token.substring(0, 20) + '...');
+        console.log('[index] token obtained:', token ? token.substring(0, 20) + '...' : 'MISSING');
         wx.setStorageSync('token', token);
         app.globalData.token = token;
         if (data.data.user) {
