@@ -56,11 +56,15 @@
   <view class="leave-form" wx:if="{{showLeaveForm}}">
     <view class="form-row">
       <text class="form-label">开始时间</text>
-      <input type="text" class="form-input" value="{{leaveStartDate}}" bindinput="bindLeaveStart" placeholder="点击选择"></input>
+      <picker mode="date" value="{{leaveStartDate}}" bindchange="bindLeaveStart">
+        <view class="form-input">{{leaveStartDate || '点击选择日期'}}</view>
+      </picker>
     </view>
     <view class="form-row">
       <text class="form-label">结束时间</text>
-      <input type="text" class="form-input" value="{{leaveEndDate}}" bindinput="bindLeaveEnd" placeholder="点击选择"></input>
+      <picker mode="date" value="{{leaveEndDate}}" bindchange="bindLeaveEnd">
+        <view class="form-input">{{leaveEndDate || '点击选择日期'}}</view>
+      </picker>
     </view>
     <view class="form-row">
       <text class="form-label">事由说明</text>
