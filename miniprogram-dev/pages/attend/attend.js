@@ -121,8 +121,8 @@ var page = Page({
     var startStr = today.getFullYear() + '-' + String(today.getMonth()+1).padStart(2,'0') + '-' + String(today.getDate()).padStart(2,'0');
     var endObj = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
     var endStr = endObj.getFullYear() + '-' + String(endObj.getMonth()+1).padStart(2,'0') + '-' + String(endObj.getDate()).padStart(2,'0');
-    var url = app.globalData.baseUrl + '/api/attendance_records:list?filter[check_time][$dateBetween][0]=' +
-      startStr + '&filter[check_time][$dateBetween][1]=' + endStr + '&sort=-check_time&pageSize=10&appends=createdBy';
+    var url = app.globalData.baseUrl + '/api/attendance_records:list?filter[check_time][$dateBetween][]=' +
+      startStr + '&filter[check_time][$dateBetween][]=' + endStr + '&sort=-check_time&pageSize=10&appends=createdBy';
     wx.request({
       url: url,
       header: { 'Authorization': 'Bearer ' + token },
