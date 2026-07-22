@@ -402,65 +402,6 @@
     _state.watchId = watchId;
     return watchId;
   }
-  // ---- Attendance-aware tracking ----
-  var _attendInterval = null;
-  var OFF_WORK_HOUR = 19;
-  var ATTEND_REPORT_INTERVAL = 15 * 60 * 1000;
-
-  async function _fetchTodayAttendStatus() {
-    var tk = _getToken();
-    if (!tk) return { checkIn: false, checkOut: false };
-    try {
-      var today = new Date();
-      var y = today.getFullYear(), m = String(today.getMonth()+1).padStart(2,'0'), d = String(today.getDate()).padStart(2,'0');
-      var s = y + '-' + m + '-' + d;
-      var eObj = new Date(y, today.getMonth(), today.getDate() + 1);
-      var e = eObj.getFullYear() + '-' + String(eObj.getMonth()+1).padStart(2,'0') + '-' + String(eObj.getDate()).padStart(2,'0');
-      var r = await fetch('/api/attendance_records:list?filter[check_time][$dateBetween][]=' + s + '&filter[check_time][$dateBetween][]=' + e + '&sort=-check_time&pageSize=10', {
-        headers: { 'Authorization': 'Bearer ' + tk }
-      });
-      var data = await r.json();
-      var recs = data.data || [];
-      var checkIn = null, checkOut = null;
-      for (var i = 0; i < recs.length; i++) {
-        var t = recs[i];
-        if (t.check_type === '上班' && !checkIn) checkIn = t;
-        if (t.check_type === '下班' && !checkOut) checkOut = t;
-      }
-      return { checkIn: !!checkIn, checkOut: !!checkOut };
-    } catch(e) { return { checkIn: false, checkOut: false }; }
-  }
-
-  async function _attendTick() {
-    var now = new Date();
-    if (now.getHours() >= OFF_WORK_HOUR) { _attendStop(); return; }
-    try {
-      var pos = await getCurrentPosition();
-      _filterAndReport(pos);
-    } catch(e) {}
-  }
-
-  function _attendStart() {
-    if (_attendInterval) return;
-    _attendTick();
-    _attendInterval = setInterval(_attendTick, ATTEND_REPORT_INTERVAL);
-  }
-
-  function _attendStop() {
-    if (_attendInterval) { clearInterval(_attendInterval); _attendInterval = null; }
-  }
-
-  window.startAttendanceAwareTracking = async function() {
-    _attendStop();
-    var state = await _fetchTodayAttendStatus();
-    if (state.checkIn && !state.checkOut) {
-      _attendStart();
-    } else {
-      watchPosition();
-    }
-  };
-
-  window.stopAttendanceAwareTracking = function() { _attendStop(); };
 
   function stopWatch(watchId) {
     if (watchId != null) {
