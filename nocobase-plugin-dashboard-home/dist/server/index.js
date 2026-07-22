@@ -16,6 +16,7 @@ const pages_1 = require("./middleware/pages");
 const dashboard_1 = require("./middleware/dashboard");
 const weather_1 = require("./middleware/weather");
 const people_dynamic_1 = require("./middleware/people-dynamic");
+const mp_login_1 = require("./middleware/mp-login");
 const qw_jwt_1 = require("./utils/qw-jwt");
 const STORAGE_DIR = '/app/nocobase/storage/dashboard';
 module.exports = class DashboardHomePlugin extends server_1.Plugin {
@@ -55,6 +56,7 @@ module.exports = class DashboardHomePlugin extends server_1.Plugin {
         (0, dashboard_1.registerDashboardRoutes)(app, pluginRef);
         (0, weather_1.registerWeatherRoutes)(app);
         (0, people_dynamic_1.registerPeopleDynamicRoutes)(app);
+        (0, mp_login_1.registerMpLoginRoutes)(app);
         app.resourceManager.use(async (ctx, next) => {
             const action = ctx.action || {};
             const params = action.params || {};
