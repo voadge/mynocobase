@@ -19,7 +19,10 @@ const STORAGE_DIR = '/app/nocobase/storage/dashboard';
 
 export function registerPageRoutes(app: any): void {
   app.use(async (ctx: Context, next: () => Promise<void>) => {
+    ctx.state.reqPath = ctx.path.replace(/^\/api/, '');
     if (ctx.method !== 'GET' || !PAGE_MAP[ctx.state.reqPath]) {
+      return await next();
+    }
       return await next();
     }
 
