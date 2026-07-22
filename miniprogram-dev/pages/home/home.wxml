@@ -1,9 +1,4 @@
 <view class="page">
-  <view class="header">
-    <view class="logo-placeholder">遵大</view>
-    <view class="title">贵州遵大数智化平台</view>
-  </view>
-
   <view class="attend-btn-wrap">
     <button class="attend-btn" bindtap="goAttend">📌 考勤打卡</button>
   </view>
