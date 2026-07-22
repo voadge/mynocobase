@@ -2,7 +2,7 @@ App({
   globalData: {
     userInfo: null,
     token: null,
-    baseUrl: 'https://voadge.top:668'
+    baseUrl: 'https://voadge.top'
   },
   onLaunch() {
     const token = wx.getStorageSync('token');
