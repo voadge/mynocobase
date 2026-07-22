@@ -8,7 +8,7 @@
   </view>
 
   <view class="section-list">
-    <view class="section-group" wx:for="{{workSections}}" wx:key="title" wx:if="{{item.items.length}}">
+    <view class="section-group" wx:for="{{workSections}}" wx:key="title">
       <view class="section-header" bindtap="toggleSection" data-idx="{{index}}">
         <view class="section-accent" style="background:{{item.accent}}"></view>
         <text class="section-title">{{item.title}}</text>
