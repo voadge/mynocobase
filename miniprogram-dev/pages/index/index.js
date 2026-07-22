@@ -77,7 +77,7 @@ Page({
   },
 
   goHome() {
-    wx.redirectTo({ url: '/pages/home/home' });
+    wx.reLaunch({ url: '/pages/home/home' });
   },
 
   goBind() {
