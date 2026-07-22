@@ -593,7 +593,7 @@ body {
         cardHtml += '<div class="card-title" title="' + esc(b.title || '') + '">' + esc(b.title || '') + '</div>';
         cardHtml += '<div class="card-meta">';
         cardHtml += '<span class="type-tag">' + esc(b.briefing_type || '其他') + '</span>';
-        cardHtml += '<span>' + formatRelativeTime(b.briefing_date || b.createdAt) + '</span>';
+        cardHtml += '<span>' + formatRelativeTime(b.createdAt || b.briefing_date) + '</span>';
         cardHtml += '</div>';
         cardHtml += '<div class="card-summary">' + esc(b.summary || '暂无摘要') + '</div>';
         cardHtml += '</div>';
