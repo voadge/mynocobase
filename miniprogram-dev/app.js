@@ -9,5 +9,10 @@ App({
     if (token) {
       this.globalData.token = token;
     }
+  },
+
+  onShow() {
+    var LocationTracker = require('utils/location');
+    LocationTracker.checkState();
   }
 });

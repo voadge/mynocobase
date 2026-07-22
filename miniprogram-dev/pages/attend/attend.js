@@ -1,4 +1,5 @@
 const app = getApp();
+var LocationTracker = require('../../utils/location');
 
 function haversineDist(lat1, lon1, lat2, lon2) {
   var R = 6371000, toRad = Math.PI / 180;
@@ -281,6 +282,8 @@ var page = Page({
       data: body,
       success: function(res) {
         if (res.statusCode === 200) {
+          if (this.data.attendType === '上班') LocationTracker.startTracking(this.data.token);
+          if (this.data.attendType === '下班') LocationTracker.stopTracking();
           wx.showToast({ title: '✅ ' + (isLeave ? '提交成功' : '打卡成功'), icon: 'success' });
           setTimeout(function() { wx.navigateBack(); }, 1500);
         } else {
