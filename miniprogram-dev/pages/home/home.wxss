@@ -19,6 +19,10 @@
   --btn-text: #e0e0e0;
   --shadow: 0 2rpx 8rpx rgba(0,0,0,0.2);
 }
+.page.dark .tracking-bar {
+  background: #1a3050;
+  color: #66b5ff;
+}
 
 .attend-btn-wrap {
   padding: 24rpx 24rpx 0;
@@ -34,6 +38,20 @@
   border-radius: 16rpx;
   box-shadow: 0 4rpx 16rpx rgba(22,119,255,0.3);
 }
+
+.tracking-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 12rpx 24rpx 0;
+  padding: 12rpx;
+  border-radius: 10rpx;
+  background: #e6f7ff;
+  color: #1677ff;
+  font-size: 24rpx;
+}
+.tracking-icon { margin-right: 8rpx; font-size: 28rpx; }
+.tracking-text { font-weight: 500; }
 
 .homepage-btn-wrap {
   padding: 12rpx 24rpx 0;

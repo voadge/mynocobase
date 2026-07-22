@@ -42,6 +42,7 @@ Page({
     workSections: [],
     token: '',
     theme: 'light',
+    trackingActive: false,
     collapsed: {}
   },
 
@@ -52,6 +53,38 @@ Page({
     var collapsed = {};
     workSections.forEach(function(s, i) { if (s.items.length) collapsed[i] = true; });
     this.setData({ token, workSections, theme: sys.theme || 'light', collapsed: collapsed });
+    this.checkTrackingStatus();
+  },
+
+  onShow() {
+    this.checkTrackingStatus();
+  },
+
+  checkTrackingStatus: function() {
+    var self = this;
+    var token = wx.getStorageSync('token') || app.globalData.token || '';
+    if (!token) return;
+    var today = new Date();
+    var y = today.getFullYear(), m = String(today.getMonth()+1).padStart(2,'0'), d = String(today.getDate()).padStart(2,'0');
+    var s = y + '-' + m + '-' + d;
+    var eObj = new Date(y, today.getMonth(), today.getDate() + 1);
+    var e = eObj.getFullYear() + '-' + String(eObj.getMonth()+1).padStart(2,'0') + '-' + String(eObj.getDate()).padStart(2,'0');
+    wx.request({
+      url: app.globalData.baseUrl + '/api/attendance_records:list?filter[check_time][$dateBetween][]=' + s + '&filter[check_time][$dateBetween][]=' + e + '&sort=-check_time&pageSize=10',
+      header: { 'Authorization': 'Bearer ' + token },
+      success: function(res) {
+        var recs = (res.data && res.data.data) || [];
+        var checkIn = false, checkOut = false;
+        for (var i = 0; i < recs.length; i++) {
+          var t = recs[i];
+          if (t.check_type === '上班') checkIn = true;
+          if (t.check_type === '下班') checkOut = true;
+        }
+        var now = today.getHours();
+        var tracking = checkIn && !checkOut && now < 19;
+        self.setData({ trackingActive: tracking });
+      }
+    });
   },
 
   toggleSection(e) {

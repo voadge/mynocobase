@@ -3,6 +3,11 @@
     <button class="attend-btn" bindtap="goAttend">📌 考勤打卡</button>
   </view>
 
+  <view class="tracking-bar {{trackingActive ? 'active' : ''}}" wx:if="{{trackingActive}}">
+    <text class="tracking-icon">🛰️</text>
+    <text class="tracking-text">野外作业安全监控运行中</text>
+  </view>
+
   <view class="homepage-btn-wrap">
     <button class="homepage-btn" bindtap="goHomepage">🏠 首页</button>
   </view>
