@@ -178,48 +178,12 @@ window.addEventListener("unhandledrejection", function(e) {
         const NOCOBASE_HOME = 'https://voadge.top:668/admin/ffw9h2yb5cp';  // NocoBase 操作面板首页（管理员在后台搭建）
         let sourceIndex = 0;
 
-        const RP = { base: '/road/bvr/zydlxc', user: 'zydlxc', pass: '123456' };
-        let rpCancel = false, rpTimer = null;
-
-        function doRoadPatrol(frame) {
-            rpCancel = false;
-            const hf = document.createElement('iframe');
-            hf.name = 'rpLogin'; hf.style.display = 'none';
-            document.body.appendChild(hf);
-            const eps = [
-                { url: RP.base + '/api/user/login', fields: { username: RP.user, password: RP.pass } },
-                { url: RP.base + '/api/login',      fields: { username: RP.user, password: RP.pass } },
-                { url: RP.base + '/user/login',     fields: { username: RP.user, password: RP.pass } },
-            ];
-            eps.forEach(ep => {
-                const form = document.createElement('form');
-                form.method = 'POST'; form.action = ep.url; form.target = 'rpLogin';
-                form.style.display = 'none';
-                Object.entries(ep.fields).forEach(([k, v]) => {
-                    const inp = document.createElement('input');
-                    inp.name = k; inp.value = v; form.appendChild(inp);
-                });
-                document.body.appendChild(form); form.submit(); form.remove();
-            });
-            fetch(RP.base + '/api/getToken', {
-                method: 'POST', credentials: 'include',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ clientId: RP.user, clientSecret: RP.pass })
-            }).catch(() => {});
-            rpTimer = setTimeout(() => {
-                if (rpCancel) return;
-                hf.remove(); frame.src = EXTERN_URLS[sourceIndex].url;
-            }, 500);
-        }
-
         function loadSource(idx) {
             sourceIndex = ((idx % EXTERN_URLS.length) + EXTERN_URLS.length) % EXTERN_URLS.length;
-            rpCancel = true; clearTimeout(rpTimer);
             var _frame=document.getElementById('externFrame');if(!_frame)return;
             var src = EXTERN_URLS[sourceIndex];
             _frame.setAttribute('sandbox', 'allow-scripts allow-forms allow-same-origin allow-popups');
-            if (sourceIndex === 0 || sourceIndex === 1) { doRoadPatrol(_frame); }
-            else if (src.url) { _frame.src = src.url; }
+            if (src.url) { _frame.src = src.url; }
             else {
                 _frame.srcdoc = '<div style="display:flex;align-items:center;justify-content:center;height:100%;background:#0c1426;color:#5a6a7a;font-size:1.2em;font-family:sans-serif">📊 ' + escHtml(src.label) + '<br><span style="font-size:0.7em;margin-top:8px">预留数据源</span></div>';
             }
