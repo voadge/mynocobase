@@ -48,9 +48,7 @@ Page({
 
   onLoad() {
     const token = wx.getStorageSync('token') || app.globalData.token || '';
-    console.log('[home] onLoad token:', token ? token.substring(0, 10) + '...' : 'EMPTY');
     if (!token) {
-      console.log('[home] no token -> reLaunch to index');
       wx.reLaunch({ url: '/pages/index/index' });
       return;
     }

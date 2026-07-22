@@ -1,27 +1,21 @@
 <view class="page">
   <view class="header">
     <view class="logo-placeholder">遵大</view>
-    <view class="header-text">
-      <text class="title">贵州遵大数智化平台</text>
-      <text class="subtitle">以道树业 致诚德信</text>
-    </view>
+    <view class="title">贵州遵大数智化平台</view>
   </view>
 
   <view class="attend-btn-wrap">
-    <button class="attend-main-btn" bindtap="goAttend">📌 考勤打卡</button>
+    <button class="attend-btn" bindtap="goAttend">📌 考勤打卡</button>
   </view>
 
-  <view class="section-list" wx:for="{{workSections}}" wx:key="title">
-    <view class="section-group" style="background:{{item.bg}};border-color:{{item.border}}">
-      <view class="section-title" style="color:{{item.color}}">{{item.title}}</view>
+  <view class="section-list">
+    <view class="section-group" wx:for="{{workSections}}" wx:key="title">
+      <view class="section-title">{{item.title}}</view>
       <view class="btn-list">
         <view class="btn-item"
           wx:for="{{item.items}}" wx:key="label"
-          style="background:{{item.btnBg}};border-color:{{item.btnBorder}};color:{{item.btnColor}}"
           data-url="{{item.url}}"
-          bindtap="goWebview">
-          <text>{{item.label}}</text>
-        </view>
+          bindtap="goWebview">{{item.label}}</view>
       </view>
     </view>
   </view>
