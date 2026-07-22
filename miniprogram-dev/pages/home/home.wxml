@@ -1,0 +1,28 @@
+<view class="page">
+  <view class="header">
+    <image class="logo" src="/assets/logo.png"></image>
+    <view class="header-text">
+      <text class="title">贵州遵大数智化平台</text>
+      <text class="subtitle">以道树业 致诚德信</text>
+    </view>
+  </view>
+
+  <view class="attend-btn-wrap">
+    <button class="attend-main-btn" bindtap="goAttend">📌 考勤打卡</button>
+  </view>
+
+  <view class="section-list" wx:for="{{workSections}}" wx:key="title">
+    <view class="section-group" style="background:{{item.bg}};border-color:{{item.border}}">
+      <view class="section-title" style="color:{{item.color}}">{{item.title}}</view>
+      <view class="btn-list">
+        <view class="btn-item"
+          wx:for="{{item.items}}" wx:key="label"
+          style="background:{{item.btnBg}};border-color:{{item.btnBorder}};color:{{item.btnColor}}"
+          data-url="{{item.url}}"
+          bindtap="goWebview">
+          <text>{{item.label}}</text>
+        </view>
+      </view>
+    </view>
+  </view>
+</view>
