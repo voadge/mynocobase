@@ -17,8 +17,10 @@ const dashboard_1 = require("./middleware/dashboard");
 const weather_1 = require("./middleware/weather");
 const people_dynamic_1 = require("./middleware/people-dynamic");
 const mp_login_1 = require("./middleware/mp-login");
+const dept_admin_api_1 = require("./middleware/dept-admin-api");
+const dept_admin_pages_1 = require("./middleware/dept-admin-pages");
+const department_acl_1 = require("./middleware/department-acl");
 const qw_jwt_1 = require("./utils/qw-jwt");
-const STORAGE_DIR = '/app/nocobase/storage/dashboard';
 module.exports = class DashboardHomePlugin extends server_1.Plugin {
     async load() {
         const app = this.app;
@@ -46,78 +48,217 @@ module.exports = class DashboardHomePlugin extends server_1.Plugin {
                 arCol.addField('workflow_status', { type: 'string', nullable: true, defaultValue: 'normal' });
             arCol.sync({ alter: true });
         }
-        // Normalize path 鈥?strip /api prefix for consistent path matching
+        // Register department_acl_rules collection
+        db.collection({
+            name: 'department_acl_rules',
+            fields: [
+                { type: 'bigInt', name: 'id', primaryKey: true, autoIncrement: true },
+                { type: 'belongsTo', name: 'department', target: 'departments', foreignKey: 'departmentId' },
+                { type: 'integer', name: 'priority', defaultValue: 100 },
+                { type: 'string', name: 'mode', defaultValue: 'dept' },
+                { type: 'belongsTo', name: 'role', target: 'roles', foreignKey: 'roleId' },
+                { type: 'string', name: 'resourceName' },
+                { type: 'string', name: 'action' },
+                { type: 'boolean', name: 'allow', defaultValue: true },
+                { type: 'json', name: 'dataScope', nullable: true },
+                { type: 'string', name: 'ruleNo', nullable: true },
+                { type: 'text', name: 'remark', nullable: true },
+                { type: 'boolean', name: 'enabled', defaultValue: true },
+                { type: 'belongsTo', name: 'createdBy', target: 'users' },
+            ],
+        });
+        // Register department_approval_routes collection
+        db.collection({
+            name: 'department_approval_routes',
+            fields: [
+                { type: 'bigInt', name: 'id', primaryKey: true, autoIncrement: true },
+                { type: 'string', name: 'name' },
+                { type: 'string', name: 'levelKey' },
+                { type: 'string', name: 'mode', defaultValue: 'dept' },
+                { type: 'belongsTo', name: 'department', target: 'departments', foreignKey: 'departmentId' },
+                { type: 'belongsTo', name: 'role', target: 'roles', foreignKey: 'roleId' },
+                { type: 'text', name: 'remark', nullable: true },
+                { type: 'boolean', name: 'enabled', defaultValue: true },
+                { type: 'belongsTo', name: 'createdBy', target: 'users' },
+            ],
+        });
+        await db.sync();
+        // Normalize path �?strip /api prefix for consistent path matching
         app.use(async (ctx, next) => {
             ctx.state.reqPath = ctx.path.replace(/^\/api/, '');
             await next();
         }, { before: 'dataSource' });
+        // Route: Serve patched plugin-departments bundle with manager_in_charge field injected
+        let DEPT_BUNDLE_PATH = null;
+        try {
+            DEPT_BUNDLE_PATH = require.resolve('@nocobase/plugin-departments/dist/client/index.js');
+        }
+        catch (e) {
+            const altPath = path_1.default.join(process.cwd(), 'node_modules/@nocobase/plugin-departments/dist/client/index.js');
+            if (fs_1.default.existsSync(altPath))
+                DEPT_BUNDLE_PATH = altPath;
+        }
+        let patchedBundle = null;
+        function getPatchedBundle() {
+            if (patchedBundle)
+                return patchedBundle;
+            if (!DEPT_BUNDLE_PATH)
+                return null;
+            let content = fs_1.default.readFileSync(DEPT_BUNDLE_PATH, 'utf8');
+            content = content.replace('owners:{title:\'{{t("Owners")}}\',"x-component":"DepartmentOwnersField","x-decorator":"FormItem"},footer:', 'owners:{title:\'{{t("Owners")}}\',"x-component":"DepartmentOwnersField","x-decorator":"FormItem"},manager_in_charge:{title:\'{{t("分管领导")}}\',"x-component":"CollectionField","x-decorator":"FormItem","x-collection-field":"departments.manager_in_charge"},footer:');
+            content = content.replace('roles:{"x-component":"CollectionField","x-decorator":"FormItem","x-collection-field":"departments.roles"},footer:', 'roles:{"x-component":"CollectionField","x-decorator":"FormItem","x-collection-field":"departments.roles"},manager_in_charge:{title:\'{{t("分管领导")}}\',"x-component":"CollectionField","x-decorator":"FormItem","x-collection-field":"departments.manager_in_charge"},footer:');
+            content = content.replace('appends:["parent(recursively=true)","roles","owners"]', 'appends:["parent(recursively=true)","roles","owners","manager_in_charge"]');
+            content = content.replace(/departments_manager_users/g, 'departmentsUsers');
+            patchedBundle = content;
+            return patchedBundle;
+        }
+        app.use(async (ctx, next) => {
+            if (ctx.method !== 'GET')
+                return await next();
+            if (ctx.state.reqPath && ctx.state.reqPath === '/__pd__/dept-bundle') {
+                const p = getPatchedBundle();
+                if (!p) {
+                    ctx.status = 404;
+                    ctx.body = 'Bundle not found';
+                    return;
+                }
+                ctx.type = 'application/javascript; charset=utf-8';
+                ctx.body = p;
+                return;
+            }
+            await next();
+        }, { before: 'dataSource' });
+        // Resource middleware: Mirror owner pattern for manager_in_charge
+        app.resourceManager.use(async (ctx, next) => {
+            const action = ctx.action || {};
+            const params = action.params || {};
+            const values = params.values || {};
+            const managerInCharge = values.manager_in_charge;
+            if (params.resourceName === 'departments' && (params.actionName === 'update' || params.actionName === 'create') && managerInCharge && Array.isArray(managerInCharge)) {
+                const managerIds = managerInCharge.map((m) => {
+                    return typeof m === 'object' ? parseInt(m.id, 10) : parseInt(m, 10);
+                }).filter((id) => id > 0);
+                const newValues = {};
+                for (const k in values) {
+                    if (k !== 'manager_in_charge')
+                        newValues[k] = values[k];
+                }
+                params.values = newValues;
+                ctx.action.params = params;
+                await next();
+                try {
+                    const deptId = params.actionName === 'update' ? params.filterByTk : (ctx.body && ctx.body.data && ctx.body.data.id);
+                    if (!deptId)
+                        return;
+                    const repo = db.getRepository('departmentsUsers');
+                    await db.sequelize.transaction(async (t) => {
+                        await repo.update({
+                            filter: { departmentId: deptId },
+                            values: { is_manager_in_charge: false },
+                            transaction: t
+                        });
+                        await repo.update({
+                            filter: { departmentId: deptId, userId: { $in: managerIds } },
+                            values: { is_manager_in_charge: true },
+                            transaction: t
+                        });
+                        const existing = await repo.find({
+                            filter: { departmentId: deptId },
+                            transaction: t
+                        });
+                        const existingIds = existing.map((d) => d.userId);
+                        for (let i = 0; i < managerIds.length; i++) {
+                            if (existingIds.indexOf(managerIds[i]) < 0) {
+                                await repo.create({
+                                    values: { departmentId: deptId, userId: managerIds[i], is_manager_in_charge: true },
+                                    transaction: t
+                                });
+                            }
+                        }
+                    });
+                }
+                catch (e) {
+                    console.log('[manager-resource-mw] Error:', e.message);
+                }
+            }
+            else {
+                await next();
+            }
+        });
+        // Register all route modules
         const pluginRef = { db, isAuthenticated: auth_1.isAuthenticated.bind(this) };
         (0, proxy_1.registerProxyRoutes)(app);
         (0, dashboard_1.registerDashboardRoutes)(app, pluginRef);
         (0, weather_1.registerWeatherRoutes)(app);
         (0, people_dynamic_1.registerPeopleDynamicRoutes)(app);
         (0, mp_login_1.registerMpLoginRoutes)(app);
+        // Register department ACL middleware (injects into ACL pipeline before core)
+        (0, department_acl_1.registerDepartmentAcl)(app, db);
+        // Register department admin API
+        (0, dept_admin_api_1.registerDeptAdminApi)(app, pluginRef);
+        // Register department admin pages
+        (0, dept_admin_pages_1.registerDeptAdminPages)(app);
+        // Middleware: auto-fill weather for construction_daily_log create/trigger
         app.resourceManager.use(async (ctx, next) => {
             const action = ctx.action || {};
             const params = action.params || {};
+            console.log('[weather-mw] ENTRY', { resourceName: ctx.action?.params?.resourceName, actionName: ctx.action?.params?.actionName, filterByTk: ctx.action?.params?.filterByTk });
             if (params.resourceName === 'construction_daily_log' && !params.filterByTk &&
                 (params.actionName === 'create' || params.actionName === 'trigger')) {
                 const values = params.values || {};
-                console.log('[weather-mw] firing', params.actionName, 'fk=', values['link-projectID'], 'pid=', values.project_id, 'pno=', values.project_name_NO, 'weather=', values.weather);
+                console.log('[weather-mw] CONDITION MET', { actionName: params.actionName, fk: values['link-projectID'], pid: values.project_id, pno: values.project_name_NO });
                 if (!values.weather) {
+                    console.log('[weather-mw] filling weather...', values['link-projectID']);
                     try {
                         let proj = null;
                         const fk = values['link-projectID'];
-                        if (fk) {
-                            proj = await db.getRepository('projects').findOne({ filterByTk: fk });
-                        }
+                        if (fk)
+                            proj = await db.getRepository('projects').findOne({ filter: { id: fk } });
                         else {
                             const pid = values.project_id;
                             const pno = values.project_name_NO;
                             if (pid)
-                                proj = await db.getRepository('projects').findOne({ filterByTk: pid });
+                                proj = await db.getRepository('projects').findOne({ filter: { id: pid } });
                             else if (pno)
                                 proj = await db.getRepository('projects').findOne({ filter: { project_code: pno } });
                         }
-                        if (proj) {
-                            console.log('[weather-mw] project found', proj.id, 'lat=', proj.location_lat, 'lon=', proj.location_lon);
-                            if (proj.location_lat && proj.location_lon) {
-                                const weather = await (0, qw_jwt_1.qwFetch)('https://' + qw_jwt_1.QW_WEATHER_HOST + '/v7/weather/now?location=' + encodeURIComponent(proj.location_lon + ',' + proj.location_lat));
-                                console.log('[weather-mw] qw response code=', weather?.code, 'hasNow=', !!weather?.now);
-                                if (weather && weather.code === '200' && weather.now) {
-                                    const n = weather.now;
-                                    values.weather = n.text + ' ' + (n.temp || '') + 'C ' + (n.windDir || '');
-                                    console.log('[weather-mw] set weather to', values.weather);
-                                }
+                        if (proj && proj.location_lat && proj.location_lon) {
+                            const weather = await (0, qw_jwt_1.qwFetch)('https://' + qw_jwt_1.QW_WEATHER_HOST + '/v7/weather/now?location=' + encodeURIComponent(proj.location_lon + ',' + proj.location_lat));
+                            if (weather && weather.code === '200' && weather.now) {
+                                const weatherStr = weather.now.text + ' ' + (weather.now.temp || '') + 'C ' + (weather.now.windDir || '');
+                                params.values.weather = weatherStr;
+                                if (ctx.request.body)
+                                    ctx.request.body.weather = weatherStr;
                             }
-                            else {
-                                console.log('[weather-mw] project missing lat/lon');
-                            }
-                        }
-                        else {
-                            console.log('[weather-mw] project not found');
                         }
                     }
                     catch (e) {
                         console.log('[weather-mw] fetch failed:', e.message);
                     }
                 }
-                if (params.actionName === 'trigger') {
-                    if (values['link-projectID'] || values.project_id || values.project_name_NO) {
-                        try {
-                            const repo = db.getRepository('construction_daily_log');
-                            const created = await repo.create({ values });
-                            ctx.action.params.filterByTk = created.id;
-                            ctx.action.params.values = { ...values, id: created.id };
-                        }
-                        catch (e) {
-                            console.log('[trigger-mw] create failed:', e.message);
-                        }
+            }
+            await next();
+        });
+        // Middleware: pre-create for construction_daily_log trigger action
+        app.resourceManager.use(async (ctx, next) => {
+            const action = ctx.action || {};
+            const params = action.params || {};
+            if (params.resourceName === 'construction_daily_log' && params.actionName === 'trigger' && !params.filterByTk) {
+                const values = params.values || {};
+                if (values['link-projectID'] || values.project_id || values.project_name_NO) {
+                    try {
+                        const repo = db.getRepository('construction_daily_log');
+                        const created = await repo.create({ values });
+                        ctx.action.params.filterByTk = created.id;
+                        ctx.action.params.values = { ...values, id: created.id };
+                    }
+                    catch (e) {
+                        console.log('[trigger-mw] create failed:', e.message);
                     }
                 }
             }
             await next();
-        }, { tag: 'dashboard-home', after: 'dataSource' });
+        });
         // Middleware: enrich auth:check response with departments (for linkage rules)
         app.resourceManager.use(async (ctx, next) => {
             await next();
@@ -214,6 +355,54 @@ module.exports = class DashboardHomePlugin extends server_1.Plugin {
                 }
             });
         }
+        // Auto-copy attachments from entries to log after log creation
+        if (logCol) {
+            logCol.model.addHook('afterCreate', async (record, options) => {
+                const logId = record.get('id');
+                const projectId = record.get('link-projectID') || record.get('project_id');
+                let logDate = record.get('log_date');
+                if (!logId || !projectId || !logDate)
+                    return;
+                try {
+                    if (typeof logDate === 'number' || /^\d{8}$/.test(String(logDate))) {
+                        const s = String(logDate);
+                        logDate = s.slice(0, 4) + '-' + s.slice(4, 6) + '-' + s.slice(6, 8);
+                    }
+                    const entries = await record.sequelize.model('construction_daily_entries').findAll({
+                        where: { projectID: projectId, entry_date: logDate }
+                    });
+                    if (!entries || entries.length === 0)
+                        return;
+                    const entryIds = entries.map((e) => e.get('id')).filter(Boolean);
+                    if (entryIds.length === 0)
+                        return;
+                    const sequelize = record.sequelize;
+                    const placeholders = entryIds.map((_, i) => ':eid' + i).join(',');
+                    const replacements = {};
+                    entryIds.forEach((id, i) => { replacements['eid' + i] = id; });
+                    const links = await sequelize.query('SELECT DISTINCT attachment_id FROM entry_attachments WHERE entry_id IN (' + placeholders + ')', { replacements, type: sequelize.QueryTypes.SELECT });
+                    if (!links || links.length === 0)
+                        return;
+                    // Delete existing log_attachments for idempotent re-aggregate
+                    await sequelize.query('DELETE FROM log_attachments WHERE log_id = :logId', { replacements: { logId }, type: sequelize.QueryTypes.DELETE });
+                    let copied = 0;
+                    for (const link of links) {
+                        const attId = link.attachment_id;
+                        if (!attId)
+                            continue;
+                        try {
+                            await sequelize.query("INSERT INTO log_attachments (log_id, attachment_id, project_id, log_date, \"createdAt\", \"updatedAt\") VALUES (:logId, :attId, :pid, :ldt, NOW(), NOW()) ON CONFLICT DO NOTHING", { replacements: { logId, attId, pid: projectId, ldt: logDate }, type: sequelize.QueryTypes.INSERT });
+                            copied++;
+                        }
+                        catch (_e) { }
+                    }
+                    console.log('[log-attachment-hook] log#' + logId + ' copied ' + copied + ' attachments from ' + entryIds.length + ' entries');
+                }
+                catch (e) {
+                    console.log('[log-attachment-hook] error:', e.message);
+                }
+            });
+        }
         // Auto-fill log_date, log_no and auto-aggregate on log creation
         if (logCol) {
             logCol.model.addHook('beforeCreate', async (record, options) => {
@@ -255,7 +444,7 @@ module.exports = class DashboardHomePlugin extends server_1.Plugin {
                         }
                         const whereClause = { entry_date: aggLogDate };
                         if (aggProjectId)
-                            whereClause.project_id = aggProjectId;
+                            whereClause.projectID = aggProjectId;
                         const entries = await record.sequelize.model('construction_daily_entries').findAll({
                             where: whereClause
                         });
@@ -296,6 +485,35 @@ module.exports = class DashboardHomePlugin extends server_1.Plugin {
                 }
             });
         }
+        // ACL context endpoint for frontend department linkage (placed before auth-check)
+        app.use(async (ctx, next) => {
+            if (ctx.method !== 'GET' || ctx.state.reqPath !== '/__pd__/acl-context') {
+                return await next();
+            }
+            try {
+                const user = ctx.state.currentUser;
+                if (!user) {
+                    ctx.status = 401;
+                    ctx.body = { error: 'Unauthenticated' };
+                    return;
+                }
+                ctx.body = {
+                    user: {
+                        id: user.id,
+                        mainDepartmentId: user.mainDepartmentId,
+                        departmentIds: user.departments?.map((d) => d.id) || [],
+                        departments: user.departments || [],
+                    },
+                    attachRoles: ctx.state.attachRoles || [],
+                };
+            }
+            catch (e) {
+                console.error('[acl-context] Error:', e.message);
+                ctx.status = 500;
+                ctx.body = { error: 'Internal server error', message: e.message };
+            }
+            await next();
+        }, { before: 'dataSource' });
         // Auth-check endpoint for nginx auth_request
         app.use(async (ctx, next) => {
             if (ctx.method !== 'GET' || ctx.state.reqPath !== '/__auth_check__') {
@@ -326,8 +544,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Ar
 .btn:disabled{background:#bfbfbf;cursor:not-allowed}
 </style></head><body>
 <div class="row"><label>椤圭洰缂栧彿</label><input id="c" placeholder="璇诲彇涓?.."/></div>
-<div class="row"><label>鏃ユ湡</label><input id="d" type="date"/></div>
-<div class="info">宸插～鎶ワ細<span class="cnt" id="n">0</span> 浠?<span class="done" id="ok">&#x2713; 宸叉眹鎬?/span></div>
+<div class="row"><label>鏃ユ�?/label><input id="d" type="date"/></div>
+<div class="info">宸插～鎶ワ細<span class="cnt" id="n">0</span> �?<span class="done" id="ok">&#x2713; 宸叉眹鎬?/span></div>
 <button class="btn" id="b">&#x26A1; 姹囨€绘棩蹇?/button>
 <script>
 (function(){
@@ -341,8 +559,8 @@ try{
     if(!lb)continue;
     var txt=lb.textContent,inp=items[i].querySelector('input');
     if(!inp)continue;
-    if((txt.indexOf('椤圭洰')>=0||txt.indexOf('缂╁啓')>=0)&&inp.value)c.value=inp.value;
-    if(txt.indexOf('鏃ユ湡')>=0&&inp.value)d.value=inp.value;
+    if((txt.indexOf('椤圭�?)>=0||txt.indexOf('缂╁�?)>=0)&&inp.value)c.value=inp.value;
+    if(txt.indexOf('鏃ユ�?)>=0&&inp.value)d.value=inp.value;
   }
   if(c.value){c.style.background='#f0f5ff';c.style.borderColor='#91d5ff'}
   else console.log('[agg] project field not found in parent DOM');
@@ -357,7 +575,7 @@ async function rf(){var code=c.value.trim(),dt=d.value;if(!code||!dt){n.textCont
 c.addEventListener('change',rf);d.addEventListener('change',rf);
 if(code&&d.value)setTimeout(rf,300);
 
-b.addEventListener('click',async function(){var code=c.value.trim(),dt=d.value;if(!code||!dt){alert('璇峰～鍐欓」鐩紪鍙峰拰鏃ユ湡');return}var ymd=parseInt(dt.replace(/-/g,''));b.disabled=true;b.textContent='姹囨€讳腑...';try{var r=await fetch('/api/__pd__/aggregate-log',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({projectNameNo:code,date:ymd})});var j=await r.json();if(j.code===0&&j.data?.updated)alert('姹囨€诲畬鎴愶紝鏂板 '+j.data.newEntryCount+' 浠?);else if(j.code===0)alert(j.data?.message||'娌℃湁鏂板唴瀹归渶瑕佹眹鎬?);else alert('姹囨€诲け璐ワ細'+(j.msg||'鏈煡閿欒'));rf()}catch(e){alert('姹囨€诲け璐? '+e.message)}finally{b.disabled=false;b.textContent='\u26A1 姹囨€绘棩蹇?}});
+b.addEventListener('click',async function(){var code=c.value.trim(),dt=d.value;if(!code||!dt){alert('璇峰～鍐欓」鐩紪鍙峰拰鏃ユ湡');return}var ymd=parseInt(dt.replace(/-/g,''));b.disabled=true;b.textContent='姹囨€讳�?..';try{var r=await fetch('/api/__pd__/aggregate-log',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({projectNameNo:code,date:ymd})});var j=await r.json();if(j.code===0&&j.data?.updated)alert('姹囨€诲畬鎴愶紝鏂板�?'+j.data.newEntryCount+' �?);else if(j.code===0)alert(j.data?.message||'娌℃湁鏂板唴瀹归渶瑕佹眹�?);else alert('姹囨€诲け璐ワ細'+(j.msg||'鏈煡閿欒'));rf()}catch(e){alert('姹囨€诲け璐? '+e.message)}finally{b.disabled=false;b.textContent='\u26A1 姹囨€绘棩蹇?}});
 })();
 </script></body></html>`;
         }, { tag: 'dashboard-home', before: 'dataSource' });

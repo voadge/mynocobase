@@ -13,29 +13,6 @@ function dateToDateStr(dt) {
     const d = String(dt.getDate()).padStart(2, '0');
     return y + '-' + m + '-' + d;
 }
-// Normalize various date formats to YYYY-MM-DD string
-function normalizeDateStr(raw) {
-    if (!raw)
-        return '';
-    if (raw instanceof Date) {
-        return dateToDateStr(raw);
-    }
-    if (typeof raw === 'number') {
-        const s = String(raw);
-        if (s.length === 13)
-            return dateToDateStr(new Date(raw)); // timestamp ms
-        if (s.length === 10)
-            return dateToDateStr(new Date(raw * 1000)); // timestamp s
-        return ymdToDateStr(raw); // YYYYMMDD
-    }
-    const s = String(raw).trim();
-    if (/^\d{4}-\d{2}-\d{2}$/.test(s))
-        return s; // YYYY-MM-DD
-    if (/^\d{8}$/.test(s))
-        return ymdToDateStr(parseInt(s)); // YYYYMMDD
-    const dt = new Date(s);
-    return isNaN(dt.getTime()) ? '' : dateToDateStr(dt);
-}
 function registerDashboardRoutes(app, plugin) {
     const { db } = plugin;
     // Workers API - server-side query bypasses ACL
@@ -63,7 +40,7 @@ function registerDashboardRoutes(app, plugin) {
             ctx.status = 500;
             ctx.body = { data: [], error: e.message };
         }
-    }, { before: 'dataSource' });
+    }, { tag: 'dashboard-home', before: 'dataSource' });
     // Batch collect - server-side location history filling (called by cron)
     app.use(async (ctx, next) => {
         if (ctx.method !== 'GET' || ctx.state.reqPath !== '/__pd__/batch-collect') {
@@ -121,12 +98,12 @@ function registerDashboardRoutes(app, plugin) {
                 const u = activeUsers[i];
                 const hist = await LocationHistory.find({
                     filter: { createdById: u.uid },
-                    sort: '-createdAt',
+                    sort: '-recorded_at',
                     limit: 1
                 });
                 const last = hist.length > 0 ? hist[0] : null;
                 const skip = last && last.latitude === String(u.lat) && last.longitude === String(u.lng) &&
-                    (Date.now() - new Date(last.createdAt).getTime()) < 5 * 60 * 1000;
+                    (Date.now() - new Date(last.recorded_at || last.createdAt).getTime()) < 5 * 60 * 1000;
                 if (skip)
                     continue;
                 await LocationHistory.create({
@@ -134,7 +111,7 @@ function registerDashboardRoutes(app, plugin) {
                         latitude: u.lat,
                         longitude: u.lng,
                         accuracy: null,
-                        recorded_at: (u.time || new Date().toISOString()).slice(0, 10),
+                        recorded_at: u.time || new Date().toISOString(),
                         createdById: u.uid
                     }
                 });
@@ -146,7 +123,7 @@ function registerDashboardRoutes(app, plugin) {
             ctx.status = 500;
             ctx.body = { data: null, error: e.message };
         }
-    }, { before: 'dataSource' });
+    }, { tag: 'dashboard-home', before: 'dataSource' });
     // Dashboard snapshot - aggregated data for people dynamic page
     app.use(async (ctx, next) => {
         if (ctx.method !== 'GET' || ctx.state.reqPath !== '/__pd__/dashboard-snapshot') {
@@ -281,17 +258,17 @@ function registerDashboardRoutes(app, plugin) {
                 }
                 const bclDateStr = ymdToDateStr(summaryDate);
                 const existingLog = await db.getRepository('construction_daily_log').findOne({
-                    filter: { 'link-projectID': projectId, log_date: bclDateStr }
+                    filter: { project_id: projectId, log_date: bclDateStr }
                 });
                 let logId = null;
                 if (!existingLog) {
                     const logRecord = await db.getRepository('construction_daily_log').create({
                         values: {
-                            'link-projectID': projectId,
+                            project_id: projectId,
                             log_date: summaryDate,
                             weather: weather,
-                            summary_content: '\u4eca\u65e5\u586b\u62a5' + entryCount + '\u6761\uff0c\u6d89\u53ca' + workerCount + '\u4eba\u6b21',
-                            status: '\u5f85\u5ba1\u6838',
+                            summary_content: '今日填报' + entryCount + '条，涉及' + workerCount + '人次',
+                            status: '待审核',
                             previous_status: ''
                         }
                     });
@@ -310,8 +287,8 @@ function registerDashboardRoutes(app, plugin) {
                         values: {
                             project_id: projectId,
                             briefing_type: 'construction_daily',
-                            title: '\u65bd\u5de5\u65e5\u62a5 - ' + summaryDate,
-                            summary: '\u9879\u76eeID:' + projectId + ' \u586b\u62a5' + entryCount + '\u6761 \u5de5\u4eba' + workerCount + '\u4eba \u5929\u6c14:' + weather,
+                            title: '施工日报 - ' + summaryDate,
+                            summary: '项目ID:' + projectId + ' 填报' + entryCount + '条 工人' + workerCount + '人 天气:' + weather,
                             briefing_date: summaryDate,
                             source_workflow_id: 366321793040403
                         }
@@ -331,9 +308,9 @@ function registerDashboardRoutes(app, plugin) {
             ctx.body = { code: 0, data: { created: logs.length, logs: logs, briefings: briefings } };
         }
         catch (e) {
-            ctx.body = { code: -1, msg: e.message };
+            ctx.body = { code: -1, msg: e.message, stack: e.stack };
         }
-    }, { before: 'dataSource' });
+    }, { tag: 'dashboard-home', before: 'dataSource' });
     // Daily summary status endpoint
     app.use(async (ctx, next) => {
         if (ctx.method !== 'GET' || ctx.state.reqPath !== '/__pd__/daily-summary-status') {
@@ -342,21 +319,15 @@ function registerDashboardRoutes(app, plugin) {
         ctx.withoutDataWrapping = true;
         ctx.type = 'application/json; charset=utf-8';
         try {
-            let projectID = parseInt(ctx.query.projectID);
-            let date = parseInt(ctx.query.date);
             const projectNameNo = ctx.query.projectNameNo;
-            if (!projectID && projectNameNo && date) {
-                const proj = await db.getRepository('projects').findOne({ filter: { project_code: projectNameNo } });
-                if (proj)
-                    projectID = proj.id;
-            }
-            if (!projectID || !date) {
-                ctx.body = { code: -1, msg: 'Missing projectID or date' };
+            const date = parseInt(ctx.query.date);
+            if (!projectNameNo || !date) {
+                ctx.body = { code: -1, msg: 'Missing projectNameNo or date' };
                 return;
             }
             const dateStr = ymdToDateStr(date);
             const entries = await db.getRepository('construction_daily_entries').find({
-                filter: { projectID: projectID, entry_date: dateStr },
+                filter: { project_name_NO: projectNameNo, entry_date: dateStr },
                 sort: ['createdAt']
             });
             const reporterIds = [];
@@ -381,145 +352,25 @@ function registerDashboardRoutes(app, plugin) {
                 }
             }
             const log = await db.getRepository('construction_daily_log').findOne({
-                filter: { 'link-projectID': projectID, log_date: dateStr }
+                filter: { project_name_NO: projectNameNo, log_date: dateStr }
             });
             ctx.body = {
                 code: 0,
                 data: {
                     entryCount: entries.length,
                     submitters: submitters,
-                    aggregated: !!(log?.exclude?.aggregated?.entryNo),
+                    aggregated: !!(log && log.getDataValue && log.getDataValue('aggregated_up_to')),
                     logId: log ? log.get('id') : null
                 }
             };
         }
         catch (e) {
-            ctx.body = { code: -1, msg: e.message };
+            ctx.body = { code: -1, msg: e.message, stack: e.stack };
         }
-    }, { before: 'dataSource' });
-    // Aggregation GET endpoint — for iframe form submission (runs before dataSource to avoid 404)
+    }, { tag: 'dashboard-home', before: 'dataSource' });
+    // Aggregation endpoint — aggregates entry data into the log record
     app.use(async (ctx, next) => {
-        if (ctx.method !== 'GET' || ctx.state.reqPath !== '/__pd__/aggregate-log') {
-            return await next();
-        }
-        ctx.withoutDataWrapping = true;
-        ctx.type = 'application/json; charset=utf-8';
-        try {
-            const q = ctx.query;
-            let projectID = q.projectID ? parseInt(q.projectID) : (q['link-projectID'] ? parseInt(q['link-projectID']) : null);
-            if (!projectID && q.projectNameNo) {
-                let proj = await db.getRepository('projects').findOne({ filter: { project_code: q.projectNameNo } });
-                if (!proj)
-                    proj = await db.getRepository('projects').findOne({ filter: { project_name: q.projectNameNo } });
-                if (proj)
-                    projectID = proj.id;
-            }
-            const rawDate = q.date || q.log_date;
-            let date = null;
-            if (rawDate) {
-                const s = String(rawDate);
-                if (s.includes('-'))
-                    date = parseInt(s.replace(/-/g, ''));
-                else
-                    date = parseInt(s);
-            }
-            if (!projectID || !date) {
-                ctx.body = { code: -1, msg: 'Missing projectID or date' };
-                return;
-            }
-            const dateStr = ymdToDateStr(date);
-            // Dedup: find the MAX aggregated_up_to across ALL logs for this project+date
-            const allLogs = await db.getRepository('construction_daily_log').find({
-                filter: { 'link-projectID': projectID, log_date: dateStr }
-            });
-            let globalMaxUpTo = null;
-            for (const lg of allLogs) {
-                const excludeRaw = lg.get('exclude');
-                const excludeObj = typeof excludeRaw === 'string' ? JSON.parse(excludeRaw) : excludeRaw;
-                const upToFromExclude = excludeObj?.aggregated?.entryNo || null;
-                const upToFromField = lg.get('aggregated_up_to') || null;
-                const upTo = upToFromExclude || upToFromField;
-                if (upTo && (!globalMaxUpTo || upTo > globalMaxUpTo)) {
-                    globalMaxUpTo = upTo;
-                }
-            }
-            const allEntries = await db.getRepository('construction_daily_entries').find({
-                filter: { projectID: projectID, entry_date: dateStr },
-                sort: ['createdAt']
-            });
-            // Dedup: only aggregate entries newer than global max
-            const entries = globalMaxUpTo
-                ? allEntries.filter((e) => e.get('id') > globalMaxUpTo)
-                : allEntries;
-            if (!entries || entries.length === 0) {
-                ctx.body = { code: 0, data: { work_content: '', quality_issues: '', safety_issues: '', others: '', personnel_count: '', equipment_usage: '', material_usage: '', weather: '', attachments: [] }, entryCount: 0, skipped: allEntries.length > 0, message: allEntries.length > 0 ? '已汇总过，无新增填报' : '暂无填报数据' };
-                return;
-            }
-            const textFields = ['work_content', 'quality_issues', 'safety_issues', 'others', 'personnel_count', 'equipment_usage', 'material_usage'];
-            const result = {};
-            for (const f of textFields) {
-                const parts = [];
-                let n = 0;
-                for (const e of entries) {
-                    const v = e.get(f);
-                    if (v && typeof v === 'string' && v.trim()) {
-                        parts.push((++n) + '. ' + v.trim());
-                    }
-                }
-                result[f] = parts.join('\n');
-            }
-            let weather = '';
-            for (const e of entries) {
-                const w = e.get('weather');
-                if (w && typeof w === 'string' && w.trim()) {
-                    weather = w.trim();
-                    break;
-                }
-            }
-            result.weather = weather;
-            // Query attachments: merge entry_attachments (new) + log_attachments (already aggregated)
-            const entryIds = entries.map((e) => e.get('id'));
-            let attIdSet = new Set();
-            // 1. entry_attachments from new entries
-            if (entryIds.length > 0) {
-                const placeholders = entryIds.map((_, i) => ':id' + i).join(',');
-                const replacements = {};
-                entryIds.forEach((id, i) => { replacements['id' + i] = id; });
-                const links = await db.sequelize.query('SELECT attachment_id FROM entry_attachments WHERE entry_id IN (' + placeholders + ')', { replacements, type: db.sequelize.QueryTypes.SELECT });
-                for (const l of links) {
-                    if (l.attachment_id)
-                        attIdSet.add(l.attachment_id);
-                }
-            }
-            // 2. log_attachments by project_id + log_date (already aggregated)
-            const logAttLinks = await db.sequelize.query('SELECT attachment_id FROM log_attachments WHERE project_id = :pid AND log_date = :dt', { replacements: { pid: projectID, dt: dateStr }, type: db.sequelize.QueryTypes.SELECT });
-            for (const l of logAttLinks) {
-                if (l.attachment_id)
-                    attIdSet.add(l.attachment_id);
-            }
-            // 3. Query attachment details
-            let attachments = [];
-            if (attIdSet.size > 0) {
-                const attIds = Array.from(attIdSet);
-                const attPlaceholders = attIds.map((_, i) => ':att' + i).join(',');
-                const attReplacements = {};
-                attIds.forEach((id, i) => { attReplacements['att' + i] = id; });
-                attachments = await db.sequelize.query('SELECT id, title, path, filename, size, mimetype FROM attachments WHERE id IN (' + attPlaceholders + ')', { replacements: attReplacements, type: db.sequelize.QueryTypes.SELECT });
-            }
-            result.attachments = attachments;
-            ctx.body = { code: 0, data: result, entryCount: entries.length, totalEntries: allEntries.length, alreadyAggregated: allEntries.length - entries.length };
-        }
-        catch (e) {
-            ctx.body = { code: -1, msg: e.message };
-        }
-    }, { before: 'dataSource' });
-    // Aggregation POST endpoint — aggregates entry data into the log record
-    app.use(async (ctx, next) => {
-        const reqPath = ctx.state.reqPath || ctx.path.replace(/^\/api/, '');
-        if (reqPath !== '/__pd__/aggregate-log') {
-            return await next();
-        }
-        if (ctx.method !== 'POST') {
+        if (ctx.method !== 'POST' || ctx.state.reqPath !== '/__pd__/aggregate-log') {
             return await next();
         }
         ctx.withoutDataWrapping = true;
@@ -527,50 +378,22 @@ function registerDashboardRoutes(app, plugin) {
         try {
             const body = ctx.request.body || {};
             let logId = body.logId ? parseInt(body.logId) : null;
-            let projectID = body.projectID ? parseInt(body.projectID) : (body['link-projectID'] ? parseInt(body['link-projectID']) : (body.project ? (typeof body.project === 'object' ? parseInt(body.project.id) : parseInt(body.project)) : null));
-            if (!projectID && body.projectNameNo) {
-                const proj = await db.getRepository('projects').findOne({ filter: { project_code: body.projectNameNo } });
-                if (proj)
-                    projectID = proj.id;
-            }
-            let date = body.date ? (typeof body.date === 'string' && body.date.includes('-') ? parseInt(body.date.replace(/-/g, '')) : parseInt(body.date)) : null;
+            let projectNameNo = body.projectNameNo ? body.projectNameNo : null;
+            let date = body.date ? parseInt(body.date) : null;
             let log = null;
             if (logId) {
                 log = await db.getRepository('construction_daily_log').findOne({
                     filter: { id: logId }
                 });
             }
-            else if (projectID && date) {
+            else if (projectNameNo && date) {
                 const dateStr = ymdToDateStr(date);
                 log = await db.getRepository('construction_daily_log').findOne({
-                    filter: { 'link-projectID': projectID, log_date: dateStr }
+                    filter: { project_name_NO: projectNameNo, log_date: dateStr }
                 });
                 if (!log) {
-                    const isPreview = body.preview === true || body.preview === 'true';
-                    if (isPreview) {
-                        // Preview mode: return aggregated data without creating log
-                        const entries = await db.getRepository('construction_daily_entries').find({
-                            filter: { projectID: projectID, entry_date: dateStr },
-                            sort: ['createdAt']
-                        });
-                        const textFields = ['work_content', 'quality_issues', 'safety_issues', 'others', 'personnel_count', 'equipment_usage', 'material_usage'];
-                        const result = {};
-                        for (const f of textFields) {
-                            const parts = [];
-                            let n = 0;
-                            for (const e of entries) {
-                                const v = e.get(f);
-                                if (v && typeof v === 'string' && v.trim()) {
-                                    parts.push((++n) + '. ' + v.trim());
-                                }
-                            }
-                            result[f] = parts.join('\n');
-                        }
-                        ctx.body = { code: 0, data: { entries: entries.length, result } };
-                        return;
-                    }
                     const entriesForWeather = await db.getRepository('construction_daily_entries').find({
-                        filter: { projectID: projectID, entry_date: dateStr },
+                        filter: { project_name_NO: projectNameNo, entry_date: dateStr },
                         sort: ['createdAt']
                     });
                     let weather = '';
@@ -583,44 +406,43 @@ function registerDashboardRoutes(app, plugin) {
                     }
                     log = await db.getRepository('construction_daily_log').create({
                         values: {
-                            'link-projectID': projectID,
-                            log_date: dateStr,
+                            project_name_NO: projectNameNo,
+                            log_date: date,
                             weather: weather,
-                            status: '\u5f85\u5ba1\u6838',
+                            status: '待审核',
                             previous_status: ''
                         }
                     });
                 }
             }
             else {
-                ctx.body = { code: -1, msg: 'Missing logId or (projectID + date)' };
+                ctx.body = { code: -1, msg: 'Missing logId or (projectNameNo + date)' };
                 return;
             }
             if (!log) {
                 ctx.body = { code: -1, msg: 'Log not found' };
                 return;
             }
-            projectID = log.get('link-projectID');
+            projectNameNo = log.get('project_name_NO');
             const rawDate = log.get('log_date');
-            const dateStr = normalizeDateStr(rawDate);
+            const dateStr = typeof rawDate === 'object' && rawDate && rawDate.getTime
+                ? dateToDateStr(rawDate)
+                : ymdToDateStr(parseInt(rawDate));
             logId = log.get('id');
             const entries = await db.getRepository('construction_daily_entries').find({
-                filter: { projectID: projectID, entry_date: dateStr },
+                filter: { project_name_NO: projectNameNo, entry_date: dateStr },
                 sort: ['createdAt']
             });
-            const isPreview2 = body.preview === true || body.preview === 'true';
-            const aggregatedUpTo = isPreview2 ? null : (log.exclude?.aggregated?.entryNo || null);
+            const aggregatedUpTo = (log.getDataValue && log.getDataValue('aggregated_up_to')) || null;
             const newEntries = aggregatedUpTo
                 ? entries.filter((e) => e.get('id') > aggregatedUpTo)
                 : entries;
-            const textFields = ['work_content', 'quality_issues', 'safety_issues', 'others', 'personnel_count', 'equipment_usage', 'material_usage'];
             if (newEntries.length === 0) {
-                const emptyResult = {};
-                textFields.forEach(f => emptyResult[f] = '');
-                ctx.body = { code: 0, data: { updated: false, message: '\u6ca1\u6709\u65b0\u589e\u7684\u65e5\u5fd7\u586b\u62a5\u9700\u8981\u6c47\u603b', result: emptyResult } };
+                ctx.body = { code: 0, data: { updated: false, message: '没有新增的日志填报需要汇总' } };
                 return;
             }
-            const countNumberedLines = (text) => {
+            const textFields = ['personnel_count', 'equipment_usage', 'material_usage', 'safety_issues', 'quality_issues', 'work_content', 'others'];
+            function countNumberedLines(text) {
                 if (!text || typeof text !== 'string')
                     return 0;
                 let count = 0;
@@ -630,12 +452,12 @@ function registerDashboardRoutes(app, plugin) {
                         count++;
                 }
                 return count;
-            };
+            }
             const updates = {};
             for (let f = 0; f < textFields.length; f++) {
                 const fieldName = textFields[f];
                 const existingText = log.get(fieldName) || '';
-                let startNum = countNumberedLines(existingText);
+                let startNum = aggregatedUpTo ? countNumberedLines(existingText) : 0;
                 const parts = [];
                 for (let e = 0; e < newEntries.length; e++) {
                     const entry = newEntries[e];
@@ -650,54 +472,24 @@ function registerDashboardRoutes(app, plugin) {
                     updates[fieldName] = existingText + separator + parts.join('\n');
                 }
             }
-            const maxEntryId = newEntries.reduce((max, e) => Math.max(max, e.get('id')), 0);
-            const existingExclude = typeof log.exclude === 'object' && log.exclude ? log.exclude : {};
-            const writeValues = { ...updates, exclude: { ...existingExclude, aggregated: { entryNo: maxEntryId } }, aggregated_up_to: maxEntryId };
             await db.getRepository('construction_daily_log').update({
                 filter: { id: logId },
-                values: writeValues
+                values: updates
             });
-            if (maxEntryId > 0) {
-                await db.sequelize.query('UPDATE construction_daily_log SET aggregated_up_to = :val WHERE id = :id', { replacements: { val: maxEntryId, id: logId }, type: db.sequelize.QueryTypes.UPDATE });
-            }
-            // Copy attachments from entry_attachments -> log_attachments
-            const newEntryIds = newEntries.map((e) => e.get('id'));
-            let copiedAttachments = 0;
-            if (newEntryIds.length > 0) {
-                const placeholders = newEntryIds.map((_, i) => ':eid' + i).join(',');
-                const entryReplacements = {};
-                newEntryIds.forEach((id, i) => { entryReplacements['eid' + i] = id; });
-                const links = await db.sequelize.query('SELECT DISTINCT attachment_id FROM entry_attachments WHERE entry_id IN (' + placeholders + ')', { replacements: entryReplacements, type: db.sequelize.QueryTypes.SELECT });
-                // Delete existing log_attachments for this log (idempotent re-aggregate)
-                await db.sequelize.query('DELETE FROM log_attachments WHERE log_id = :logId', { replacements: { logId }, type: db.sequelize.QueryTypes.DELETE });
-                for (const link of links) {
-                    const attId = link.attachment_id;
-                    if (!attId)
-                        continue;
-                    try {
-                        await db.sequelize.query("INSERT INTO log_attachments (log_id, attachment_id, project_id, log_date, \"createdAt\", \"updatedAt\") VALUES (:logId, :attId, :pid, :ldt, NOW(), NOW()) ON CONFLICT DO NOTHING", { replacements: { logId, attId, pid: projectID, ldt: dateStr }, type: db.sequelize.QueryTypes.INSERT });
-                        copiedAttachments++;
-                    }
-                    catch (_e) { /* skip duplicates */ }
+            const maxEntryId = newEntries.reduce((max, e) => Math.max(max, e.get('id')), 0);
+            await db.sequelize.query('UPDATE construction_daily_log SET aggregated_up_to = :val WHERE id = :id', { replacements: { val: maxEntryId, id: logId }, type: db.sequelize.QueryTypes.UPDATE });
+            ctx.body = {
+                code: 0,
+                data: {
+                    updated: true,
+                    newEntryCount: newEntries.length,
+                    totalEntryCount: entries.length,
+                    fields: Object.keys(updates).filter((k) => k !== 'aggregated_up_to')
                 }
-            }
-            const resultData = {
-                updated: true,
-                newEntryCount: newEntries.length,
-                totalEntryCount: entries.length,
-                fields: Object.keys(updates),
-                values: updates,
-                attachmentsCopied: copiedAttachments,
             };
-            if (isPreview2) {
-                resultData.result = updates;
-            }
-            ctx.body = { code: 0, data: resultData };
-            return;
         }
         catch (e) {
-            ctx.body = { code: -1, msg: e.message };
-            return;
+            ctx.body = { code: -1, msg: e.message, stack: e.stack };
         }
-    }, { tag: 'dashboard-home', before: 'resourcer' });
+    }, { tag: 'dashboard-home', before: 'dataSource' });
 }
