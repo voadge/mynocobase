@@ -65,6 +65,13 @@ if ($LASTEXITCODE -eq 0) {
     Write-Host "   ✓ dashboard/assets/" -ForegroundColor Green
 }
 
+# BUGFIX: SCP 有时会创建嵌套的 assets/assets/ 目录，删掉它
+$nestedAssets = "$localAssets\assets"
+if (Test-Path $nestedAssets) {
+    Remove-Item -Recurse -Force $nestedAssets
+    Write-Host "   ⚠ 清理冗余的 assets/assets/ 嵌套目录" -ForegroundColor Yellow
+}
+
 Write-Host ""
 Write-Host "3. 同步插件 dist/ 目录..." -ForegroundColor Yellow
 foreach ($plugin in @("nocobase-plugin-dashboard-home", "nocobase-plugin-print-template")) {
