@@ -264,6 +264,8 @@
 </div>
 
 <script>
+// ========== URL token injection (for Mini Program web-view) ==========
+(function(){var m=location.search.match(/[?&]token=([^&]*)/);if(m&&m[1]){localStorage.setItem("NOCOBASE_TOKEN",m[1]);}})();
 // ========== 常量 & 状态 ==========
 var token = localStorage.getItem("NOCOBASE_TOKEN") || localStorage.getItem("nocobase_token");
 var headers = { 'Content-Type': 'application/json' };

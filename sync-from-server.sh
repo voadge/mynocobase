@@ -30,6 +30,7 @@ SYNC_ITEMS=(
   "dashboard/百宝箱.html"
   "dashboard/行程发票报销助手.html"
   "dashboard/智能排版打印助手.html"
+  "dashboard/人员动态.html"
   "dashboard/sw.js"
   "dashboard/nb-version.json"
   "dashboard/mappings.json"
