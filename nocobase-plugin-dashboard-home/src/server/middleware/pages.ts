@@ -26,7 +26,9 @@ export function registerPageRoutes(app: any): void {
       return await next();
     }
 
-    if (await isAuthenticated(ctx)) {
+    const isPublic = ['/__tb__', '/__fp__', '/__tp__'].indexOf(ctx.state.reqPath) >= 0;
+
+    if (isPublic || (await isAuthenticated(ctx))) {
       ctx.withoutDataWrapping = true;
       ctx.set('Cache-Control', 'no-cache, no-store, must-revalidate');
       ctx.set('Pragma', 'no-cache');
