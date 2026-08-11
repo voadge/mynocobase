@@ -423,7 +423,7 @@ window.addEventListener("unhandledrejection", function(e) {
 
         function openNocoBase() {
             if (window.innerWidth < 768) {
-                openDrawer(NOCOBASE_HOME, 'NocoBase 后台');
+                window.location.href = '/signin';
             } else {
                 window.open(NOCOBASE_HOME, '_blank');
             }
