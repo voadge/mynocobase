@@ -14,9 +14,6 @@ import { registerDashboardRoutes } from './middleware/dashboard';
 import { registerWeatherRoutes } from './middleware/weather';
 import { registerPeopleDynamicRoutes } from './middleware/people-dynamic';
 import { registerMpLoginRoutes } from './middleware/mp-login';
-import { registerDeptAdminApi } from './middleware/dept-admin-api';
-import { registerDeptAdminPages } from './middleware/dept-admin-pages';
-import { registerDepartmentAcl } from './middleware/department-acl';
 import { qwFetch, QW_WEATHER_HOST } from './utils/qw-jwt';
 
 
@@ -40,45 +37,9 @@ module.exports = class DashboardHomePlugin extends Plugin {
       arCol.sync({ alter: true });
     }
 
-    // Register department_acl_rules collection
-    db.collection({
-      name: 'department_acl_rules',
-      fields: [
-        { type: 'bigInt', name: 'id', primaryKey: true, autoIncrement: true },
-        { type: 'belongsTo', name: 'department', target: 'departments', foreignKey: 'departmentId' },
-        { type: 'integer', name: 'priority', defaultValue: 100 },
-        { type: 'string', name: 'mode', defaultValue: 'dept' },
-        { type: 'belongsTo', name: 'role', target: 'roles', foreignKey: 'roleId' },
-        { type: 'string', name: 'resourceName' },
-        { type: 'string', name: 'action' },
-        { type: 'boolean', name: 'allow', defaultValue: true },
-        { type: 'json', name: 'dataScope', nullable: true },
-        { type: 'string', name: 'ruleNo', nullable: true },
-        { type: 'text', name: 'remark', nullable: true },
-        { type: 'boolean', name: 'enabled', defaultValue: true },
-        { type: 'belongsTo', name: 'createdBy', target: 'users' },
-      ],
-    });
-
-    // Register department_approval_routes collection
-    db.collection({
-      name: 'department_approval_routes',
-      fields: [
-        { type: 'bigInt', name: 'id', primaryKey: true, autoIncrement: true },
-        { type: 'string', name: 'name' },
-        { type: 'string', name: 'levelKey' },
-        { type: 'string', name: 'mode', defaultValue: 'dept' },
-        { type: 'belongsTo', name: 'department', target: 'departments', foreignKey: 'departmentId' },
-        { type: 'belongsTo', name: 'role', target: 'roles', foreignKey: 'roleId' },
-        { type: 'text', name: 'remark', nullable: true },
-        { type: 'boolean', name: 'enabled', defaultValue: true },
-        { type: 'belongsTo', name: 'createdBy', target: 'users' },
-      ],
-    });
-
     await db.sync();
 
-    // Normalize path �?strip /api prefix for consistent path matching
+    // Normalize path �?strip /api prefix for consistent path matching
     app.use(async (ctx: any, next: () => Promise<void>) => {
       ctx.state.reqPath = ctx.path.replace(/^\/api/, '');
       await next();
@@ -192,15 +153,6 @@ module.exports = class DashboardHomePlugin extends Plugin {
     registerPeopleDynamicRoutes(app);
     registerMpLoginRoutes(app);
 
-    // Register department ACL middleware (injects into ACL pipeline before core)
-    registerDepartmentAcl(app, db);
-
-    // Register department admin API
-    registerDeptAdminApi(app, pluginRef);
-
-    // Register department admin pages
-    registerDeptAdminPages(app);
-
     // Middleware: auto-fill weather for construction_daily_log create/trigger
     app.resourceManager.use(async (ctx: any, next: () => Promise<void>) => {
       const action = ctx.action || {};
@@ -257,28 +209,6 @@ module.exports = class DashboardHomePlugin extends Plugin {
       }
       await next();
     });
-
-    // Middleware: enrich auth:check response with departments (for linkage rules)
-    app.resourceManager.use(async (ctx: any, next: () => Promise<void>) => {
-      await next();
-      const action = ctx.action || {};
-      if (action.resourceName === 'auth' && action.actionName === 'check') {
-        const body = ctx.body;
-        if (body && body.data && body.data.id && !body.data.departments) {
-          try {
-            const user = await db.getRepository('users').findOne({
-              filterByTk: body.data.id,
-              appends: ['departments']
-            });
-            if (user && user.departments) {
-              body.data.departments = user.departments;
-            }
-          } catch (e) {
-            console.log('[auth-check-enrich] Error:', e.message);
-          }
-        }
-      }
-    }, { tag: 'dashboard-home-auth-enrich', after: 'dataSource' });
 
     // Auto-fill hooks for construction daily entries and logs
     const entriesCol = db.getCollection('construction_daily_entries');
@@ -475,35 +405,6 @@ module.exports = class DashboardHomePlugin extends Plugin {
       });
     }
 
-    // ACL context endpoint for frontend department linkage (placed before auth-check)
-    app.use(async (ctx: any, next: () => Promise<void>) => {
-      if (ctx.method !== 'GET' || ctx.state.reqPath !== '/__pd__/acl-context') {
-        return await next();
-      }
-      try {
-        const user = ctx.state.currentUser;
-        if (!user) {
-          ctx.status = 401;
-          ctx.body = { error: 'Unauthenticated' };
-          return;
-        }
-        ctx.body = {
-          user: {
-            id: user.id,
-            mainDepartmentId: user.mainDepartmentId,
-            departmentIds: user.departments?.map((d: any) => d.id) || [],
-            departments: user.departments || [],
-          },
-          attachRoles: ctx.state.attachRoles || [],
-        };
-      } catch (e) {
-        console.error('[acl-context] Error:', e.message);
-        ctx.status = 500;
-        ctx.body = { error: 'Internal server error', message: e.message };
-      }
-      await next();
-    }, { before: 'dataSource' });
-
     // Auth-check endpoint for nginx auth_request
     app.use(async (ctx: any, next: () => Promise<void>) => {
       if (ctx.method !== 'GET' || ctx.state.reqPath !== '/__auth_check__') {
@@ -535,8 +436,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Ar
 .btn:disabled{background:#bfbfbf;cursor:not-allowed}
 </style></head><body>
 <div class="row"><label>椤圭洰缂栧彿</label><input id="c" placeholder="璇诲彇涓?.."/></div>
-<div class="row"><label>鏃ユ�?/label><input id="d" type="date"/></div>
-<div class="info">宸插～鎶ワ細<span class="cnt" id="n">0</span> �?<span class="done" id="ok">&#x2713; 宸叉眹鎬?/span></div>
+<div class="row"><label>鏃ユ�?/label><input id="d" type="date"/></div>
+<div class="info">宸插～鎶ワ細<span class="cnt" id="n">0</span> �?<span class="done" id="ok">&#x2713; 宸叉眹鎬?/span></div>
 <button class="btn" id="b">&#x26A1; 姹囨€绘棩蹇?/button>
 <script>
 (function(){
@@ -550,8 +451,8 @@ try{
     if(!lb)continue;
     var txt=lb.textContent,inp=items[i].querySelector('input');
     if(!inp)continue;
-    if((txt.indexOf('椤圭�?)>=0||txt.indexOf('缂╁�?)>=0)&&inp.value)c.value=inp.value;
-    if(txt.indexOf('鏃ユ�?)>=0&&inp.value)d.value=inp.value;
+    if((txt.indexOf('椤圭�?)>=0||txt.indexOf('缂╁�?)>=0)&&inp.value)c.value=inp.value;
+    if(txt.indexOf('鏃ユ�?)>=0&&inp.value)d.value=inp.value;
   }
   if(c.value){c.style.background='#f0f5ff';c.style.borderColor='#91d5ff'}
   else console.log('[agg] project field not found in parent DOM');
@@ -566,7 +467,7 @@ async function rf(){var code=c.value.trim(),dt=d.value;if(!code||!dt){n.textCont
 c.addEventListener('change',rf);d.addEventListener('change',rf);
 if(code&&d.value)setTimeout(rf,300);
 
-b.addEventListener('click',async function(){var code=c.value.trim(),dt=d.value;if(!code||!dt){alert('璇峰～鍐欓」鐩紪鍙峰拰鏃ユ湡');return}var ymd=parseInt(dt.replace(/-/g,''));b.disabled=true;b.textContent='姹囨€讳�?..';try{var r=await fetch('/api/__pd__/aggregate-log',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({projectNameNo:code,date:ymd})});var j=await r.json();if(j.code===0&&j.data?.updated)alert('姹囨€诲畬鎴愶紝鏂板�?'+j.data.newEntryCount+' �?);else if(j.code===0)alert(j.data?.message||'娌℃湁鏂板唴瀹归渶瑕佹眹�?);else alert('姹囨€诲け璐ワ細'+(j.msg||'鏈煡閿欒'));rf()}catch(e){alert('姹囨€诲け璐? '+e.message)}finally{b.disabled=false;b.textContent='\u26A1 姹囨€绘棩蹇?}});
+b.addEventListener('click',async function(){var code=c.value.trim(),dt=d.value;if(!code||!dt){alert('璇峰～鍐欓」鐩紪鍙峰拰鏃ユ湡');return}var ymd=parseInt(dt.replace(/-/g,''));b.disabled=true;b.textContent='姹囨€讳�?..';try{var r=await fetch('/api/__pd__/aggregate-log',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({projectNameNo:code,date:ymd})});var j=await r.json();if(j.code===0&&j.data?.updated)alert('姹囨€诲畬鎴愶紝鏂板�?'+j.data.newEntryCount+' �?);else if(j.code===0)alert(j.data?.message||'娌℃湁鏂板唴瀹归渶瑕佹眹�?);else alert('姹囨€诲け璐ワ細'+(j.msg||'鏈煡閿欒'));rf()}catch(e){alert('姹囨€诲け璐? '+e.message)}finally{b.disabled=false;b.textContent='\u26A1 姹囨€绘棩蹇?}});
 })();
 </script></body></html>`;
     }, { tag: 'dashboard-home', before: 'dataSource' });

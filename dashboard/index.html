@@ -1590,7 +1590,7 @@ window.addEventListener("unhandledrejection", function(e) {
                 var _listHeaders = {};
                 if (_listToken) _listHeaders['Authorization'] = 'Bearer ' + _listToken;
                 var r = await fetch('/api/attendance_records:list?filter[check_time][$dateBetween]=' +
-                    encodeURIComponent(start) + ',' + encodeURIComponent(end) +
+                    encodeURIComponent('[' + start + ',' + end + ']') +
                     '&sort=-check_time&pageSize=10&appends=createdBy', { credentials:'include', headers:_listHeaders });
                 if (r.ok) {
                     var data = await r.json();
