@@ -8,8 +8,7 @@ import fs from 'fs';
 
 const JWT_PATH = '/app/nocobase/node_modules/@nocobase/plugin-print-template/node_modules/jsonwebtoken';
 const APP_KEY_PATH = '/run/secrets/app_key';
-const WX_OAUTH_TOKEN_URL = 'https://api.weixin.qq.com/sns/oauth2/access_token';
-const WX_USERINFO_URL = 'https://api.weixin.qq.com/sns/userinfo';
+const WX_JSCODE2SESSION_URL = 'https://api.weixin.qq.com/sns/jscode2session';
 
 function readAppKey(): string {
   return fs.readFileSync(APP_KEY_PATH, 'utf8').trim();
@@ -32,22 +31,15 @@ function wxRequest(url: string): Promise<any> {
   });
 }
 
-async function getWxUserInfo(appId: string, appSecret: string, code: string): Promise<{ openid: string; nickname: string } | null> {
-  // Step1: exchange code for access_token
-  const tokenResp = await wxRequest(
-    `${WX_OAUTH_TOKEN_URL}?appid=${appId}&secret=${appSecret}&code=${code}&grant_type=authorization_code`
+async function getWxOpenid(appId: string, appSecret: string, code: string): Promise<string | null> {
+  // jscode2session is the correct endpoint for mini program wx.login() code
+  const resp = await wxRequest(
+    `${WX_JSCODE2SESSION_URL}?appid=${appId}&secret=${appSecret}&js_code=${code}&grant_type=authorization_code`
   );
-  if (tokenResp.errcode || !tokenResp.access_token || !tokenResp.openid) {
+  if (resp.errcode || !resp.openid) {
     return null;
   }
-  // Step2: get user info
-  const infoResp = await wxRequest(
-    `${WX_USERINFO_URL}?access_token=${tokenResp.access_token}&openid=${tokenResp.openid}&lang=zh_CN`
-  );
-  if (infoResp.errcode || !infoResp.openid) {
-    return { openid: tokenResp.openid, nickname: '' };
-  }
-  return { openid: infoResp.openid, nickname: infoResp.nickname || '' };
+  return resp.openid;
 }
 
 export function registerMpLoginRoutes(app: any): void {
@@ -59,7 +51,7 @@ export function registerMpLoginRoutes(app: any): void {
     ctx.withoutDataWrapping = true;
     ctx.type = 'application/json; charset=utf-8';
     try {
-      const { code } = ctx.request.body || {};
+      const { code, wxNickname } = ctx.request.body || {};
       if (!code) {
         ctx.body = { code: -1, msg: '缺少参数code' };
         return;
@@ -70,16 +62,16 @@ export function registerMpLoginRoutes(app: any): void {
         ctx.body = { code: -1, msg: 'WX_APP_SECRET not configured' };
         return;
       }
-      const wxInfo = await getWxUserInfo(appId, appSecret, code);
-      if (!wxInfo || !wxInfo.openid) {
+      const openid = await getWxOpenid(appId, appSecret, code);
+      if (!openid) {
         ctx.body = { code: -1, msg: '微信登录失败' };
         return;
       }
-      const { openid, nickname: wxNickname } = wxInfo;
+      // wxNickname comes from mini program's wx.getUserProfile() (server cannot fetch it for mini program)
       const repo = ctx.db.getRepository('users');
       const user = await repo.findOne({ filter: { WeChat: openid } });
       if (!user) {
-        ctx.body = { code: 0, data: { openid, wxNickname, needBind: true } };
+        ctx.body = { code: 0, data: { openid, wxNickname: wxNickname || '', needBind: true } };
         return;
       }
       const appKey = readAppKey();
