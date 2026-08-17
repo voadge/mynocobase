@@ -282,8 +282,8 @@ var page = Page({
       data: body,
       success: function(res) {
         if (res.statusCode === 200) {
-          if (this.data.attendType === '上班') LocationTracker.startTracking(this.data.token);
-          if (this.data.attendType === '下班') LocationTracker.stopTracking();
+          if (self.data.attendType === '上班') LocationTracker.startTracking(self.data.token);
+          if (self.data.attendType === '下班') LocationTracker.stopTracking();
           wx.showToast({ title: '✅ ' + (isLeave ? '提交成功' : '打卡成功'), icon: 'success' });
           setTimeout(function() { wx.navigateBack(); }, 1500);
         } else {
