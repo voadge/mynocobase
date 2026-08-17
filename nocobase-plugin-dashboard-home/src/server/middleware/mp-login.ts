@@ -103,14 +103,17 @@ export function registerMpLoginRoutes(app: any): void {
         appends: ['departments'],
         sort: ['nickname'],
       });
-      const list = users.map((u: any) => ({
-        id: u.id,
-        nickname: u.nickname,
-        email: u.email,
-        phone: u.phone,
-        department: u.departments && u.departments.length > 0 ? u.departments[0].name : '',
-        bound: !!u.WeChat,
-      }));
+      // Only show unbound users in the binding selection list
+      const list = users
+        .filter((u: any) => !u.WeChat)
+        .map((u: any) => ({
+          id: u.id,
+          nickname: u.nickname,
+          email: u.email,
+          phone: u.phone,
+          department: u.departments && u.departments.length > 0 ? u.departments[0].name : '',
+          bound: !!u.WeChat,
+        }));
       ctx.body = { code: 0, data: { users: list } };
     } catch (e: any) {
       ctx.body = { code: -1, msg: e.message };
