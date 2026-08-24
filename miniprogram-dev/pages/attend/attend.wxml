@@ -35,9 +35,9 @@
         {{gpsState==='ok' ? '✅ 已获取' : gpsState==='waiting' ? '获取中...' : '❌ 定位失败'}}
       </text>
     </view>
-    <view class="info-row" wx:if="{{location}}">
+    <view class="info-row" wx:if="{{coordText}}">
       <text class="info-label">🌐 坐标</text>
-      <text class="info-value">{{location.lat.toFixed(5)}}, {{location.lng.toFixed(5)}}</text>
+      <text class="info-value">{{coordText}}</text>
     </view>
     <view class="info-row">
       <text class="info-label">📍 围栏</text>

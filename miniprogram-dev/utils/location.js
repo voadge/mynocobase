@@ -71,15 +71,26 @@ function _reportLocation(token) {
 function _flushCache(token) {
   var cache = _loadCache();
   if (!cache.length) return;
-  var batch = cache.splice(0, 10);
-  wx.request({
-    url: getApp().globalData.baseUrl + '/api/location_history:create',
-    method: 'POST',
-    header: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-    data: batch.length === 1 ? batch[0] : batch,
-    success: function() { _saveCache(cache); },
-    fail: function() { cache = batch.concat(cache); _saveCache(cache); }
-  });
+  var pending = cache.slice();
+  var stillPending = cache.slice();
+  function next(idx) {
+    if (idx >= pending.length) return;
+    var item = pending[idx];
+    wx.request({
+      url: getApp().globalData.baseUrl + '/api/location_history:create',
+      method: 'POST',
+      header: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      data: item,
+      success: function() {
+        var k = stillPending.indexOf(item);
+        if (k >= 0) stillPending.splice(k, 1);
+        _saveCache(stillPending);
+        next(idx + 1);
+      },
+      fail: function() { next(idx + 1); }
+    });
+  }
+  next(0);
 }
 
 module.exports = {

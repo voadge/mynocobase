@@ -49,18 +49,25 @@ Page({
 
   exchangeToken(code) {
     console.log('[index] exchangeToken, code:', code.substring(0, 10) + '...');
-    // Get WeChat nickname from user profile (server cannot fetch it for mini program)
-    wx.getUserProfile({
-      desc: '用于绑定微信账号',
-      success: (profileRes) => {
-        const wxNickname = profileRes.userInfo ? profileRes.userInfo.nickName : '';
-        this.sendLoginRequest(code, wxNickname);
-      },
-      fail: () => {
-        // User declined or API unavailable - proceed without nickname
-        this.sendLoginRequest(code, '');
+    // Get WeChat nickname from user profile (server cannot fetch it for mini program).
+    // wx.getUserProfile requires base library >= 2.10.4; fall back to wx.getUserInfo on older libs.
+    const getNickname = (cb) => {
+      if (wx.getUserProfile) {
+        wx.getUserProfile({
+          desc: '用于绑定微信账号',
+          success: (res) => cb(res.userInfo ? res.userInfo.nickName : ''),
+          fail: () => cb('')
+        });
+      } else if (wx.getUserInfo) {
+        wx.getUserInfo({
+          success: (res) => cb(res.userInfo ? res.userInfo.nickName : ''),
+          fail: () => cb('')
+        });
+      } else {
+        cb('');
       }
-    });
+    };
+    getNickname((wxNickname) => this.sendLoginRequest(code, wxNickname));
   },
 
   sendLoginRequest(code, wxNickname) {

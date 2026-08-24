@@ -1,85 +1,14 @@
 const app = getApp();
 var LocationTracker = require('../../utils/location');
 
-function haversineDist(lat1, lon1, lat2, lon2) {
-  var R = 6371000, toRad = Math.PI / 180;
-  var dLat = (lat2 - lat1) * toRad, dLon = (lon2 - lon1) * toRad;
-  var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-          Math.cos(lat1 * toRad) * Math.cos(lat2 * toRad) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
-function pointToSegmentDistance(lat, lon, lat1, lon1, lat2, lon2) {
-  var dAC = haversineDist(lat, lon, lat1, lon1);
-  var dBC = haversineDist(lat, lon, lat2, lon2);
-  var dAB = haversineDist(lat1, lon1, lat2, lon2);
-  if (dAB < 1) return dAC;
-  var cosA = (dAC * dAC + dAB * dAB - dBC * dBC) / (2 * dAC * dAB);
-  var cosB = (dBC * dBC + dAB * dAB - dAC * dAC) / (2 * dBC * dAB);
-  if (cosA <= 0) return dAC;
-  if (cosB <= 0) return dBC;
-  var s = (dAC + dBC + dAB) / 2;
-  var area = Math.sqrt(Math.max(0, s * (s - dAC) * (s - dBC) * (s - dAB)));
-  return area * 2 / dAB;
-}
-
-function distanceToPolyline(lat, lon, polyline) {
-  var minDist = Infinity;
-  for (var i = 0; i < polyline.length - 1; i++) {
-    var dist = pointToSegmentDistance(lat, lon, polyline[i][1], polyline[i][0], polyline[i + 1][1], polyline[i + 1][0]);
-    if (dist < minDist) minDist = dist;
+function fenceDisplay(v) {
+  if (!v.matched) return { text: '✅ 无需围栏（自由打卡）', color: '#52c41a', canSubmit: true };
+  if (v.inside) {
+    var ratio = v.bufferRadius ? v.distance / v.bufferRadius : 0;
+    if (ratio > 0.6) return { text: '⚠️ 接近围栏边界 (' + v.distance + 'm)', color: '#faad14', canSubmit: true };
+    return { text: '✅ 围栏内 (' + v.distance + 'm)', color: '#52c41a', canSubmit: true };
   }
-  return Math.round(minDist);
-}
-
-var _pi = 3.141592653589793, _a = 6378245.0, _ee = 0.00669342162296594323;
-function _transformLat(x, y) {
-  var ret = -100 + 2*x + 3*y + 0.2*y*y + 0.1*x*y + 0.2*Math.sqrt(Math.abs(x));
-  ret += (20*Math.sin(6*x*_pi) + 20*Math.sin(2*x*_pi)) * 2/3;
-  ret += (20*Math.sin(y*_pi) + 40*Math.sin(y/3*_pi)) * 2/3;
-  ret += (160*Math.sin(y/12*_pi) + 320*Math.sin(y*_pi/30)) * 2/3;
-  return ret;
-}
-function _transformLng(x, y) {
-  var ret = 300 + x + 2*y + 0.1*x*x + 0.1*x*y + 0.1*Math.sqrt(Math.abs(x));
-  ret += (20*Math.sin(6*x*_pi) + 20*Math.sin(2*x*_pi)) * 2/3;
-  ret += (20*Math.sin(x*_pi) + 40*Math.sin(x/3*_pi)) * 2/3;
-  ret += (150*Math.sin(x/12*_pi) + 300*Math.sin(x/30*_pi)) * 2/3;
-  return ret;
-}
-function _outOfChina(lat, lng) { return lng < 72.004 || lng > 137.8347 || lat < 0.8293 || lat > 55.8271; }
-function wgs84ToGcj02(lat, lng) {
-  if (_outOfChina(lat, lng)) return [lat, lng];
-  var dLat = _transformLat(lng - 105, lat - 35);
-  var dLng = _transformLng(lng - 105, lat - 35);
-  var radLat = lat / 180 * _pi;
-  var magic = Math.sin(radLat);
-  magic = 1 - _ee * magic * magic;
-  var sqrtMagic = Math.sqrt(magic);
-  dLat = (dLat * 180) / ((_a * (1 - _ee)) / (magic * sqrtMagic) * _pi);
-  dLng = (dLng * 180) / (_a / sqrtMagic * Math.cos(radLat) * _pi);
-  return [lat + dLat, lng + dLng];
-}
-
-var __geofencesCache = null, __geofencesCacheTime = 0;
-function fetchGeofences(token) {
-  var now = Date.now();
-  if (__geofencesCache && now - __geofencesCacheTime < 300000) {
-    return Promise.resolve(__geofencesCache);
-  }
-  return new Promise(function(resolve) {
-    wx.request({
-      url: app.globalData.baseUrl + '/api/geofences:list?filter[is_active]=true&sort=sort',
-      header: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-      success: function(res) {
-        var data = res.data || {};
-        __geofencesCache = data.data || [];
-        __geofencesCacheTime = now;
-        resolve(__geofencesCache);
-      },
-      fail: function() { resolve(__geofencesCache || []); }
-    });
-  });
+  return { text: '❌ 围栏外 (' + v.distance + 'm)', color: '#ff4d4f', canSubmit: false };
 }
 
 var page = Page({
@@ -89,10 +18,12 @@ var page = Page({
     attendState: null,
     location: null,
     gpsState: 'waiting',
+    coordText: '',
     photoPath: '',
     fenceResult: null,
     fenceText: '检测围栏...',
     fenceColor: '#888',
+    fenceCanSubmit: true,
     isLeave: false,
     showLeaveForm: false,
     leaveStartDate: '',
@@ -156,61 +87,52 @@ var page = Page({
       isHighAccuracy: true,
       highAccuracyExpireTime: 5000,
       success: function(res) {
-        var loc = { lat: res.latitude, lng: res.longitude, accuracy: res.accuracy || 0 };
-        self.setData({ location: loc, gpsState: 'ok' });
+        var lat = res.latitude, lng = res.longitude;
+        if (typeof lat !== 'number' || typeof lng !== 'number' || !isFinite(lat) || !isFinite(lng)) {
+          self.setData({ gpsState: 'fail', coordText: '定位数据异常', fenceText: '❌ 定位数据异常', fenceColor: '#ff4d4f', fenceCanSubmit: false });
+          return;
+        }
+        var loc = { lat: lat, lng: lng, accuracy: res.accuracy || 0 };
+        self.setData({ location: loc, gpsState: 'ok', coordText: lat.toFixed(5) + ', ' + lng.toFixed(5) });
         self.checkFence(loc);
       },
       fail: function() {
-        self.setData({ gpsState: 'fail', fenceText: '❌ 定位失败', fenceColor: '#ff4d4f' });
+        self.setData({ gpsState: 'fail', coordText: '', fenceText: '❌ 定位失败', fenceColor: '#ff4d4f', fenceCanSubmit: false });
       }
     });
+  },
+
+  handleAuthError: function() {
+    var self = this;
+    if (this._authRedirecting) return;
+    this._authRedirecting = true;
+    wx.removeStorageSync('token');
+    app.globalData.token = '';
+    wx.showToast({ title: '登录已过期，正在重新登录', icon: 'none' });
+    setTimeout(function() {
+      self._authRedirecting = false;
+      wx.reLaunch({ url: '/pages/index/index' });
+    }, 800);
   },
 
   checkFence: function(loc) {
     var self = this;
-    fetchGeofences(this.data.token).then(function(fences) {
-      if (!fences || fences.length === 0) {
-        self.checkCircularFence(loc);
-        return;
-      }
-      var minDist = Infinity, matchedFence = null;
-      for (var i = 0; i < fences.length; i++) {
-        var fence = fences[i];
-        if (fence.bbox_min_lat != null && fence.bbox_max_lat != null && fence.bbox_min_lng != null && fence.bbox_max_lng != null) {
-          var bufDeg = (fence.buffer_radius || 200) / 111320;
-          var bufDegLng = bufDeg / Math.cos(loc.lat * Math.PI / 180);
-          if (loc.lat < fence.bbox_min_lat - bufDeg || loc.lat > fence.bbox_max_lat + bufDeg ||
-              loc.lng < fence.bbox_min_lng - bufDegLng || loc.lng > fence.bbox_max_lng + bufDegLng) {
-            continue;
-          }
+    wx.request({
+      url: app.globalData.baseUrl + '/api/__pd__/mp-fence-check?lat=' + loc.lat + '&lng=' + loc.lng,
+      header: { 'Authorization': 'Bearer ' + this.data.token },
+      success: function(res) {
+        if (res.statusCode === 401) { self.handleAuthError(); return; }
+        var d = res.data && res.data.data;
+        if (res.statusCode !== 200 || !d || d.matched === undefined) {
+          self.setData({ fenceResult: null, fenceText: '⚠️ 围栏状态未知（提交时服务端仍会校验）', fenceColor: '#faad14', fenceCanSubmit: true });
+          return;
         }
-        var polyline;
-        try { polyline = JSON.parse(fence.polyline_coords); } catch(e) { continue; }
-        if (!Array.isArray(polyline) || polyline.length < 2) continue;
-        var dist = distanceToPolyline(loc.lat, loc.lng, polyline);
-        if (dist < minDist) { minDist = dist; matchedFence = fence; }
+        var disp = fenceDisplay(d);
+        self.setData({ fenceResult: d, fenceText: disp.text, fenceColor: disp.color, fenceCanSubmit: disp.canSubmit });
+      },
+      fail: function() {
+        self.setData({ fenceText: '⚠️ 围栏检测失败（允许打卡）', fenceColor: '#faad14', fenceCanSubmit: true });
       }
-      var buffer = matchedFence ? matchedFence.buffer_radius : 200;
-      var inside = matchedFence ? minDist <= buffer : true;
-      var result = { inside: inside, distance: minDist < Infinity ? minDist : null, fenceName: matchedFence ? matchedFence.fence_name : null };
-      self.setData({ fenceResult: result, fenceText: inside ? '✅ 围栏内' : '❌ 围栏外 (' + minDist + 'm)', fenceColor: inside ? '#52c41a' : '#ff4d4f' });
-    });
-  },
-
-  checkCircularFence: function(loc) {
-    var config = { centerLat: 27.706, centerLng: 106.937, radius: 300 };
-    var R = 6371000;
-    var dLat = (loc.lat - config.centerLat) * Math.PI / 180;
-    var dLng = (loc.lng - config.centerLng) * Math.PI / 180;
-    var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-            Math.cos(config.centerLat * Math.PI / 180) * Math.cos(loc.lat * Math.PI / 180) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
-    var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    var distance = Math.round(R * c);
-    var inside = distance <= config.radius;
-    this.setData({
-      fenceResult: { inside: inside, distance: distance, fenceName: '默认围栏' },
-      fenceText: inside ? '✅ 围栏内' : '❌ 围栏外 (' + distance + 'm)',
-      fenceColor: inside ? '#52c41a' : '#ff4d4f'
     });
   },
 
@@ -227,16 +149,29 @@ var page = Page({
 
   takePhoto: function() {
     var self = this;
-    wx.chooseMedia({
-      count: 1,
-      mediaType: ['image'],
-      sourceType: ['camera'],
-      camera: 'back',
-      success: function(res) {
-        var tempPath = res.tempFiles[0] && res.tempFiles[0].tempFilePath;
-        if (tempPath) self.setData({ photoPath: tempPath, faceIndicator: '✅' });
-      }
-    });
+    var onPicked = function(tempPath) {
+      if (tempPath) self.setData({ photoPath: tempPath, faceIndicator: '✅' });
+    };
+    // wx.chooseMedia requires base library >= 2.10.0; fall back to wx.chooseImage on older libs.
+    if (wx.chooseMedia) {
+      wx.chooseMedia({
+        count: 1,
+        mediaType: ['image'],
+        sourceType: ['camera'],
+        camera: 'back',
+        success: function(res) {
+          onPicked(res.tempFiles[0] && res.tempFiles[0].tempFilePath);
+        }
+      });
+    } else {
+      wx.chooseImage({
+        count: 1,
+        sourceType: ['camera'],
+        success: function(res) {
+          onPicked(res.tempFilePaths && res.tempFilePaths[0]);
+        }
+      });
+    }
   },
 
   bindLeaveStart: function(e) { this.setData({ leaveStartDate: e.detail.value }); },
@@ -251,43 +186,51 @@ var page = Page({
       wx.showToast({ title: '请填写事由说明', icon: 'none' });
       return;
     }
+    if (!isLeave && !this.data.fenceCanSubmit) {
+      wx.showToast({ title: '不在围栏内，无法打卡', icon: 'none' });
+      return;
+    }
+    var loc = this.data.location;
+    if (!loc) {
+      wx.showToast({ title: '定位未完成', icon: 'none' });
+      return;
+    }
     self.setData({ submitting: true, submitText: '提交中...' });
     var now = new Date();
     var body = {
       check_type: this.data.attendType,
       check_time: now.toISOString(),
-      gps_state: this.data.gpsState,
-      workflow_status: isLeave ? 'pending' : 'normal'
+      latitude: loc.lat,
+      longitude: loc.lng,
+      gps_accuracy: Math.round(loc.accuracy),
+      gps_state: this.data.gpsState
     };
-    var fr = this.data.fenceResult;
-    if (fr && fr.fenceName) {
-      body.geofence_inside = fr.inside;
-      body.geofence_distance = fr.distance;
-    }
-    var loc = this.data.location;
-    if (loc) { body.latitude = loc.lat; body.longitude = loc.lng; body.gps_accuracy = Math.round(loc.accuracy); }
+    try { body.device_model = (wx.getDeviceInfo ? wx.getDeviceInfo().model : wx.getSystemInfoSync().model) || ''; } catch(e) {}
+    if (this.data.photoPath) body.photo_taken = true;
     if (isLeave) {
       body.reason = this.data.leaveReason.trim();
       body.start_date = this.data.leaveStartDate || now.toISOString();
       body.end_date = this.data.leaveEndDate || now.toISOString();
-    } else {
-      var methods = ['gps'];
-      if (this.data.photoPath) methods.push('photo');
-      body.verify_status = methods.join('+');
     }
     wx.request({
-      url: app.globalData.baseUrl + '/api/attendance_records:create',
+      url: app.globalData.baseUrl + '/api/__pd__/mp-attendance-submit',
       method: 'POST',
       header: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + this.data.token },
       data: body,
       success: function(res) {
-        if (res.statusCode === 200) {
+        if (res.statusCode === 401) {
+          self.setData({ submitting: false, submitText: '确认打卡' });
+          self.handleAuthError();
+          return;
+        }
+        var d = res.data || {};
+        if (res.statusCode === 200 && d.code !== -1) {
           if (self.data.attendType === '上班') LocationTracker.startTracking(self.data.token);
           if (self.data.attendType === '下班') LocationTracker.stopTracking();
           wx.showToast({ title: '✅ ' + (isLeave ? '提交成功' : '打卡成功'), icon: 'success' });
           setTimeout(function() { wx.navigateBack(); }, 1500);
         } else {
-          var err = (res.data && (res.data.errors || res.data.error || JSON.stringify(res.data))) || '请求失败';
+          var err = d.msg || '打卡被拦截';
           self.setData({ submitting: false, submitText: '✗ ' + String(err).substring(0, 40) });
         }
       },
