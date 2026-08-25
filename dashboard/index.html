@@ -171,7 +171,7 @@ window.addEventListener("unhandledrejection", function(e) {
         const EXTERN_URLS = [
             { label: '智慧云屏', url: 'https://road.xiangsu.work/bvr/zydlxc/#/homePage' },
             { label: '巡查管理', url: 'https://road.xiangsu.work/bvr/zydlxc/#/' },
-            { label: '人员动态', url: '/peopledynamic' },
+            { label: '人员动态', url: '/dashboard/人员动态.html' },
             { label: '视频监控', url: '/dashboard/video-monitor.html?v=3' }
         ];
         const NOCOBASE_HOME = 'https://voadge.top:668/v/admin/ffw9h2yb5cp';  // NocoBase 操作面板首页（管理员在后台搭建）
@@ -1589,8 +1589,16 @@ window.addEventListener("unhandledrejection", function(e) {
                 var _listToken = localStorage.getItem("NOCOBASE_TOKEN") || localStorage.getItem("nocobase_token");
                 var _listHeaders = {};
                 if (_listToken) _listHeaders['Authorization'] = 'Bearer ' + _listToken;
+                var _uid = currentUserId;
+                if (!_uid) {
+                    try {
+                        var _c = await fetch('/api/auth:check', _listHeaders.Authorization ? { headers: _listHeaders } : {});
+                        if (_c.ok) { var _cd = await _c.json(); _uid = _cd.data && _cd.data.id; }
+                    } catch(e) {}
+                }
+                var _uidFilter = _uid ? '&filter[createdById][$eq]=' + _uid : '';
                 var r = await fetch('/api/attendance_records:list?filter[check_time][$dateBetween]=' +
-                    encodeURIComponent('[' + start + ',' + end + ']') +
+                    encodeURIComponent('[' + start + ',' + end + ']') + _uidFilter +
                     '&sort=-check_time&pageSize=10&appends=createdBy', { credentials:'include', headers:_listHeaders });
                 if (r.ok) {
                     var data = await r.json();
