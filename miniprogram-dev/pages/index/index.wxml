@@ -16,3 +16,4 @@
     <button class="retry-btn" bindtap="handleLogin">重试</button>
   </view>
 </view>
+<privacy-popup />

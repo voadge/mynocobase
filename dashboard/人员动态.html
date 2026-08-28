@@ -53,6 +53,7 @@
             color: #aab;
         }
         .map-search-results div:hover { background: rgba(0,212,255,0.15); color: #e0e6ed; }
+        .map-search-results div.highlight { background: rgba(0,212,255,0.25); color: #fff; }
         @media (max-width: 768px) {
             .map-search-bar input { width: 100px; }
             .map-search-results { width: 200px; max-height: 160px; }
@@ -153,14 +154,15 @@
         }
         .bottom-bar {
             display: flex; align-items: center;
-            height: 72px;
+            height: 48px;
             background: rgba(12,20,38,0.95);
             border-top: 1px solid rgba(0,212,255,0.12);
             font-size: 0.78em;
         }
         .bar-left {
             display: flex; align-items: center; gap: 14px;
-            padding: 0 14px; margin-left: 300px;
+            padding: 0 14px;
+            margin-left: 180px;
             flex-shrink: 0;
             border-right: 1px solid rgba(0,212,255,0.15);
         }
@@ -200,10 +202,16 @@
             color: #5a6a7a; font-size: 0.7em; z-index: 1000;
             background: rgba(0,0,0,0.4); padding: 2px 8px; border-radius: 4px;
         }
+        .map-trajectory-info {
+            position: absolute; bottom: 28px; left: 50%; transform: translateX(-50%);
+            color: #ffd93d; font-size: 0.75em; z-index: 1000;
+            background: rgba(0,0,0,0.5); padding: 2px 12px; border-radius: 4px;
+            pointer-events: none; white-space: nowrap;
+        }
         @media (max-width: 768px) {
             .right-panel { width: 200px; }
             .bottom-bar {
-                height: 44px; font-size: 0.55em;
+                height: 22px; font-size: 0.55em;
             }
             .bar-left { gap: 4px; padding: 0 6px; }
             .bar-scroll { gap: 6px; padding: 0 8px; }
@@ -212,15 +220,11 @@
         @media (max-width: 480px) {
             .right-panel { width: 160px; }
             .bottom-bar {
-                height: 32px; font-size: 0.45em;
+                height: 16px; font-size: 0.45em;
             }
             .bar-left { gap: 3px; padding: 0 4px; }
             .bar-scroll { gap: 4px; padding: 0 4px; }
         }
-        .traj-panel { position: absolute; top: 10px; left: 10px; z-index: 1000; display: flex; gap: 4px; align-items: center; background: rgba(20,30,48,0.92); padding: 4px 6px; border-radius: 6px; border: 1px solid #445; }
-        .traj-btn { padding: 3px 10px; font-size: 0.82em; background: transparent; border: 1px solid #445; color: #aab; border-radius: 4px; cursor: pointer; }
-        .traj-btn.active { background: rgba(0,212,255,0.18); color: #00d4ff; border-color: #00d4ff; }
-        .traj-month { background: rgba(0,0,0,0.3); border: 1px solid rgba(0,212,255,0.18); color: #e0e6ed; border-radius: 4px; padding: 2px 4px; font-size: 0.8em; color-scheme: dark; }
     </style>
 </head>
 <body>
@@ -230,17 +234,13 @@
             <div id="map"></div>
             <div class="map-status" id="mapStatus">人员动态 · 实时位置</div>
             <div class="map-loading" id="mapLoading">加载中...</div>
+            <div class="map-trajectory-info" id="trajectoryInfo"></div>
             <div class="map-search-bar">
-                <input type="text" id="mapSearchInput" placeholder="搜索地名/POI..." onkeydown="if(event.key==='Enter') searchPlace()">
+                <input type="text" id="mapSearchInput" placeholder="搜索地名/POI..." oninput="onMapSearchInput()" onkeydown="if(event.key==='Enter') searchPlace()">
                 <button type="button" onclick="searchPlace()">🔍</button>
                 <button type="button" class="locate-btn" onclick="locateMe()" title="定位当前位置">◎</button>
             </div>
             <div class="map-search-results" id="mapSearchResults"></div>
-            <div class="traj-panel" id="trajPanel" style="display:none">
-                <button class="traj-btn active" id="trajTodayBtn" onclick="setTrajMode('today')">当天</button>
-                <button class="traj-btn" id="trajMonthBtn" onclick="setTrajMode('month')">历史(月)</button>
-                <input type="month" id="trajMonth" class="traj-month" onchange="if(window._trajMode==='month') loadTrajectory(selectedUserId,'month')">
-            </div>
         </div>
         <button class="panel-toggle" id="panelToggle" onclick="togglePanel()" title="切换人员列表">人员列表 ▶</button>
         <div class="right-panel" id="rightPanel">
@@ -264,6 +264,8 @@
 </div>
 
 <script>
+// ========== URL token injection (for Mini Program web-view) ==========
+(function(){var m=location.search.match(/[?&]token=([^&]*)/);if(m&&m[1]){localStorage.setItem("NOCOBASE_TOKEN",m[1]);}})();
 // ========== 常量 & 状态 ==========
 var token = localStorage.getItem("NOCOBASE_TOKEN") || localStorage.getItem("nocobase_token");
 var headers = { 'Content-Type': 'application/json' };
@@ -289,6 +291,12 @@ var pollTimer = null;
 var lastSnapshotData = null;
 
 var MOBILE_MAX_MARKERS = 20;
+
+// 轨迹缓存 { uid: { points, timestamp } }
+var trajectoryCache = {};
+var TRAJECTORY_CACHE_TTL = 120000; // 2分钟
+var TRAJECTORY_MAX_DAYS = 7;       // 默认加载7天
+var TRAJECTORY_MAX_POINTS = 300;   // 最大点数
 
 // ========== 初始化地图 (Canvas 渲染器) ==========
 function initMap() {
@@ -325,16 +333,6 @@ function loadSnapshot() {
         todayRecords = data.records || [];
         var locs = data.latestLocations || {};
         for (var uid in locs) { latestLocations[uid] = locs[uid]; }
-        var _attLoc = {};
-        (data.records || []).forEach(function(r){
-          var uid = r.createdBy ? (r.createdBy.id || r.createdById) : r.createdById;
-          if (!uid || r.latitude == null || r.longitude == null) return;
-          var t = r.check_time || r.recorded_at || '';
-          if (!_attLoc[uid] || t > _attLoc[uid]._t) {
-            _attLoc[uid] = { lat: parseFloat(r.latitude), lng: parseFloat(r.longitude), accuracy: r.gps_accuracy, source: 'attendance', trigger: r.check_type, recorded_at: t, _t: t };
-          }
-        });
-        for (var _au in _attLoc) { if (!latestLocations[_au]) latestLocations[_au] = _attLoc[_au]; }
         var onl = data.online || {};
         for (var uid2 in onl) { onlineStatus[uid2] = onl[uid2]; }
         renderFences();
@@ -342,8 +340,6 @@ function loadSnapshot() {
         renderBottomBar(data.stats);
         renderMarkers();
         document.getElementById('mapLoading').textContent = '已更新 ' + new Date().toLocaleTimeString();
-        var hasUsers = document.getElementById('userList').children.length > 0;
-        if (hasUsers && !panelOpen) togglePanel(true);
     }).catch(function(){
         document.getElementById('mapLoading').textContent = '更新失败，使用上次数据';
     });
@@ -444,6 +440,7 @@ function showClusterHint(n) {
 }
 
 // ========== 用户列表 ==========
+var _searchDebounce = null;
 function renderUserList(query) {
     var container = document.getElementById('userList');
     var deptMap = {};
@@ -473,7 +470,10 @@ function renderUserList(query) {
             deptMatch = (group.title || '').toLowerCase().indexOf(query) !== -1;
             if (!deptMatch) {
                 matchedUsers = group.users.filter(function(u){
-                    return (u.nickname || u.username || '').toLowerCase().indexOf(query) !== -1;
+                    var name = (u.nickname || u.username || '').toLowerCase();
+                    var phone = (u.phone || '').toLowerCase();
+                    var uname = (u.username || '').toLowerCase();
+                    return name.indexOf(query) !== -1 || phone.indexOf(query) !== -1 || uname.indexOf(query) !== -1;
                 });
             }
         }
@@ -503,23 +503,14 @@ function renderUserList(query) {
 }
 
 function onSearch() {
-    var q = document.getElementById('searchInput').value.trim().toLowerCase();
-    renderUserList(q);
+    if (_searchDebounce) clearTimeout(_searchDebounce);
+    _searchDebounce = setTimeout(function(){
+        var q = document.getElementById('searchInput').value.trim().toLowerCase();
+        renderUserList(q);
+    }, 200);
 }
 
 // ========== 选择人员 ==========
-var _trajMode = 'today';
-function setTrajMode(mode) {
-    _trajMode = mode;
-    document.getElementById('trajTodayBtn').classList.toggle('active', mode==='today');
-    document.getElementById('trajMonthBtn').classList.toggle('active', mode==='month');
-    if (mode==='month' && !document.getElementById('trajMonth').value) {
-        var n = new Date();
-        document.getElementById('trajMonth').value = n.getFullYear() + '-' + String(n.getMonth()+1).padStart(2,'0');
-    }
-    document.getElementById('trajPanel').style.display = 'flex';
-    loadTrajectory(selectedUserId, mode);
-}
 function selectUser(uid) {
     if (!uid) return;
     selectedUserId = uid;
@@ -528,41 +519,35 @@ function selectUser(uid) {
     if (loc && loc.lat && loc.lng) {
         map.setView([parseFloat(loc.lat), parseFloat(loc.lng)], 14, { animate: true });
     }
-    _trajMode = 'today';
-    document.getElementById('trajTodayBtn').classList.add('active');
-    document.getElementById('trajMonthBtn').classList.remove('active');
-    document.getElementById('trajPanel').style.display = 'flex';
-    loadTrajectory(uid, 'today');
+    loadTrajectory(uid);
 }
 
-// ========== 轨迹加载 (精度过滤 + 平滑) ==========
-function loadTrajectory(uid, mode) {
-    if (!uid) return;
+// ========== 轨迹加载 (缓存 + 时间边界 + 精度/速度过滤 + 平滑) ==========
+function clearTrajectory() {
     if (trajectoryLayer) { map.removeLayer(trajectoryLayer); trajectoryLayer = null; }
     if (trajectoryStartMarker) { map.removeLayer(trajectoryStartMarker); trajectoryStartMarker = null; }
     if (trajectoryEndMarker) { map.removeLayer(trajectoryEndMarker); trajectoryEndMarker = null; }
-    var trajInfo = document.getElementById('trajectoryInfo');
-    trajInfo.textContent = '加载轨迹...';
-    var now = new Date();
-    var start, end;
-    if (mode === 'month') {
-        var mv = document.getElementById('trajMonth').value || '';
-        var y = now.getFullYear(), m = now.getMonth();
-        if (/^\d{4}-\d{2}$/.test(mv)) { y = parseInt(mv.slice(0,4)); m = parseInt(mv.slice(5,7)) - 1; }
-        start = new Date(y, m, 1, 0, 0, 0, 0);
-        end = new Date(y, m + 1, 0, 23, 59, 59, 999);
-    } else {
-        start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-        end = now;
+    document.getElementById('trajectoryInfo').textContent = '';
+}
+
+function loadTrajectory(uid, force) {
+    clearTrajectory();
+    // 检查缓存
+    var cached = trajectoryCache[uid];
+    if (cached && !force && Date.now() - cached.ts < TRAJECTORY_CACHE_TTL) {
+        renderTrajectory(cached.points);
+        return;
     }
-    var sISO = start.toISOString(), eISO = end.toISOString();
-    var sDate = sISO.slice(0, 10), eDate = eISO.slice(0, 10);
+    document.getElementById('trajectoryInfo').textContent = '加载轨迹...';
+    var now = new Date();
+    var today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    var sDate = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
     var locUrl = '/api/location_history:list?filter[createdById]=' + uid
-        + '&filter[is_valid]=true&filter[recorded_at][$gte]=' + sISO + '&filter[recorded_at][$lte]=' + eISO
-        + '&sort=recorded_at&pageSize=300';
+        + '&filter[is_valid]=true&filter[recorded_at][$gte]=' + sDate
+        + '&sort=recorded_at&pageSize=' + TRAJECTORY_MAX_POINTS;
     var attUrl = '/api/attendance_records:list?filter[createdById]=' + uid
-        + '&filter[latitude][$ne]=null&filter[check_time][$gte]=' + sDate + '&filter[check_time][$lte]=' + eDate
-        + '&sort=check_time&pageSize=300';
+        + '&filter[check_time][$gte]=' + sDate
+        + '&sort=check_time&pageSize=' + TRAJECTORY_MAX_POINTS;
     Promise.all([
         apiGet(locUrl).catch(function(){ return { data: [] }; }),
         apiGet(attUrl).catch(function(){ return { data: [] }; })
@@ -581,46 +566,71 @@ function loadTrajectory(uid, mode) {
             pts.push({ lat: parseFloat(r.latitude), lng: parseFloat(r.longitude), ts: ts });
         });
         pts = pts.filter(function(p){ return !isNaN(p.lat) && !isNaN(p.lng); })
-            .sort(function(a,b){ return a.ts - b.ts; })
-            .filter(function(p, i, arr){
-                if (i === 0) return true;
-                var dist = _haversine([p.lat, p.lng], [arr[i-1].lat, arr[i-1].lng]);
-                var dt = arr[i-1].ts > 0 && p.ts > 0 ? (p.ts - arr[i-1].ts) / 1000 : 0;
-                if (dist > 3000) return false;
-                if (dt > 0 && dt < 3 && dist > 100) return false;
-                if (dt > 0 && dist / dt > 100) return false;
-                return true;
-            })
-            .map(function(p){ return [p.lat, p.lng]; });
-        if (pts.length < 2) {
-            trajInfo.textContent = '该时段无轨迹点';
+            .sort(function(a,b){ return a.ts - b.ts; });
+            
+        var clusters = [];
+        var cur = [];
+        pts.forEach(function(p){
+            if (cur.length === 0) { cur.push(p); return; }
+            var prev = cur[cur.length - 1];
+            var dist = _haversine([p.lat, p.lng], [prev.lat, prev.lng]);
+            var dt = prev.ts > 0 && p.ts > 0 ? (p.ts - prev.ts) / 1000 : 0;
+            if (dist > 3000) { clusters.push(cur); cur = [p]; return; }
+            if (dt > 0 && dt < 3 && dist > 100) { return; }
+            if (dt > 0 && dist / dt > 100) { return; }
+            cur.push(p);
+        });
+        if (cur.length) clusters.push(cur);
+        clusters.sort(function(a, b){
+            if (b.length !== a.length) return b.length - a.length;
+            return (b[b.length - 1].ts || 0) - (a[a.length - 1].ts || 0);
+        });
+        var best = clusters.length ? clusters[0] : [];
+        pts = best.map(function(p){ return [p.lat, p.lng]; });
+
+        if (pts.length === 0) {
+            document.getElementById('trajectoryInfo').textContent = '该时段无位置数据';
             return;
         }
-        var smoothed = _smoothTrajectory(pts, 0.3);
-        trajectoryLayer = L.polyline(smoothed, {
-            color: '#ffd93d', weight: 3, opacity: 0.7, dashArray: '8,6'
-        }).addTo(map);
-        trajectoryStartMarker = L.circleMarker(smoothed[0], {
-            radius: 5, color: '#00ff88', fillColor: '#00ff88', fillOpacity: 0.8, weight: 2
-        }).addTo(map).bindTooltip('起点', { permanent: false });
-        trajectoryEndMarker = L.circleMarker(smoothed[smoothed.length - 1], {
-            radius: 5, color: '#ff6b6b', fillColor: '#ff6b6b', fillOpacity: 0.8, weight: 2
-        }).addTo(map).bindTooltip('终点', { permanent: false });
-        map.fitBounds(trajectoryLayer.getBounds().pad(0.2));
-        var dlen = 0;
-        for (var i = 1; i < smoothed.length; i++) dlen += _haversine(smoothed[i-1], smoothed[i]);
-        trajInfo.textContent = (mode === 'month' ? '本月轨迹: ' : '今日轨迹: ') + smoothed.length + '点, ' + Math.round(dlen) + 'm';
+        var smoothed = _smoothTrajectory(pts, 0.25);
+        trajectoryCache[uid] = { points: smoothed, ts: Date.now() };
+        renderTrajectory(smoothed);
     }).catch(function(){
-        trajInfo.textContent = '轨迹加载失败';
+        document.getElementById('trajectoryInfo').textContent = '轨迹加载失败';
     });
 }
 
+function renderTrajectory(smoothed) {
+    if (smoothed.length >= 2) {
+        trajectoryLayer = L.polyline(smoothed, {
+            color: '#ffd93d', weight: 3, opacity: 0.7, dashArray: '8,6'
+        }).addTo(map);
+    }
+    trajectoryStartMarker = L.circleMarker(smoothed[0], {
+        radius: 6, color: '#00ff88', fillColor: '#00ff88', fillOpacity: 0.9, weight: 2
+    }).addTo(map).bindTooltip('位置', { permanent: false });
+    if (smoothed.length >= 2) {
+        trajectoryEndMarker = L.circleMarker(smoothed[smoothed.length - 1], {
+            radius: 5, color: '#ff6b6b', fillColor: '#ff6b6b', fillOpacity: 0.8, weight: 2
+        }).addTo(map).bindTooltip('终点', { permanent: false });
+        var dist = 0;
+        for (var i = 1; i < smoothed.length; i++) {
+            dist += _haversine(smoothed[i-1], smoothed[i]);
+        }
+        document.getElementById('trajectoryInfo').textContent = '轨迹: ' + smoothed.length + '点, ' + Math.round(dist) + 'm';
+        map.fitBounds(trajectoryLayer.getBounds().pad(0.2));
+    } else {
+        document.getElementById('trajectoryInfo').textContent = '位置: ' + smoothed.length + '点';
+        map.setView(smoothed[0], Math.max(map.getZoom(), 15));
+    }
+}
+
 function _smoothTrajectory(points, alpha) {
-    if (alpha === undefined) alpha = 0.3;
+    if (alpha === undefined) alpha = 0.25;
     if (points.length < 3) return points;
     var result = [points[0]];
     for (var i = 1; i < points.length; i++) {
-        var prev = result[i - 1];
+        var prev = result[result.length - 1];
         result.push([
             prev[0] + alpha * (points[i][0] - prev[0]),
             prev[1] + alpha * (points[i][1] - prev[1])
@@ -631,10 +641,11 @@ function _smoothTrajectory(points, alpha) {
 
 function _haversine(p1, p2) {
     var R = 6371000;
-    var dLat = (p2[0] - p1[0]) * Math.PI / 180;
-    var dLng = (p2[1] - p1[1]) * Math.PI / 180;
+    var lat1 = p1[0], lng1 = p1[1], lat2 = p2[0], lng2 = p2[1];
+    var dLat = (lat2 - lat1) * Math.PI / 180;
+    var dLng = (lng2 - lng1) * Math.PI / 180;
     var a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-            Math.cos(p1[0]*Math.PI/180) * Math.cos(p2[0]*Math.PI/180) * Math.sin(dLng/2) * Math.sin(dLng/2);
+            Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dLng/2) * Math.sin(dLng/2);
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 }
 
@@ -757,13 +768,26 @@ async function locateMe() {
     }, function(){}, { enableHighAccuracy: true, timeout: 10000 });
 }
 
-// ========== 地名搜索 ==========
+// ========== 地名搜索 (高德 InputTips + 分类标签 + 键盘导航) ==========
+var _mapSearchDebounce = null;
+var _searchSelectedIdx = -1;
+var _searchResults = [];
+
+function onMapSearchInput() {
+    if (_mapSearchDebounce) clearTimeout(_mapSearchDebounce);
+    _mapSearchDebounce = setTimeout(function(){
+        var q = document.getElementById('mapSearchInput').value.trim();
+        if (q.length >= 2) searchPlace();
+    }, 300);
+}
 async function searchPlace() {
     var q = document.getElementById('mapSearchInput').value.trim();
     if (!q) return;
     var container = document.getElementById('mapSearchResults');
     container.style.display = 'block';
     container.innerHTML = '<div style="color:#5a6a7a;padding:8px">搜索中...</div>';
+    _searchResults = [];
+    _searchSelectedIdx = -1;
     try {
         var resp = await fetch('/api/__pd__/geocode?q=' + encodeURIComponent(q), { headers: headers });
         if (!resp.ok) throw new Error('HTTP ' + resp.status);
@@ -771,20 +795,24 @@ async function searchPlace() {
         container.innerHTML = '';
         if (d && d.tips && d.tips.length > 0) {
             d.tips.forEach(function(tip){
-                var loc = tip.location;
-                var name = tip.name || '';
-                var addr = tip.address || '';
-                var district = tip.district || '';
-                if (!loc) return;
-                var parts = loc.split(',');
+                if (!tip.location) return;
+                var parts = tip.location.split(',');
+                if (parts.length < 2) return;
+                var badge = getTypeLabel(tip.typecode);
+                _searchResults.push({ lat: parseFloat(parts[1]), lng: parseFloat(parts[0]), name: tip.name, addr: tip.address, badge: badge });
                 var div = document.createElement('div');
-                div.textContent = name + (addr ? ' - ' + addr : '') + (district ? ' [' + district + ']' : '');
+                div.className = 'search-result-item';
+                div.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center"><span><strong>' + escHtml(tip.name) + '</strong></span>' + (badge ? '<span class="type-badge" style="font-size:0.7em;padding:1px 6px;border-radius:4px;background:rgba(0,212,255,0.1);color:#00d4ff;white-space:nowrap">' + badge + '</span>' : '') + '</div><div style="font-size:0.85em;color:#5a6a7a;margin-top:1px">' + escHtml(tip.address || tip.district || '') + '</div>';
                 div.onclick = function(){
                     map.setView([parseFloat(parts[1]), parseFloat(parts[0])], 15);
                     container.style.display = 'none';
                 };
                 container.appendChild(div);
             });
+            if (_searchResults.length > 0) {
+                container.querySelector('.search-result-item')?.classList.add('highlight');
+                _searchSelectedIdx = 0;
+            }
         } else {
             container.innerHTML = '<div style="color:#5a6a7a;padding:8px">未找到结果</div>';
         }
@@ -792,13 +820,48 @@ async function searchPlace() {
         container.innerHTML = '<div style="color:#ff6b6b;padding:8px">搜索失败</div>';
     }
 }
+function getTypeLabel(t) {
+    if (!t) return '';
+    if (t.startsWith('02')) return '省'; if (t.startsWith('03')) return '城市';
+    if (t.startsWith('04')) return '区县'; if (t.startsWith('11')) return '景点';
+    if (t.startsWith('05')) return '餐饮'; if (t.startsWith('10')) return '住宿';
+    if (t.startsWith('14')) return '科教'; if (t.startsWith('15')) return '交通';
+    if (t.startsWith('13')) return '政府'; if (t.startsWith('06')) return '购物';
+    return 'POI';
+}
+// 键盘导航
+document.getElementById('mapSearchInput').addEventListener('keydown', function(e) {
+    var container = document.getElementById('mapSearchResults');
+    if (container.style.display !== 'block' || _searchResults.length === 0) return;
+    var items = container.querySelectorAll('.search-result-item');
+    if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        if (_searchSelectedIdx < items.length - 1) _searchSelectedIdx++;
+        else _searchSelectedIdx = 0;
+        items.forEach(function(el, i){ el.classList.toggle('highlight', i === _searchSelectedIdx); });
+        if (items[_searchSelectedIdx]) items[_searchSelectedIdx].scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (_searchSelectedIdx > 0) _searchSelectedIdx--;
+        else _searchSelectedIdx = items.length - 1;
+        items.forEach(function(el, i){ el.classList.toggle('highlight', i === _searchSelectedIdx); });
+        if (items[_searchSelectedIdx]) items[_searchSelectedIdx].scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (_searchSelectedIdx >= 0 && _searchSelectedIdx < _searchResults.length) {
+            var r = _searchResults[_searchSelectedIdx];
+            map.setView([r.lat, r.lng], 15);
+            container.style.display = 'none';
+        }
+    } else if (e.key === 'Escape') {
+        container.style.display = 'none';
+    }
+});
 document.addEventListener('click', function(e) {
     var bar = document.querySelector('.map-search-bar');
     var sr = document.getElementById('mapSearchResults');
     if (bar && bar.contains(e.target)) return;
-    if (sr && !sr.contains(e.target)) {
-        sr.style.display = 'none';
-    }
+    if (sr && !sr.contains(e.target)) sr.style.display = 'none';
 });
 
 // ========== 启动 ==========

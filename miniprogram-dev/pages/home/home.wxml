@@ -1,21 +1,32 @@
 <view class="page {{theme}}">
-  <view class="attend-btn-wrap">
-    <button class="attend-btn" bindtap="goAttend">📌 考勤打卡</button>
+  <view class="app-header">
+    <view class="app-title">野外作业安全监控</view>
+    <view class="app-sub">人员动态与轨迹管理</view>
   </view>
 
-  <view class="tracking-bar {{trackingActive ? 'active' : ''}}" wx:if="{{trackingActive}}">
+  <view class="card attend-card">
+    <view class="attend-info">
+      <view class="attend-title">考勤打卡</view>
+      <view class="attend-status {{checkedIn ? (checkedOut ? 'done' : 'ongoing') : 'none'}}">{{attendStatus}}</view>
+    </view>
+    <button class="attend-btn" bindtap="goAttend" hover-class="btn-hover">{{checkedOut ? '查看' : '去打卡'}}</button>
+  </view>
+
+  <view class="tracking-bar {{trackingActive ? 'active' : 'inactive'}}">
+    <view class="live-dot" wx:if="{{trackingActive}}"></view>
     <text class="tracking-icon">🛰️</text>
-    <text class="tracking-text">野外作业安全监控运行中</text>
+    <text class="tracking-text">{{trackingActive ? '安全监控运行中（每 15 分钟采集位置）' : '安全监控未开启（请先上班打卡）'}}</text>
   </view>
 
-  <view class="homepage-btn-wrap">
-    <button class="homepage-btn" bindtap="goHomepage">🏠 首页</button>
+  <view class="card homepage-card">
+    <button class="homepage-btn" bindtap="goHomepage" hover-class="btn-hover">🏠 进入管理后台</button>
   </view>
 
+  <view class="list-title">工作台</view>
   <view class="section-list">
     <view class="section-group" wx:for="{{workSections}}" wx:key="title">
-      <view class="section-header" bindtap="toggleSection" data-idx="{{index}}">
-        <view class="section-accent" style="background:{{item.accent}}"></view>
+      <view class="section-header" bindtap="toggleSection" data-idx="{{index}}" hover-class="section-hover">
+        <view class="section-letter" style="background:{{item.accent}}">{{item.letter}}</view>
         <text class="section-title">{{item.title}}</text>
         <text class="section-arrow">{{collapsed[index] ? '▶' : '▼'}}</text>
       </view>
@@ -23,8 +34,12 @@
         <view class="btn-item"
           wx:for="{{item.items}}" wx:key="label"
           data-url="{{item.url}}"
-          bindtap="goWebview">{{item.label}}</view>
+          bindtap="goWebview" hover-class="item-hover">{{item.label}}</view>
       </view>
     </view>
   </view>
+
+  <view class="footer">数据来自 NocoBase · 实时同步</view>
+
+  <privacy-popup />
 </view>

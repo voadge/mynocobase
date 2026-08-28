@@ -40,7 +40,8 @@ var page = Page({
     if (!token) { wx.redirectTo({ url: '/pages/index/index' }); return; }
     this.setData({ token: token, clockText: new Date().toLocaleString('zh-CN') });
     this.fetchTodayStatus();
-    this.getLocation();
+    var self = this;
+    LocationTracker.ensurePrivacy(function () { self.getLocation(); });
     setInterval(function() {
       var t = new Date();
       this.setData({ clockText: t.toLocaleString('zh-CN') });

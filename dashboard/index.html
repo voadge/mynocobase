@@ -273,7 +273,8 @@ window.addEventListener("unhandledrejection", function(e) {
                 bg: '#2a1f0b', border: '#854F0B', color: '#f0b84d',
                 btnBg: '#3d2e14', btnBorder: '#854F0B', btnColor: '#fac775',
                 items: [
-                    { label: '首页', url: '/v/admin/ffw9h2yb5cp' }
+                    { label: '首页', url: '/v/admin/ffw9h2yb5cp' },
+                    { label: '小修台账', url: '/v/admin/32y3lm7skny' }
                 ]
             },
             {
@@ -422,11 +423,7 @@ window.addEventListener("unhandledrejection", function(e) {
         }
 
         function openNocoBase() {
-            if (window.innerWidth < 768) {
-                window.location.href = '/signin';
-            } else {
-                window.open(NOCOBASE_HOME, '_blank');
-            }
+            window.open(NOCOBASE_HOME, '_blank');
         }
 
         document.addEventListener('keydown', function(e) {
@@ -467,6 +464,17 @@ window.addEventListener("unhandledrejection", function(e) {
                 if (r.ok) totalPending += ((await r.json()).data || []).length;
             } catch {}
             p.textContent = totalPending;
+            if (totalPending > 0) {
+                p.style.cursor = 'pointer';
+                p.title = '查看流程待办';
+                p.onmouseenter = function() { p.style.opacity = '0.7'; };
+                p.onmouseleave = function() { p.style.opacity = '1'; };
+                p.onclick = function() { openDrawer('/v/admin/workflow/tasks/manual/pending', '流程待办'); };
+            } else {
+                p.style.cursor = 'default';
+                p.title = '';
+                p.onclick = null;
+            }
             try {
                 const r = await fetch('/api/notifications:list?filter[read]=false' + uid + '&pageSize=1', _opt);
                 n.textContent = r.ok ? ((await r.json()).meta?.count ?? '0') : '0';

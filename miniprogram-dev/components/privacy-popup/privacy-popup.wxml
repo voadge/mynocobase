@@ -1,0 +1,14 @@
+<view class="privacy-mask" wx:if="{{showPrivacy}}">
+  <view class="privacy-popup">
+    <view class="privacy-title">用户隐私保护提示</view>
+    <view class="privacy-content">
+      感谢您使用本小程序。使用前请仔细阅读
+      <text class="privacy-link" bindtap="openPrivacyContract">{{privacyContractName || '《隐私保护指引》'}}</text>。
+      当您点击"同意"后，即表示已理解并同意该条款，我们将按指引收集您的位置信息，用于考勤打卡与野外作业安全监控。
+    </view>
+    <view class="privacy-btns">
+      <button class="privacy-btn disagree" bindtap="handleDisagree">拒绝</button>
+      <button id="agree-btn" class="privacy-btn agree" open-type="agreePrivacyAuthorization" bindagreeprivacyauthorization="handleAgree">同意</button>
+    </view>
+  </view>
+</view>

@@ -1,3 +1,5 @@
+const LocationTracker = require('utils/location');
+
 App({
   globalData: {
     userInfo: null,
@@ -9,10 +11,10 @@ App({
     if (token) {
       this.globalData.token = token;
     }
+    LocationTracker.init({ baseUrl: this.globalData.baseUrl });
   },
 
   onShow() {
-    var LocationTracker = require('utils/location');
     LocationTracker.checkState();
   }
 });

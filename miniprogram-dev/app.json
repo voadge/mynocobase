@@ -7,7 +7,7 @@
     "pages/attend/attend"
   ],
   "window": {
-    "navigationBarTitleText": "人员动态",
+    "navigationBarTitleText": "野外作业安全监控",
     "navigationBarBackgroundColor": "#1677ff",
     "navigationBarTextStyle": "white"
   },
@@ -23,5 +23,8 @@
       "desc": "野外作业安全监控：上班期间每15分钟采集一次位置信息"
     }
   },
-  "sitemapLocation": "sitemap.json"
+  "sitemapLocation": "sitemap.json",
+  "usingComponents": {
+    "privacy-popup": "/components/privacy-popup/privacy-popup"
+  }
 }

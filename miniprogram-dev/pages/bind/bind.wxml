@@ -1,4 +1,5 @@
 <view class="page">
+  <privacy-popup />
   <view wx:if="{{loading}}" class="loading-wrap">
     <text>加载用户列表...</text>
   </view>

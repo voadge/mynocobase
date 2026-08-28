@@ -1,4 +1,5 @@
 <view class="page">
+  <privacy-popup />
   <view class="header">
     <text class="title">📸 考勤打卡</text>
     <text class="time">🕐 {{clockText}}</text>
@@ -7,6 +8,8 @@
   <view class="status-bar" wx:if="{{attendState && attendState.statusText}}">
     <text class="status-text">{{attendState.statusText}}</text>
   </view>
+
+  <view class="notice" style="font-size:22rpx;color:#888;padding:8rpx 24rpx;line-height:1.5;">🛰️ 上班后将每 15 分钟采集位置，用于野外作业安全监控（可在系统设置中关闭）</view>
 
   <view class="type-tabs">
     <view class="type-tab {{attendType==='上班'?'selected':''}}" data-type="上班" bindtap="chooseAttendType">✅ 上班</view>
