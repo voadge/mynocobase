@@ -1605,9 +1605,9 @@ window.addEventListener("unhandledrejection", function(e) {
                     } catch(e) {}
                 }
                 var _uidFilter = _uid ? '&filter[createdById][$eq]=' + _uid : '';
-                var r = await fetch('/api/attendance_records:list?filter[check_time][$dateBetween]=' +
+                var r = await fetch('/api/attendance_records:list?filter[createdAt][$dateBetween]=' +
                     encodeURIComponent('[' + start + ',' + end + ']') + _uidFilter +
-                    '&sort=-check_time&pageSize=10&appends=createdBy', { credentials:'include', headers:_listHeaders });
+                    '&sort=-createdAt&pageSize=10&appends=createdBy', { credentials:'include', headers:_listHeaders });
                 if (r.ok) {
                     var data = await r.json();
                     var recs = data.data || [];
