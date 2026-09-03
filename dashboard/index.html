@@ -1919,6 +1919,7 @@ window.addEventListener("unhandledrejection", function(e) {
         try{checkAdmin();}catch(e){console.warn('[b]checkAdmin',e)}
         try{fetchAnnouncements();}catch(e){console.warn('[b]fetchAnn',e)}
         try{fetchAttendance();}catch(e){console.warn('[b]fetchAtt',e)}
+        try{setInterval(fetchAttendance,60000);}catch(e){console.warn("[b]attInt",e)}
         try{fetchWeather();}catch(e){console.warn('[b]fetchWx',e)}
         try{fetchNbVersion();}catch(e){console.warn('[b]fetchNb',e)}
         try{updateDisplay();}catch(e){console.warn('[b]updateDisp',e)}

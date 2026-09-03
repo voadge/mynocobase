@@ -13,7 +13,9 @@
   },
   "requiredPrivateInfos": [
     "getLocation",
-    "startLocationUpdateBackground"
+    "startLocationUpdateBackground",
+    "startLocationUpdate",
+    "onLocationChange"
   ],
   "permission": {
     "scope.userLocation": {
