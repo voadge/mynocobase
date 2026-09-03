@@ -1919,7 +1919,25 @@ window.addEventListener("unhandledrejection", function(e) {
         try{checkAdmin();}catch(e){console.warn('[b]checkAdmin',e)}
         try{fetchAnnouncements();}catch(e){console.warn('[b]fetchAnn',e)}
         try{fetchAttendance();}catch(e){console.warn('[b]fetchAtt',e)}
-        try{setInterval(fetchAttendance,60000);}catch(e){console.warn("[b]attInt",e)}
+        // 考勤状态轮询：仅标签页可见时每60s刷新；隐藏时停止；切回可见立即补刷；打卡弹窗打开时跳过
+        var _attPollTimer = null;
+        function _attPollTick() {
+            var _ov = document.getElementById('attendOverlay');
+            if (document.hidden || (_ov && _ov.classList.contains('show'))) return;
+            try{ fetchAttendance(); }catch(e){ console.warn('[b]attFetch', e); }
+        }
+        function _attPollSchedule() {
+            if (document.hidden) {
+                if (_attPollTimer) { clearInterval(_attPollTimer); _attPollTimer = null; }
+            } else if (!_attPollTimer) {
+                _attPollTimer = setInterval(_attPollTick, 60000);
+            }
+        }
+        document.addEventListener('visibilitychange', function(){
+            _attPollSchedule();
+            if (!document.hidden) _attPollTick();
+        });
+        _attPollSchedule();
         try{fetchWeather();}catch(e){console.warn('[b]fetchWx',e)}
         try{fetchNbVersion();}catch(e){console.warn('[b]fetchNb',e)}
         try{updateDisplay();}catch(e){console.warn('[b]updateDisp',e)}
