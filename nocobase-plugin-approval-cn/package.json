@@ -1,0 +1,20 @@
+{
+  "name": "@nocobase/plugin-approval-cn",
+  "version": "1.0.0",
+  "main": "dist/server/index.js",
+  "displayName": "Approval CN",
+  "displayName.zh-CN": "中国式审批",
+  "description": "桌面式流程审批插件：个人待办桌面 + A4 文件详情 + 右侧流程节点，复用原生工作流 manual 节点",
+  "description.zh-CN": "桌面式流程审批插件：个人待办桌面 + A4 文件详情 + 右侧流程节点，复用原生工作流 manual 节点",
+  "license": "Apache-2.0",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc --watch"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "peerDependencies": {
+    "@nocobase/server": "2.x"
+  }
+}
