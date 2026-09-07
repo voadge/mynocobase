@@ -1,0 +1,16 @@
+# 本目录是 @nocobase/plugin-approval-cn 插件（生产端唯一真相源同步而来）。
+# 根 .gitignore 排除了 storage/ 与 *.sql，但以下属于插件本身的静态资源
+# 与 SQL 变更脚本（非数据库备份），必须纳入 Git 版本管理以保证与生产端一致。
+!storage/
+storage/*
+!storage/approval/
+storage/approval/*
+!storage/approval/index.html
+!storage/approval/assets/
+storage/approval/assets/*
+!storage/approval/assets/app.js
+!storage/approval/assets/style.css
+
+!sql/
+sql/*
+!sql/*.sql
