@@ -32,6 +32,7 @@ $syncItems = @(
     "dashboard/智能排版打印助手.html"
     "dashboard/人员动态.html"
     "dashboard/sw.js"
+    "dashboard/precache.js"
     "dashboard/nb-version.json"
     "dashboard/mappings.json"
 )
