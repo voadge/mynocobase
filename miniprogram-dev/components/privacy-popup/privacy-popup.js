@@ -2,14 +2,21 @@ let privacyHandler;
 let privacyResolves = [];
 let closeOtherPagePopUpHooks = [];
 
-if (wx.onNeedPrivacyAuthorization) {
+// 鸿蒙(HarmonyOS)上 onNeedPrivacyAuthorization 不触发，且注册后会把 getLocation
+// 永久挂入 pending（不回调）。因此鸿蒙下不注册监听，改用页面内常驻
+// open-type="agreePrivacyAuthorization" 按钮完成隐私同步。
+// 安卓/iOS 保持原监听，触发时弹出本组件的自定义隐私弹窗。
+var harmonyOS = false;
+try {
+  harmonyOS = /ohos|harmony/i.test((wx.getSystemInfoSync() || {}).system || '');
+} catch (e) {}
+
+if (wx.onNeedPrivacyAuthorization && !harmonyOS) {
   wx.onNeedPrivacyAuthorization(function(resolve) {
     if (typeof privacyHandler === 'function') {
       privacyHandler(resolve);
     }
   });
-} else {
-  console.error('当前基础库不支持 wx.onNeedPrivacyAuthorization');
 }
 
 var closeOtherPagePopUp = function(closePopUp) {

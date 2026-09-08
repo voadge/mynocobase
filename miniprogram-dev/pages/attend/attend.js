@@ -32,7 +32,34 @@ var page = Page({
     submitting: false,
     submitText: '确认打卡',
     clockText: '',
-    faceIndicator: ''
+    faceIndicator: '',
+    privacyNeedsAgree: false
+  },
+
+  _isHarmonyOS: function() {
+    try {
+      var s = (wx.getSystemInfoSync() || {}).system || '';
+      return /ohos|harmony/i.test(s);
+    } catch (e) { return false; }
+  },
+
+  _checkPrivacyAgree: function() {
+    var self = this;
+    // 鸿蒙上 onNeedPrivacyAuthorization 不触发，走常驻「同意隐私」按钮；安卓/iOS 走 privacy-popup 弹窗
+    if (!this._isHarmonyOS()) return;
+    if (typeof wx.getPrivacySetting !== 'function') return;
+    wx.getPrivacySetting({
+      success: function(res) {
+        var need = res && (res.need === true || res.needAuthorization === true);
+        if (need) self.setData({ privacyNeedsAgree: true });
+      }
+    });
+  },
+
+  onPrivacyAgreed: function() {
+    // 用户点击 open-type="agreePrivacyAuthorization" 已同步"已同意隐私"；立即重新触发定位
+    this.setData({ privacyNeedsAgree: false });
+    this.getLocation(true);
   },
 
   onLoad() {
@@ -42,6 +69,7 @@ var page = Page({
     this.fetchTodayStatus();
     var self = this;
     LocationTracker.ensurePrivacy(function () { self.getLocation(); });
+    this._checkPrivacyAgree();
     setInterval(function() {
       var t = new Date();
       this.setData({ clockText: t.toLocaleString('zh-CN') });
@@ -51,11 +79,10 @@ var page = Page({
   fetchTodayStatus() {
     var token = this.data.token;
     var today = new Date();
-    var startStr = today.getFullYear() + '-' + String(today.getMonth()+1).padStart(2,'0') + '-' + String(today.getDate()).padStart(2,'0');
-    var endObj = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
-    var endStr = endObj.getFullYear() + '-' + String(endObj.getMonth()+1).padStart(2,'0') + '-' + String(endObj.getDate()).padStart(2,'0');
-    var url = app.globalData.baseUrl + '/api/attendance_records:list?filter[check_time][$dateBetween][]=' +
-      startStr + '&filter[check_time][$dateBetween][]=' + endStr + '&sort=-check_time&pageSize=10&appends=createdBy';
+    var start = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString();
+    var end = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1).toISOString();
+    var url = app.globalData.baseUrl + '/api/attendance_records:list?filter[createdAt][$dateBetween]=' +
+      encodeURIComponent('[' + start + ',' + end + ']') + '&sort=-createdAt&pageSize=10&appends=createdBy';
     wx.request({
       url: url,
       header: { 'Authorization': 'Bearer ' + token },
@@ -81,26 +108,79 @@ var page = Page({
     });
   },
 
-  getLocation() {
+  getLocation: function(high) {
     var self = this;
-    wx.getLocation({
-      type: 'gcj02',
-      isHighAccuracy: true,
-      highAccuracyExpireTime: 5000,
-      success: function(res) {
-        var lat = res.latitude, lng = res.longitude;
-        if (typeof lat !== 'number' || typeof lng !== 'number' || !isFinite(lat) || !isFinite(lng)) {
-          self.setData({ gpsState: 'fail', coordText: '定位数据异常', fenceText: '❌ 定位数据异常', fenceColor: '#ff4d4f', fenceCanSubmit: false });
+    if (high === undefined) high = true;
+    this._locSettled = false;
+    function finish(over) {
+      if (self._locSettled) return;
+      self._locSettled = true;
+      if (self._locTimer) { clearTimeout(self._locTimer); self._locTimer = null; }
+      self.setData(over);
+    }
+    function onSuccess(res) {
+      var lat = res.latitude, lng = res.longitude;
+      if (typeof lat !== 'number' || typeof lng !== 'number' || !isFinite(lat) || !isFinite(lng)) {
+        finish({ gpsState: 'fail', coordText: '定位数据异常', fenceText: '❌ 定位数据异常', fenceColor: '#ff4d4f', fenceCanSubmit: false });
+        return;
+      }
+      finish({ gpsState: 'ok', coordText: lat.toFixed(5) + ', ' + lng.toFixed(5) });
+      var loc = { lat: lat, lng: lng, accuracy: res.accuracy || 0 };
+      self.setData({ location: loc });
+      self.checkFence(loc);
+    }
+function onFail(err) {
+      if (self._locSettled) return;
+      var msg = (err && err.errMsg) || '';
+      if (msg.indexOf('auth') >= 0 || msg.indexOf('deny') >= 0 || msg.indexOf('permission') >= 0) {
+        finish({ gpsState: 'denied', coordText: '', fenceText: '⚠️ 定位权限被拒，可仍打卡（跳过围栏）', fenceColor: '#faad14', fenceCanSubmit: true });
+        return;
+      }
+      if (high) { self.getLocation(false); return; }
+      finish({ gpsState: 'fail', coordText: '', fenceText: '⚠️ 定位失败，可仍打卡（跳过围栏）', fenceColor: '#faad14', fenceCanSubmit: true });
+    }
+    // 看门狗：高精度 9s / 普通 10s 内无回调 → 高精度降级重试，普通则判超时（杜绝无限"获取中"）
+    self._locTimer = setTimeout(function() {
+      if (self._locSettled) return;
+      if (high) { self.getLocation(false); return; }
+      // 普通定位也超时：允许无坐标打卡（服务端权威校验）
+      finish({ gpsState: 'timeout', coordText: '', fenceText: '⚠️ 定位超时，可仍打卡（跳过围栏）', fenceColor: '#faad14', fenceCanSubmit: true });
+    }, high ? 9000 : 10000);
+    // 权限预检：若已拒绝直接引导开启，不再空等
+    wx.getSetting({
+      success: function(s) {
+        if (self._locSettled) return;
+        if (s.authSetting && s.authSetting['scope.userLocation'] === false) {
+          finish({ gpsState: 'denied', coordText: '', fenceText: '❌ 定位权限被拒绝，点击定位行去开启', fenceColor: '#ff4d4f', fenceCanSubmit: false });
           return;
         }
-        var loc = { lat: lat, lng: lng, accuracy: res.accuracy || 0 };
-        self.setData({ location: loc, gpsState: 'ok', coordText: lat.toFixed(5) + ', ' + lng.toFixed(5) });
-        self.checkFence(loc);
+        wx.getLocation({
+          type: 'gcj02',
+          isHighAccuracy: high,
+          highAccuracyExpireTime: 5000,
+          success: onSuccess,
+          fail: onFail
+        });
       },
       fail: function() {
-        self.setData({ gpsState: 'fail', coordText: '', fenceText: '❌ 定位失败', fenceColor: '#ff4d4f', fenceCanSubmit: false });
+        if (self._locSettled) return;
+        wx.getLocation({
+          type: 'gcj02',
+          isHighAccuracy: high,
+          highAccuracyExpireTime: 5000,
+          success: onSuccess,
+          fail: onFail
+        });
       }
     });
+  },
+
+  retryLocate: function() {
+    if (this.data.gpsState === 'denied') {
+      wx.openSetting({ fail: function() {} });
+      return;
+    }
+    this.getLocation(true);
   },
 
   handleAuthError: function() {
@@ -121,6 +201,7 @@ var page = Page({
     wx.request({
       url: app.globalData.baseUrl + '/api/__pd__/mp-fence-check?lat=' + loc.lat + '&lng=' + loc.lng,
       header: { 'Authorization': 'Bearer ' + this.data.token },
+      timeout: 10000,
       success: function(res) {
         if (res.statusCode === 401) { self.handleAuthError(); return; }
         var d = res.data && res.data.data;
@@ -192,8 +273,14 @@ var page = Page({
       return;
     }
     var loc = this.data.location;
-    if (!loc) {
-      wx.showToast({ title: '定位未完成', icon: 'none' });
+    var gpsState = this.data.gpsState;
+    // 定位仍在获取中 → 拦截；已尝试过（超时/失败/拒绝）→ 允许提交（服务端权威校验）
+    if (!loc && gpsState === 'waiting') {
+      wx.showToast({ title: '定位获取中，请稍候', icon: 'none' });
+      return;
+    }
+    if (!loc && gpsState === 'ok') {
+      wx.showToast({ title: '定位数据异常，点击重试', icon: 'none' });
       return;
     }
     self.setData({ submitting: true, submitText: '提交中...' });
@@ -201,11 +288,17 @@ var page = Page({
     var body = {
       check_type: this.data.attendType,
       check_time: now.toISOString(),
-      latitude: loc.lat,
-      longitude: loc.lng,
-      gps_accuracy: Math.round(loc.accuracy),
-      gps_state: this.data.gpsState
+      gps_state: (loc && gpsState === 'ok') ? 'ok' : (gpsState === 'timeout' ? 'timeout' : 'fail')
     };
+    if (loc) {
+      body.latitude = loc.lat;
+      body.longitude = loc.lng;
+      body.gps_accuracy = Math.round(loc.accuracy);
+    }
+    if (!loc) {
+      // 无坐标提交：服务端 validLoc=false 直接放行；此处明确告知后台按失败定位处理
+      body.gps_state = gpsState === 'timeout' ? 'timeout' : 'fail';
+    }
     try { body.device_model = (wx.getDeviceInfo ? wx.getDeviceInfo().model : wx.getSystemInfoSync().model) || ''; } catch(e) {}
     if (this.data.photoPath) body.photo_taken = true;
     if (isLeave) {

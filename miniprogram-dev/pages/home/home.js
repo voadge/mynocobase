@@ -46,7 +46,8 @@ Page({
     theme: 'light',
     trackingActive: false,
     attendStatus: '今日未打卡',
-    collapsed: {}
+    collapsed: {},
+    privacyNeedsAgree: false
   },
 
   onLoad() {
@@ -61,6 +62,36 @@ Page({
 
   onShow() {
     this.checkTrackingStatus();
+    this.checkPrivacyAgree();
+  },
+
+  _isHarmonyOS: function() {
+    try {
+      var s = (wx.getSystemInfoSync() || {}).system || '';
+      return /ohos|harmony/i.test(s);
+    } catch (e) { return false; }
+  },
+
+  checkPrivacyAgree: function() {
+    var self = this;
+    if (!this._isHarmonyOS()) return;
+    if (typeof wx.getPrivacySetting !== 'function') return;
+    wx.getPrivacySetting({
+      success: function(res) {
+        var need = res && (res.need === true || res.needAuthorization === true);
+        if (need) self.setData({ privacyNeedsAgree: true });
+      }
+    });
+  },
+
+  onPrivacyAgreed: function() {
+    this.setData({ privacyNeedsAgree: false });
+    // 用一次 getLocation 验证隐私已解锁；成功即说明定位链路通了
+    wx.getLocation({
+      type: 'gcj02',
+      success: function() {},
+      fail: function() {}
+    });
   },
 
   checkTrackingStatus: function() {
@@ -68,12 +99,12 @@ Page({
     var token = wx.getStorageSync('token') || app.globalData.token || '';
     if (!token) return;
     var today = new Date();
-    var y = today.getFullYear(), m = String(today.getMonth()+1).padStart(2,'0'), d = String(today.getDate()).padStart(2,'0');
-    var s = y + '-' + m + '-' + d;
-    var eObj = new Date(y, today.getMonth(), today.getDate() + 1);
-    var e = eObj.getFullYear() + '-' + String(eObj.getMonth()+1).padStart(2,'0') + '-' + String(eObj.getDate()).padStart(2,'0');
+    var start = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString();
+    var end = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1).toISOString();
+    var url = app.globalData.baseUrl + '/api/attendance_records:list?filter[createdAt][$dateBetween]=' +
+      encodeURIComponent('[' + start + ',' + end + ']') + '&sort=-createdAt&pageSize=10';
     wx.request({
-      url: app.globalData.baseUrl + '/api/attendance_records:list?filter[check_time][$dateBetween][]=' + s + '&filter[check_time][$dateBetween][]=' + e + '&sort=-check_time&pageSize=10',
+      url: url,
       header: { 'Authorization': 'Bearer ' + token },
       success: function(res) {
         var recs = (res.data && res.data.data) || [];
@@ -83,8 +114,7 @@ Page({
           if (t.check_type === '上班') checkIn = true;
           if (t.check_type === '下班') checkOut = true;
         }
-        var now = today.getHours();
-        var tracking = checkIn && !checkOut && now < 19;
+        var tracking = checkIn && !checkOut;
         var attendStatus = !checkIn ? '今日未打卡' : (checkOut ? '今日已下班' : '今日已上班');
         self.setData({ trackingActive: tracking, checkedIn: checkIn, checkedOut: checkOut, attendStatus: attendStatus });
       }

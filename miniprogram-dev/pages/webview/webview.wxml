@@ -1,2 +1,3 @@
 <web-view src="{{src}}" binderror="onError" bindload="onLoadSuccess"></web-view>
+<cover-view class="back-home" bindtap="goHome">返回首页</cover-view>
 <privacy-popup />

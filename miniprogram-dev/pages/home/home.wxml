@@ -18,6 +18,11 @@
     <text class="tracking-text">{{trackingActive ? '安全监控运行中（每 15 分钟采集位置）' : '安全监控未开启（请先上班打卡）'}}</text>
   </view>
 
+  <view class="privacy-guide" wx:if="{{privacyNeedsAgree}}">
+    <view class="privacy-guide-text">🔒 首次使用定位需先同意隐私保护指引（华为鸿蒙手机请手动点击下方按钮）</view>
+    <button id="home-agree-privacy-btn" class="privacy-guide-btn" open-type="agreePrivacyAuthorization" bindagreeprivacyauthorization="onPrivacyAgreed">同意隐私并开启定位</button>
+  </view>
+
   <view class="card homepage-card">
     <button class="homepage-btn" bindtap="goHomepage" hover-class="btn-hover">🏠 进入管理后台</button>
   </view>

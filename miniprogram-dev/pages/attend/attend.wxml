@@ -31,11 +31,20 @@
     <text class="photo-hint">{{photoPath ? '✅ 已拍照' : '点击拍照'}}</text>
   </view>
 
+  <view class="privacy-guide" wx:if="{{privacyNeedsAgree}}">
+    <view class="privacy-guide-text">🔒 首次使用定位需先同意隐私保护指引</view>
+    <button id="agree-privacy-btn" class="privacy-guide-btn" open-type="agreePrivacyAuthorization" bindagreeprivacyauthorization="onPrivacyAgreed">同意隐私并开启定位</button>
+  </view>
+
   <view class="info-section">
-    <view class="info-row">
+    <view class="info-row" bindtap="retryLocate">
       <text class="info-label">📍 定位</text>
       <text class="info-value {{gpsState==='ok'?'ok':'fail'}}">
-        {{gpsState==='ok' ? '✅ 已获取' : gpsState==='waiting' ? '获取中...' : '❌ 定位失败'}}
+        <text wx:if="{{gpsState==='ok'}}">✅ 已获取</text>
+        <text wx:elif="{{gpsState==='denied'}}">❌ 权限被拒绝</text>
+        <text wx:elif="{{gpsState==='timeout'}}">⏰ 定位超时</text>
+        <text wx:elif="{{gpsState==='fail'}}">❌ 定位失败</text>
+        <text wx:else>获取中...</text>
       </text>
     </view>
     <view class="info-row" wx:if="{{coordText}}">
