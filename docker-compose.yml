@@ -131,7 +131,6 @@ services:
 
     ports:
       - "80:80"
-      - "668:443"
       - "443:443"
     networks:
       - nocobase
