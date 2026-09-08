@@ -33,6 +33,7 @@ $syncItems = @(
     "dashboard/人员动态.html"
     "dashboard/sw.js"
     "dashboard/precache.js"
+    "nginx-brotli/Dockerfile"
     "dashboard/nb-version.json"
     "dashboard/mappings.json"
 )
