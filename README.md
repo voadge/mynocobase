@@ -71,7 +71,7 @@ scripts\restore.bat [备份文件名]
 
 - **服务器 IP:** 110.42.236.231
 - **SSH 用户:** ubuntu
-- **NocoBase 地址:** https://voadge.top:668
+- **NocoBase 地址:** https://voadge.top
 - **SSH 密钥:** voadge.pem
 
 ## Git 操作

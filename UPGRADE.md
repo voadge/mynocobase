@@ -46,7 +46,7 @@ bash setup-print-template.sh
 
 ```bash
 # 检查插件 API
-curl -sk https://voadge.top:668/api/print_templates:list
+curl -sk https://voadge.top/api/print_templates:list
 
 # 应返回 401 (需要认证) 或 200 (成功)
 ```

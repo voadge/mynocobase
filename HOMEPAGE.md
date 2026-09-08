@@ -71,7 +71,7 @@
 
 ## 🔗 快速访问
 
-- 🌐 **系统地址**: [https://voadge.top:668](https://voadge.top:668)
+- 🌐 **系统地址**: [https://voadge.top](https://voadge.top)
 - 📁 **GitHub 仓库**: [https://github.com/voadge/mynocobase](https://github.com/voadge/mynocobase)
 - 🖥️ **服务器**: 110.42.236.231
 

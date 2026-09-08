@@ -56,7 +56,7 @@ awk '
     print "    }"
     print ""
     print "    location @login_redirect {"
-    print "        return 302 $upstream_x_forwarded_proto://$http_host:668/signin;"
+    print "        return 302 $upstream_x_forwarded_proto://$http_host/signin;"
     print "    }"
     print ""
 }

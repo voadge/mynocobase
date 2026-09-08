@@ -55,7 +55,7 @@ $tmpFile = "E:\my-project\.tmp-mcp.json"
 try {
     Set-Content -NoNewline -Encoding ASCII -Path $tmpFile -Value $body
     $auth = "Authorization: Bearer $token"
-    $raw = curl.exe -s -X POST "https://voadge.top:668/api/mcp" -H $auth -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" -d "@E:\my-project\.tmp-mcp.json" -k 2>&1
+    $raw = curl.exe -s -X POST "https://voadge.top/api/mcp" -H $auth -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" -d "@E:\my-project\.tmp-mcp.json" -k 2>&1
     if ($raw -match 'data:\s*(\{.*\})') {
         Write-Output $Matches[1]
     } else {

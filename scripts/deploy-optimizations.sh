@@ -121,23 +121,23 @@ if [ -n "$TOKEN" ]; then
 
   # 验证插件
   echo -n "验证 dashboard-home 插件: "
-  curl -s -o /dev/null -w "%{http_code}" --cookie "nb_token=$TOKEN" https://voadge.top:668/ 2>/dev/null || echo "skip"
+  curl -s -o /dev/null -w "%{http_code}" --cookie "nb_token=$TOKEN" https://voadge.top/ 2>/dev/null || echo "skip"
 
   echo ""
   echo -n "验证 人员动态 页面: "
-  curl -s -o /dev/null -w "%{http_code}" --cookie "nb_token=$TOKEN" https://voadge.top:668/peopledynamic 2>/dev/null || echo "skip"
+  curl -s -o /dev/null -w "%{http_code}" --cookie "nb_token=$TOKEN" https://voadge.top/peopledynamic 2>/dev/null || echo "skip"
 
   echo ""
   echo -n "验证 围栏管理 页面: "
-  curl -s -o /dev/null -w "%{http_code}" --cookie "nb_token=$TOKEN" https://voadge.top:668/geofence 2>/dev/null || echo "skip"
+  curl -s -o /dev/null -w "%{http_code}" --cookie "nb_token=$TOKEN" https://voadge.top/geofence 2>/dev/null || echo "skip"
 
   echo ""
   echo -n "验证 geofences 表: "
-  curl -s --cookie "nb_token=$TOKEN" https://voadge.top:668/api/geofences:list?pageSize=1 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); print('OK (' + str(d.get('meta',{}).get('count',0)) + ' fences)')" 2>/dev/null || echo "skip"
+  curl -s --cookie "nb_token=$TOKEN" https://voadge.top/api/geofences:list?pageSize=1 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); print('OK (' + str(d.get('meta',{}).get('count',0)) + ' fences)')" 2>/dev/null || echo "skip"
 
   echo ""
   echo -n "验证 dashboard-snapshot: "
-  curl -s --cookie "nb_token=$TOKEN" https://voadge.top:668/api/__pd__/dashboard-snapshot 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); print('OK (' + str(len(d.get('workers',[]))) + ' workers)')" 2>/dev/null || echo "skip"
+  curl -s --cookie "nb_token=$TOKEN" https://voadge.top/api/__pd__/dashboard-snapshot 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); print('OK (' + str(len(d.get('workers',[]))) + ' workers)')" 2>/dev/null || echo "skip"
 else
   echo "⚠ 无法获取 token，跳过验证"
 fi
@@ -145,9 +145,9 @@ fi
 echo ""
 echo "=== 部署完成! ==="
 echo "请手动检查:"
-echo "  1. 浏览器打开 https://voadge.top:668/ 确认看板正常"
-echo "  2. 打开 https://voadge.top:668/peopledynamic 验证人员动态"
-echo "  3. 打开 https://voadge.top:668/geofence 验证围栏管理"
+echo "  1. 浏览器打开 https://voadge.top/ 确认看板正常"
+echo "  2. 打开 https://voadge.top/peopledynamic 验证人员动态"
+echo "  3. 打开 https://voadge.top/geofence 验证围栏管理"
 echo "  4. 测试打卡流程"
 echo "  5. 检查容器日志: docker logs noco-base-app-1 --tail 30"
 echo ""

@@ -116,4 +116,4 @@ docker logs "$APP_CONTAINER" --tail 30
 echo ""
 echo "=== Deployment complete ==="
 echo "Check if the plugin loaded successfully from the logs above."
-echo "Then visit: https://voadge.top:668/home"
+echo "Then visit: https://voadge.top/home"

@@ -14,9 +14,9 @@
 
 | 项目 | 值 |
 |------|-----|
-| **访问地址** | https://voadge.top:668 |
-| **HTTP 重定向** | http://voadge.top → https://voadge.top:668 |
-| **MCP 端点** | https://voadge.top:668/api/mcp |
+| **访问地址** | https://voadge.top |
+| **HTTP 重定向** | http://voadge.top → https://voadge.top |
+| **MCP 端点** | https://voadge.top/api/mcp |
 | **部署目录** | `/opt/noco-base` |
 | **Docker Compose** | `/opt/noco-base/docker-compose.yml` |
 

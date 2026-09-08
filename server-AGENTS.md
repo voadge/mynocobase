@@ -1,6 +1,6 @@
 # AGENTS.md — NocoBase 生产服务器工作规范
 
-> 服务器：`ubuntu@110.42.236.231`　部署目录：`/opt/noco-base`　访问：`https://voadge.top:668`
+> 服务器：`ubuntu@110.42.236.231`　部署目录：`/opt/noco-base`　访问：`https://voadge.top`
 
 ## 核心原则：服务器是唯一数据源
 本地 Git 仓库仅作备份快照。正确流程：**服务器修改 → 浏览器验证 → `sync-from-server.ps1` 拉回 → git commit**。

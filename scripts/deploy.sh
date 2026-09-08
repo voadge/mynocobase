@@ -27,4 +27,4 @@ docker compose ps
 EOF
 
 echo ""
-echo "部署完成！访问 https://voadge.top:668"
+echo "部署完成！访问 https://voadge.top"

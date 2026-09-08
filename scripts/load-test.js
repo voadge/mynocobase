@@ -2,7 +2,7 @@
 // 测试关键端点：聚合API、围栏列表、位置历史
 // 用法: node scripts/load-test.js
 
-const BASE = 'https://voadge.top:668';
+const BASE = 'https://voadge.top';
 const AUTH = { account: 'voadge@voadge.cn', password: '875253tz@' };
 
 async function getToken() {
