@@ -125,19 +125,27 @@ function registerDashboardRoutes(app, plugin) {
                     limit: 1
                 });
                 const last = hist.length > 0 ? hist[0] : null;
-                const skip = last && last.latitude === String(u.lat) && last.longitude === String(u.lng) &&
+                const skip = last && parseFloat(last.latitude) === parseFloat(u.lat) && parseFloat(last.longitude) === parseFloat(u.lng) &&
                     (Date.now() - new Date(last.createdAt).getTime()) < 5 * 60 * 1000;
                 if (skip)
                     continue;
-                await LocationHistory.create({
+                const created = await LocationHistory.create({
                     values: {
                         latitude: u.lat,
                         longitude: u.lng,
                         accuracy: null,
-                        recorded_at: (u.time || new Date().toISOString()).slice(0, 10),
-                        createdById: u.uid
+                        recorded_at: new Date().toISOString()
                     }
                 });
+                try {
+                    await LocationHistory.update({
+                        filterByTk: created.id,
+                        values: { createdById: u.uid }
+                    });
+                }
+                catch (e) {
+                    console.log('[batch-collect] createdById update failed:', e.message);
+                }
                 written.push(u.uid);
             }
             ctx.body = { data: { processed: activeUsers.length, written: written.length, userIds: written } };
