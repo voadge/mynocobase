@@ -80,7 +80,7 @@ services:
       - redis_password
 
   app:
-    image: nocobase/nocobase:2.2.12
+    image: nocobase/nocobase:2.2.14
     restart: unless-stopped
     env_file: ./env/app.env
     entrypoint: ["/bin/sh", "/opt/noco-base/entrypoint-wrapper.sh"]

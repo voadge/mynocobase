@@ -225,6 +225,33 @@
             .bar-left { gap: 3px; padding: 0 4px; }
             .bar-scroll { gap: 4px; padding: 0 4px; }
         }
+        /* 最新位置点（点击"在线"时显示） */
+        .latest-point-marker { background: transparent !important; border: none !important; }
+        .latest-point-dot {
+            width: 18px; height: 18px; border-radius: 50%;
+            background: radial-gradient(circle at 35% 35%, #ffb3b3, #ff4d4f 60%, #c00000);
+            box-shadow: 0 0 10px rgba(255,77,79,1), 0 0 20px rgba(255,77,79,0.6);
+            transform-origin: 50% 50%;
+            animation: latestPointPulse 1.2s ease-in-out infinite;
+        }
+        @keyframes latestPointPulse {
+            0%, 100% { transform: scale(1);   opacity: 0.9; }
+            50%      { transform: scale(1.5); opacity: 1; }
+        }
+        /* 轨迹动态人形（沿路径流动，朝向行进方向，位置放大加亮） */
+        .traj-person-marker { background: transparent !important; border: none !important; }
+        .traj-person-rot { width: 26px; height: 26px; transform-origin: 50% 50%; }
+        .traj-person {
+            width: 26px; height: 26px;
+            transform-origin: 50% 50%;
+            animation: trajPersonPulse 0.9s ease-in-out infinite;
+        }
+        .traj-person svg { width: 100%; height: 100%; display: block; }
+        @keyframes trajPersonPulse {
+            0%   { transform: scale(1);   opacity: 0.85; filter: drop-shadow(0 0 3px rgba(255,77,79,0.8)); }
+            50%  { transform: scale(1.4); opacity: 1;    filter: drop-shadow(0 0 10px rgba(255,77,79,1)); }
+            100% { transform: scale(1);   opacity: 0.85; filter: drop-shadow(0 0 3px rgba(255,77,79,0.8)); }
+        }
     </style>
 </head>
 <body>
@@ -266,6 +293,10 @@
 <script>
 // ========== URL token injection (for Mini Program web-view) ==========
 (function(){var m=location.search.match(/[?&]token=([^&]*)/);if(m&&m[1]){localStorage.setItem("NOCOBASE_TOKEN",m[1]);}})();
+// ========== 版本标记（用于确认是否加载到最新版） ==========
+var RYDT_VERSION = 'v3.3';
+document.title = '人员动态 ' + RYDT_VERSION;
+console.log('[人员动态] version', RYDT_VERSION);
 // ========== 常量 & 状态 ==========
 var token = localStorage.getItem("NOCOBASE_TOKEN") || localStorage.getItem("nocobase_token");
 var headers = { 'Content-Type': 'application/json' };
@@ -283,6 +314,7 @@ var selectedUserId = null;
 var userMarkers = {};
 var fenceLayers = [];
 var trajectoryLayer = null;
+var trajectoryLayers = [];
 var trajectoryStartMarker = null;
 var trajectoryEndMarker = null;
 var currentLocationMarker = null;
@@ -489,9 +521,12 @@ function renderUserList(query) {
             html += '<div class="user-item' + (isSelected ? ' active' : '') + '" onclick="selectUser(' + uid + ')" data-uid="' + uid + '">';
             html += '<span class="user-dot ' + (isOnline ? 'online' : 'offline') + '"></span>';
             html += '<span class="user-name">' + escHtml(u.nickname || u.username) + '</span>';
-            if (!loc) html += '<span class="user-badge">无位置</span>';
-            else if (isOnline) html += '<span class="user-badge">在线</span>';
-            if (isSelected) html += '<span class="user-badge tracking">追踪中</span>';
+            if (!loc) {
+                html += '<span class="user-badge">无位置</span>';
+            } else {
+                if (isOnline) html += '<span class="user-badge" onclick="event.stopPropagation();selectUser(' + uid + ')">在线</span>';
+                html += '<span class="user-badge tracking" onclick="event.stopPropagation();trackUser(' + uid + ')">追踪中</span>';
+            }
             html += '</div>';
         });
         html += '</div>';
@@ -516,18 +551,136 @@ function selectUser(uid) {
     selectedUserId = uid;
     renderUserList(document.getElementById('searchInput').value.trim().toLowerCase());
     var loc = latestLocations[uid];
+    clearTrajectory();
+    clearLatestPoint();
+    if (loc && loc.lat && loc.lng) {
+        map.setView([parseFloat(loc.lat), parseFloat(loc.lng)], 14, { animate: true });
+        showLatestPoint(uid, loc);
+        document.getElementById('trajectoryInfo').textContent = '最新位置 · 点击「追踪中」查看当日轨迹';
+    } else {
+        document.getElementById('trajectoryInfo').textContent = '该用户暂无位置数据';
+    }
+}
+
+// ── 点「追踪中」徽章 → 显示当日轨迹 ──
+function trackUser(uid) {
+    if (!uid) return;
+    selectedUserId = uid;
+    renderUserList(document.getElementById('searchInput').value.trim().toLowerCase());
+    clearLatestPoint();
+    var loc = latestLocations[uid];
     if (loc && loc.lat && loc.lng) {
         map.setView([parseFloat(loc.lat), parseFloat(loc.lng)], 14, { animate: true });
     }
     loadTrajectory(uid);
 }
 
+// ── 最新位置点（在线点击时显示） ──
+var latestPointMarker = null;
+var latestPointIcon = L.divIcon({
+    className: 'latest-point-marker',
+    html: '<div class="latest-point-dot"></div>',
+    iconSize: [18, 18],
+    iconAnchor: [9, 9]
+});
+function showLatestPoint(uid, loc) {
+    clearLatestPoint();
+    if (!loc || !loc.lat || !loc.lng) return;
+    latestPointMarker = L.marker([parseFloat(loc.lat), parseFloat(loc.lng)], {
+        icon: latestPointIcon, interactive: false, keyboard: false
+    }).addTo(map);
+    latestPointMarker.bindTooltip('最新位置', { permanent: false });
+}
+function clearLatestPoint() {
+    if (latestPointMarker) { map.removeLayer(latestPointMarker); latestPointMarker = null; }
+}
+
 // ========== 轨迹加载 (缓存 + 时间边界 + 精度/速度过滤 + 平滑) ==========
 function clearTrajectory() {
     if (trajectoryLayer) { map.removeLayer(trajectoryLayer); trajectoryLayer = null; }
+    trajectoryLayers.forEach(function(l){ if (l) map.removeLayer(l); });
+    trajectoryLayers = [];
+    clearTrajectoryPersons();
     if (trajectoryStartMarker) { map.removeLayer(trajectoryStartMarker); trajectoryStartMarker = null; }
     if (trajectoryEndMarker) { map.removeLayer(trajectoryEndMarker); trajectoryEndMarker = null; }
     document.getElementById('trajectoryInfo').textContent = '';
+}
+
+// ── 轨迹动态人形（沿路径流动，朝向行进方向，位置放大加亮） ──
+var trajArrowRaf = null;
+var trajArrows = [];
+var TRAJ_ARROW_COUNT = 1;
+var TRAJ_ARROW_SPEED = 80; // 米/秒（原 240 的 1/3）
+
+function _segLen(a, b) { return _haversine(a, b); }
+function _pathTotalLen(latlngs) {
+    var d = 0;
+    for (var i = 1; i < latlngs.length; i++) d += _segLen(latlngs[i-1], latlngs[i]);
+    return d;
+}
+function _pointAt(latlngs, dist) {
+    if (latlngs.length === 1) return { lat: latlngs[0][0], lng: latlngs[0][1], deg: 0 };
+    var acc = 0;
+    for (var i = 1; i < latlngs.length; i++) {
+        var segLen = _segLen(latlngs[i-1], latlngs[i]);
+        if (segLen === 0) continue;
+        if (acc + segLen >= dist || i === latlngs.length - 1) {
+            var t = segLen === 0 ? 0 : Math.max(0, Math.min(1, (dist - acc) / segLen));
+            var lat = latlngs[i-1][0] + t * (latlngs[i][0] - latlngs[i-1][0]);
+            var lng = latlngs[i-1][1] + t * (latlngs[i][1] - latlngs[i-1][1]);
+            var dLat = (latlngs[i][0] - latlngs[i-1][0]) * Math.PI / 180;
+            var dLng = (latlngs[i][1] - latlngs[i-1][1]) * Math.PI / 180;
+            var x = dLng * Math.cos(latlngs[i-1][0] * Math.PI / 180);
+            var deg = Math.atan2(x, dLat) * 180 / Math.PI;
+            return { lat: lat, lng: lng, deg: deg };
+        }
+        acc += segLen;
+    }
+    var n = latlngs.length - 1;
+    return { lat: latlngs[n][0], lng: latlngs[n][1], deg: 0 };
+}
+function startTrajectoryPersons(segments) {
+    clearTrajectoryPersons();
+    trajArrows = [];
+    var personSvg = '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7" fill="#ffffff" stroke="#ff4d4f" stroke-width="2.5"/></svg>';
+    segments.forEach(function(seg){
+        if (seg.length < 2) return;
+        var totalLen = _pathTotalLen(seg);
+        if (totalLen <= 0) return;
+        var icon = L.divIcon({
+            className: 'traj-person-marker',
+            html: '<div class="traj-person-rot"><div class="traj-person">' + personSvg + '</div></div>',
+            iconSize: [26, 26],
+            iconAnchor: [13, 13]
+        });
+        for (var i = 0; i < TRAJ_ARROW_COUNT; i++) {
+            var m = L.marker(seg[0], { icon: icon, interactive: false, keyboard: false }).addTo(map);
+            trajArrows.push({ marker: m, seg: seg, totalLen: totalLen, phase: i / TRAJ_ARROW_COUNT });
+        }
+    });
+    if (!trajArrows.length) return;
+    var start = performance.now();
+    function frame(now) {
+        var t = (now - start) / 1000;
+        trajArrows.forEach(function(a){
+            var dist = ((t * TRAJ_ARROW_SPEED) % a.totalLen) + a.phase * a.totalLen;
+            if (dist >= a.totalLen) dist -= a.totalLen;
+            var pos = _pointAt(a.seg, dist);
+            var el = a.marker.getElement();
+            if (el) {
+                var rot = el.querySelector('.traj-person-rot');
+                if (rot) rot.style.transform = 'rotate(' + pos.deg + 'deg)';
+            }
+            a.marker.setLatLng([pos.lat, pos.lng]);
+        });
+        trajArrowRaf = requestAnimationFrame(frame);
+    }
+    trajArrowRaf = requestAnimationFrame(frame);
+}
+function clearTrajectoryPersons() {
+    if (trajArrowRaf) { cancelAnimationFrame(trajArrowRaf); trajArrowRaf = null; }
+    trajArrows.forEach(function(a){ if (a.marker) map.removeLayer(a.marker); });
+    trajArrows = [];
 }
 
 function loadTrajectory(uid, force) {
@@ -581,47 +734,63 @@ function loadTrajectory(uid, force) {
             cur.push(p);
         });
         if (cur.length) clusters.push(cur);
-        clusters.sort(function(a, b){
-            if (b.length !== a.length) return b.length - a.length;
-            return (b[b.length - 1].ts || 0) - (a[a.length - 1].ts || 0);
-        });
-        var best = clusters.length ? clusters[0] : [];
-        pts = best.map(function(p){ return [p.lat, p.lng]; });
-
-        if (pts.length === 0) {
+        var totalPts = 0;
+        clusters.forEach(function(c){ totalPts += c.length; });
+        if (totalPts === 0) {
             document.getElementById('trajectoryInfo').textContent = '该时段无位置数据';
             return;
         }
-        var smoothed = _smoothTrajectory(pts, 0.25);
-        trajectoryCache[uid] = { points: smoothed, ts: Date.now() };
-        renderTrajectory(smoothed);
+        var segments = clusters.map(function(c){
+            var seg = c.map(function(p){ return [p.lat, p.lng]; });
+            return _smoothTrajectory(seg, 0.25);
+        });
+        trajectoryCache[uid] = { points: segments, ts: Date.now() };
+        renderTrajectory(segments);
     }).catch(function(){
         document.getElementById('trajectoryInfo').textContent = '轨迹加载失败';
     });
 }
 
-function renderTrajectory(smoothed) {
-    if (smoothed.length >= 2) {
-        trajectoryLayer = L.polyline(smoothed, {
-            color: '#ffd93d', weight: 3, opacity: 0.7, dashArray: '8,6'
-        }).addTo(map);
-    }
-    trajectoryStartMarker = L.circleMarker(smoothed[0], {
+function renderTrajectory(segments) {
+    if (!segments || !segments.length) return;
+    var first = segments[0][0];
+    var lastSeg = segments[segments.length - 1];
+    var last = lastSeg[lastSeg.length - 1];
+    var totalPts = 0, totalDist = 0, bounds = [];
+    segments.forEach(function(seg){
+        totalPts += seg.length;
+        if (seg.length >= 2) {
+            var line = L.polyline(seg, {
+                color: '#ffd93d', weight: 5, opacity: 0.9
+            }).addTo(map);
+            trajectoryLayers.push(line);
+            for (var i = 1; i < seg.length; i++) {
+                totalDist += _haversine(seg[i-1], seg[i]);
+            }
+            try { bounds.push(line.getBounds()); } catch(e) {}
+        } else if (seg.length === 1) {
+            var dot = L.circleMarker(seg[0], {
+                radius: 4, color: '#ffd93d', fillColor: '#ffd93d', fillOpacity: 0.6, weight: 1
+            }).addTo(map);
+            trajectoryLayers.push(dot);
+        }
+    });
+    startTrajectoryPersons(segments);
+    trajectoryStartMarker = L.circleMarker(first, {
         radius: 6, color: '#00ff88', fillColor: '#00ff88', fillOpacity: 0.9, weight: 2
-    }).addTo(map).bindTooltip('位置', { permanent: false });
-    if (smoothed.length >= 2) {
-        trajectoryEndMarker = L.circleMarker(smoothed[smoothed.length - 1], {
+    }).addTo(map).bindTooltip('起点', { permanent: false });
+    if (last && (last[0] !== first[0] || last[1] !== first[1])) {
+        trajectoryEndMarker = L.circleMarker(last, {
             radius: 5, color: '#ff6b6b', fillColor: '#ff6b6b', fillOpacity: 0.8, weight: 2
         }).addTo(map).bindTooltip('终点', { permanent: false });
-        var dist = 0;
-        for (var i = 1; i < smoothed.length; i++) {
-            dist += _haversine(smoothed[i-1], smoothed[i]);
-        }
-        document.getElementById('trajectoryInfo').textContent = '轨迹: ' + smoothed.length + '点, ' + Math.round(dist) + 'm';
-        map.fitBounds(trajectoryLayer.getBounds().pad(0.2));
+    }
+    document.getElementById('trajectoryInfo').textContent = '轨迹: ' + totalPts + '点, ' + Math.round(totalDist) + 'm';
+    if (bounds.length) {
+        var b = bounds[0];
+        for (var i = 1; i < bounds.length; i++) b.extend(bounds[i]);
+        map.fitBounds(b.pad(0.2));
     } else {
-        document.getElementById('trajectoryInfo').textContent = '位置: ' + smoothed.length + '点';
-        map.setView(smoothed[0], Math.max(map.getZoom(), 15));
+        map.setView(first, Math.max(map.getZoom(), 15));
     }
 }
 
