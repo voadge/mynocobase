@@ -17,6 +17,7 @@ const PAGE_MAP = {
     '/__tp__': '智能排版打印助手.html',
     '/__gf__': 'geofence-manager.html',
     '/__pd__': '人员动态.html',
+    '/__wm__': '拍照水印.html',
 };
 const STORAGE_DIR = '/app/nocobase/storage/dashboard';
 function registerPageRoutes(app) {
@@ -25,7 +26,7 @@ function registerPageRoutes(app) {
         if (ctx.method !== 'GET' || !PAGE_MAP[ctx.state.reqPath]) {
             return await next();
         }
-        const isPublic = ['/__tb__', '/__fp__', '/__tp__'].indexOf(ctx.state.reqPath) >= 0;
+        const isPublic = ['/__tb__', '/__fp__', '/__tp__', '/__wm__'].indexOf(ctx.state.reqPath) >= 0;
         if (isPublic || (await (0, auth_1.isAuthenticated)(ctx))) {
             ctx.withoutDataWrapping = true;
             ctx.set('Cache-Control', 'no-cache, no-store, must-revalidate');

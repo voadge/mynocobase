@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>拍照水印</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f5f5f5;padding:16px}
+.card{background:#fff;border-radius:12px;padding:16px;margin-bottom:12px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+.title{font-size:16px;font-weight:600;margin-bottom:12px}
+.info{font-size:13px;color:#8c8c8c;margin-bottom:8px}
+.video-wrap{position:relative;width:100%;border-radius:8px;overflow:hidden;background:#000;margin-bottom:12px}
+video{width:100%;display:block}
+.btn{width:100%;padding:12px;font-size:15px;font-weight:600;color:#fff;background:#1890ff;border:none;border-radius:8px;cursor:pointer}
+.btn:active{background:#096dd9}
+.btn:disabled{background:#bfbfbf}
+.preview{margin-top:12px;display:none}
+.preview img{width:100%;border-radius:8px}
+.station-info{background:#f0f5ff;border-radius:8px;padding:10px;margin-bottom:12px;font-size:13px;color:#1890ff}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="title">拍照水印</div>
+  <div class="station-info" id="stationInfo">定位中...</div>
+  <div class="video-wrap">
+    <video id="video" autoplay playsinline></video>
+  </div>
+  <button class="btn" id="captureBtn" onclick="capture()">拍照</button>
+  <div class="preview" id="preview">
+    <img id="resultImg">
+    <button class="btn" style="margin-top:8px;background:#52c41a" onclick="download()">保存</button>
+  </div>
+</div>
+
+<script>
+var video = document.getElementById('video');
+var stream = null;
+var currentStation = null;
+
+// Start camera
+navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } } })
+  .then(function(s) {
+    stream = s;
+    video.srcObject = stream;
+  })
+  .catch(function(e) {
+    document.getElementById('stationInfo').textContent = '无法访问摄像头: ' + e.message;
+  });
+
+// Get location and compute station
+if (navigator.geolocation) {
+  navigator.geolocation.getCurrentPosition(function(pos) {
+    var lat = pos.coords.latitude;
+    var lng = pos.coords.longitude;
+    var acc = pos.coords.accuracy;
+    // Call server to convert to station (WGS84 → server converts to GCJ02)
+    fetch('/api/__pd__/station/convert?lat=' + lat + '&lng=' + lng + '&cs=wgs84', { credentials: 'same-origin' })
+      .then(function(r) { return r.json(); })
+      .then(function(j) {
+        if (j.code === 0 && j.data) {
+          currentStation = j.data;
+          document.getElementById('stationInfo').innerHTML =
+            '<b>' + j.data.station + '</b> ' + j.data.road_name + '<br>' +
+            '距路线 ' + j.data.distance + 'm' +
+            (j.data.structure_name ? ' | ' + j.data.structure_name : '');
+        } else {
+          document.getElementById('stationInfo').textContent = '未匹配到路线 (GPS ' + lat.toFixed(4) + ',' + lng.toFixed(4) + ')';
+        }
+      })
+      .catch(function() {
+        document.getElementById('stationInfo').textContent = 'GPS: ' + lat.toFixed(4) + ', ' + lng.toFixed(4) + ' (桩号查询失败)';
+      });
+  }, function() {
+    document.getElementById('stationInfo').textContent = 'GPS 未授权，水印将不含桩号';
+  }, { enableHighAccuracy: true, timeout: 10000 });
+}
+
+function capture() {
+  var canvas = document.createElement('canvas');
+  canvas.width = video.videoWidth || 640;
+  canvas.height = video.videoHeight || 480;
+  var ctx = canvas.getContext('2d');
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+  // Draw watermark
+  var lines = [];
+  if (currentStation) {
+    lines.push('桩号: ' + currentStation.station);
+    if (currentStation.road_name) lines.push('路线: ' + currentStation.road_name);
+    if (currentStation.structure_name) lines.push('结构物: ' + currentStation.structure_name);
+  }
+  var lat = video.dataset.lat, lng = video.dataset.lng;
+  lines.push(new Date().toLocaleString('zh-CN'));
+
+  var fontSize = Math.max(14, Math.floor(canvas.width / 40));
+  var lineHeight = fontSize * 1.4;
+  var padding = fontSize;
+  var boxH = lines.length * lineHeight + padding * 2;
+  var boxW = Math.min(canvas.width * 0.6, 320);
+  var x = canvas.width - boxW - 10;
+  var y = canvas.height - boxH - 10;
+
+  ctx.fillStyle = 'rgba(0,0,0,0.55)';
+  ctx.beginPath();
+  var r = 6;
+  ctx.moveTo(x+r,y);ctx.lineTo(x+boxW-r,y);ctx.arcTo(x+boxW,y,x+boxW,y+r,r);
+  ctx.lineTo(x+boxW,y+boxH-r);ctx.arcTo(x+boxW,y+boxH,x+boxW-r,y+boxH,r);
+  ctx.lineTo(x+r,y+boxH);ctx.arcTo(x,y+boxH,x,y+boxH-r,r);
+  ctx.lineTo(x,y+r);ctx.arcTo(x,y,x+r,y,r);
+  ctx.fill();
+  ctx.fillStyle = '#fff';
+  ctx.font = fontSize + 'px sans-serif';
+  ctx.textBaseline = 'top';
+  for (var i = 0; i < lines.length; i++) {
+    ctx.fillText(lines[i], x + padding, y + padding + i * lineHeight);
+  }
+
+  var dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+  document.getElementById('resultImg').src = dataUrl;
+  document.getElementById('preview').style.display = 'block';
+  document.getElementById('captureBtn').textContent = '重拍';
+}
+
+function download() {
+  var a = document.createElement('a');
+  a.href = document.getElementById('resultImg').src;
+  a.download = 'watermark_' + Date.now() + '.jpg';
+  a.click();
+}
+</script>
+</body>
+</html>

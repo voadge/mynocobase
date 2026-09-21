@@ -344,4 +344,77 @@ export function registerStationRoutes(app: any, authMiddleware: any): void {
       ctx.body = { code: -1, msg: e.message };
     }
   }, { tag: 'dashboard-home', before: 'dataSource' });
+
+  // POST /api/__pd__/station/convert-batch - batch convert multiple points
+  app.use(async (ctx: any, next: () => Promise<void>) => {
+    if (ctx.method !== 'POST' || ctx.state.reqPath !== '/__pd__/station/convert-batch') {
+      return await next();
+    }
+    if (!(await authMiddleware.isAuthenticated(ctx))) { ctx.status = 401; ctx.body = 'Unauthorized'; return; }
+    ctx.withoutDataWrapping = true;
+    ctx.type = 'application/json; charset=utf-8';
+    try {
+      const body = ctx.request.body || {};
+      const points = body.points; // [{lat, lng}]
+      const cs = (body.cs || 'gcj02') as 'gcj02' | 'wgs84';
+      const projectId = body.project_id ? parseInt(body.project_id, 10) : undefined;
+      if (!Array.isArray(points) || points.length === 0) {
+        ctx.body = { code: -1, msg: '缺少 points 数组' };
+        return;
+      }
+      if (points.length > 200) {
+        ctx.body = { code: -1, msg: '单次最多 200 个点' };
+        return;
+      }
+      const results = [];
+      for (const p of points) {
+        const rawLat = parseFloat(p.lat || p.latitude);
+        const rawLng = parseFloat(p.lng || p.longitude);
+        if (isNaN(rawLat) || isNaN(rawLng)) { results.push(null); continue; }
+        const [lat, lng] = convertToGCJ02(rawLat, rawLng, cs);
+        const result = await findNearestStation(ctx.db, lat, lng, { projectId });
+        results.push(result);
+      }
+      ctx.body = { code: 0, data: results };
+    } catch (e: any) {
+      ctx.status = 500;
+      ctx.body = { code: -1, msg: e.message };
+    }
+  }, { tag: 'dashboard-home', before: 'dataSource' });
+
+  // GET /api/__pd__/station/validate-import - validate import coordinates
+  app.use(async (ctx: any, next: () => Promise<void>) => {
+    if (ctx.method !== 'GET' || ctx.state.reqPath !== '/__pd__/station/validate-import') {
+      return await next();
+    }
+    if (!(await authMiddleware.isAuthenticated(ctx))) { ctx.status = 401; ctx.body = 'Unauthorized'; return; }
+    ctx.withoutDataWrapping = true;
+    ctx.type = 'application/json; charset=utf-8';
+    try {
+      const body = ctx.request.body || {};
+      const points = body.points || [];
+      const cs = (body.cs || 'gcj02') as 'gcj02' | 'wgs84';
+      const errors: string[] = [];
+      const validPoints: Array<{ lng: number; lat: number }> = [];
+      for (let i = 0; i < points.length; i++) {
+        const p = points[i];
+        const rawLng = Array.isArray(p) ? p[0] : p.lng || p.longitude;
+        const rawLat = Array.isArray(p) ? p[1] : p.lat || p.latitude;
+        if (typeof rawLng !== 'number' || typeof rawLat !== 'number') {
+          errors.push('[' + i + '] 坐标格式错误');
+          continue;
+        }
+        if (rawLng < 73 || rawLng > 135 || rawLat < 3 || rawLat > 54) {
+          errors.push('[' + i + '] 坐标越界 [' + rawLng + ',' + rawLat + ']，请检查 [lng,lat] 顺序');
+          continue;
+        }
+        const [lat, lng] = convertToGCJ02(rawLat, rawLng, cs);
+        validPoints.push({ lng, lat });
+      }
+      ctx.body = { code: 0, data: { valid: errors.length === 0, errors, validCount: validPoints.length, totalCount: points.length } };
+    } catch (e: any) {
+      ctx.status = 500;
+      ctx.body = { code: -1, msg: e.message };
+    }
+  }, { tag: 'dashboard-home', before: 'dataSource' });
 }

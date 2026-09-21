@@ -13,6 +13,7 @@ const PAGE_MAP: Record<string, string> = {
   '/__tp__': '智能排版打印助手.html',
   '/__gf__': 'geofence-manager.html',
   '/__pd__': '人员动态.html',
+  '/__wm__': '拍照水印.html',
 };
 
 const STORAGE_DIR = '/app/nocobase/storage/dashboard';
@@ -24,7 +25,7 @@ export function registerPageRoutes(app: any): void {
       return await next();
     }
 
-    const isPublic = ['/__tb__', '/__fp__', '/__tp__'].indexOf(ctx.state.reqPath) >= 0;
+    const isPublic = ['/__tb__', '/__fp__', '/__tp__', '/__wm__'].indexOf(ctx.state.reqPath) >= 0;
 
     if (isPublic || (await isAuthenticated(ctx))) {
       ctx.withoutDataWrapping = true;

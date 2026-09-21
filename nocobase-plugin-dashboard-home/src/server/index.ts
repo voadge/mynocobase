@@ -545,6 +545,45 @@ b.addEventListener('click',async function(){var code=c.value.trim(),dt=d.value;i
       roadCol.model.addHook('beforeUpdate', recomputeAndUpsert);
     }
 
+    // Phase 5: Auto-compute station on location_history/attendance_records afterSave (anti-recursion guard)
+    const stationHooks = async (record: any) => {
+      try {
+        if (record.get('station')) return; // C7: anti-recursion guard
+        const lat = record.get('latitude');
+        const lng = record.get('longitude');
+        if (lat == null || lng == null) return;
+        // Lazy-load station utils to avoid circular deps
+        const { nearestOnPolyline, stationToStr, recomputeMeters } = require('../utils/geo');
+        const roads = await db.getRepository('road_lines').find({ filter: { is_active: true } });
+        if (!roads || roads.length === 0) return;
+        let bestResult: any = null, bestDist = Infinity;
+        for (const road of roads) {
+          const rawPts = road.points ? (typeof road.points === 'string' ? JSON.parse(road.points) : road.points) : [];
+          if (rawPts.length < 2) continue;
+          const points = recomputeMeters(rawPts);
+          const nearest = nearestOnPolyline(lat, lng, points);
+          if (!nearest || nearest.distance > (road.buffer_meters || 200)) continue;
+          if (nearest.distance < bestDist) {
+            bestDist = nearest.distance;
+            const stationM = (road.station_offset_m || 0) + nearest.meters;
+            bestResult = { station_m: stationM, road_id: road.id, station: stationToStr(stationM, road.prefix || 'K') };
+          }
+        }
+        if (bestResult) {
+          await db.getRepository(record.constructor.name).update({
+            filterByTk: record.get('id'),
+            values: { station: bestResult.station, station_m: bestResult.station_m, road_id: bestResult.road_id },
+          });
+        }
+      } catch (e) {
+        console.log('[station-hook] error:', (e as any).message);
+      }
+    };
+    const lhStationCol = db.getCollection('location_history');
+    if (lhStationCol) lhStationCol.model.addHook('afterCreate', stationHooks);
+    const arStationHook = db.getCollection('attendance_records');
+    if (arStationHook) arStationHook.model.addHook('afterCreate', stationHooks);
+
     // Register page serving routes (must be last)
     registerPageRoutes(app);
   }
