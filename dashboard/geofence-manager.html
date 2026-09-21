@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>地理围栏管理</title>
+    <title>地理围栏 & 路线管理</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
@@ -16,13 +16,14 @@
         .main-layout { display: flex; gap: 12px; flex: 1; min-height: 0; }
         .map-panel { flex: 1; position: relative; min-height: 0; }
         #map { width: 100%; height: 100%; border-radius: 10px; border: 1px solid rgba(0, 212, 255, 0.2); }
-        .side-panel { width: 380px; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; flex-shrink: 0; }
+        .side-panel { width: 400px; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; flex-shrink: 0; }
         .card { background: rgba(255,255,255,0.03); border: 1px solid rgba(0, 212, 255, 0.18); border-radius: 10px; padding: 12px; }
         .card h3 { color: #00d4ff; font-size: 0.95em; margin-bottom: 8px; }
         .form-group { margin-bottom: 8px; }
         .form-group label { display: block; color: #aab; font-size: 0.82em; margin-bottom: 2px; }
-        .form-group input, .form-group textarea { width: 100%; padding: 5px 8px; border-radius: 5px; border: 1px solid #334; background: #1a2332; color: #e0e6ed; font-size: 0.88em; }
+        .form-group input, .form-group textarea, .form-group select { width: 100%; padding: 5px 8px; border-radius: 5px; border: 1px solid #334; background: #1a2332; color: #e0e6ed; font-size: 0.88em; }
         .form-group textarea { min-height: 44px; resize: vertical; font-family: monospace; font-size: 0.8em; }
+        .form-group select { cursor: pointer; }
         .form-row { display: flex; gap: 6px; }
         .form-row .form-group { flex: 1; }
         .btn { padding: 6px 14px; border-radius: 5px; border: none; cursor: pointer; font-size: 0.85em; transition: all 0.2s; }
@@ -33,15 +34,17 @@
         .btn-secondary:hover { background: rgba(255,255,255,0.1); }
         .btn-sm { padding: 3px 8px; font-size: 0.8em; }
         .btn-group { display: flex; gap: 5px; margin-top: 6px; }
-        .fence-list { max-height: 200px; overflow-y: auto; }
-        .fence-item { display: flex; justify-content: space-between; align-items: center; padding: 6px 8px; border-radius: 5px; background: rgba(255,255,255,0.03); margin-bottom: 3px; cursor: pointer; transition: background 0.2s; }
-        .fence-item:hover { background: rgba(0,212,255,0.08); }
-        .fence-item.active { background: rgba(0,212,255,0.12); border: 1px solid rgba(0,212,255,0.3); }
-        .fence-item .name { font-weight: 500; }
-        .fence-item .badge { font-size: 0.75em; padding: 1px 5px; border-radius: 3px; }
+        .list-container { max-height: 200px; overflow-y: auto; }
+        .item-card { display: flex; justify-content: space-between; align-items: center; padding: 6px 8px; border-radius: 5px; background: rgba(255,255,255,0.03); margin-bottom: 3px; cursor: pointer; transition: background 0.2s; }
+        .item-card:hover { background: rgba(0,212,255,0.08); }
+        .item-card.active { background: rgba(0,212,255,0.12); border: 1px solid rgba(0,212,255,0.3); }
+        .item-card .name { font-weight: 500; }
+        .badge { font-size: 0.75em; padding: 1px 5px; border-radius: 3px; }
         .badge-on { background: rgba(0,255,136,0.15); color: #00ff88; }
         .badge-off { background: rgba(255,107,107,0.15); color: #ff6b6b; }
         .badge-radius { background: rgba(0,212,255,0.1); color: #00d4ff; }
+        .badge-purple { background: rgba(123,44,191,0.2); color: #b37feb; }
+        .badge-type { background: rgba(183,127,235,0.2); color: #b37feb; font-size: 0.7em; padding: 1px 6px; border-radius: 4px; white-space: nowrap; }
         .status-bar { padding: 8px; border-radius: 6px; font-size: 0.82em; margin-bottom: 6px; }
         .status-info { background: rgba(0,212,255,0.08); border: 1px solid rgba(0,212,255,0.2); }
         .status-error { background: rgba(255,107,107,0.08); border: 1px solid rgba(255,107,107,0.2); color: #ff6b6b; }
@@ -52,7 +55,7 @@
         .search-bar input::placeholder { color: #5a6a7a; }
         .search-bar button { padding: 3px 6px; font-size: 0.85em; background: transparent; border: none; color: #00d4ff; cursor: pointer; }
         .search-bar button:hover { color: #7b2cbf; }
-        .search-results { position: absolute; top: 42px; right: 10px; z-index: 1000; background: rgba(20,30,48,0.96); border: 1px solid #445; border-radius: 5px; max-height: 200px; overflow-y: auto; width: 280px; display: none; }
+        .search-results { position: absolute; top: 42px; right: 10px; z-index: 1000; background: rgba(20,30,48,0.96); border: 1px solid #445; border-radius: 5px; max-height: 320px; overflow-y: auto; width: 280px; display: none; }
         .search-results div { padding: 6px 10px; cursor: pointer; font-size: 0.82em; border-bottom: 1px solid rgba(255,255,255,0.05); color: #aab; }
         .search-results div:hover { background: rgba(0,212,255,0.15); color: #e0e6ed; }
         .node-list { max-height: 120px; overflow-y: auto; font-family: monospace; font-size: 0.78em; }
@@ -62,13 +65,25 @@
         .node-item .node-del:hover { color: #ff4444; }
         .node-idx { color: #5a6a7a; margin-right: 6px; }
         .type-badge { font-size: 0.7em; padding: 1px 6px; border-radius: 4px; background: rgba(0,212,255,0.1); color: #00d4ff; white-space: nowrap; }
-        .search-results { max-height: 320px; }
         .locate-btn { font-size: 1.1em; line-height: 1; padding: 3px 8px !important; }
+        .tab-bar { display: flex; gap: 0; margin-bottom: 10px; flex-shrink: 0; }
+        .tab-btn { flex: 1; padding: 10px 0; text-align: center; font-size: 1.05em; font-weight: 600; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px 10px 0 0; cursor: pointer; transition: all 0.25s; color: #5a6a7a; border-bottom: 2px solid transparent; }
+        .tab-btn:hover { color: #aab; background: rgba(255,255,255,0.05); }
+        .tab-btn.active { background: rgba(0,212,255,0.08); color: #00d4ff; border-color: rgba(0,212,255,0.2); border-bottom-color: #00d4ff; }
+        .tab-btn.purple-tab.active { background: rgba(123,44,191,0.08); color: #b37feb; border-color: rgba(123,44,191,0.2); border-bottom-color: #b37feb; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .derive-label { font-size: 0.7em; color: #b37feb; font-style: italic; }
+        .road-info { font-size: 0.78em; color: #5a6a7a; margin-top: 4px; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>📍 地理围栏管理</h1>
+        <h1>📍 地理围栏 & 路线管理</h1>
+        <div class="tab-bar">
+            <div class="tab-btn active" id="tabFence" onclick="switchTab('fence')">📍 围栏管理</div>
+            <div class="tab-btn purple-tab" id="tabRoad" onclick="switchTab('road')">🛤️ 路线管理</div>
+        </div>
         <div class="main-layout">
             <div class="map-panel">
                 <div id="map"></div>
@@ -81,49 +96,132 @@
                 <div class="search-results" id="searchResults"></div>
             </div>
             <div class="side-panel">
-                <div class="card">
-                    <h3>✏️ 编辑围栏</h3>
-                    <div id="formMessage"></div>
-                    <div class="form-group">
-                        <label>围栏名称</label>
-                        <input type="text" id="fenceName" placeholder="如：遵义-仁怀段">
-                    </div>
-                    <div class="form-row">
+                <!-- ===== 围栏 Tab ===== -->
+                <div class="tab-content active" id="fenceTab">
+                    <div class="card">
+                        <h3>✏️ 编辑围栏</h3>
+                        <div id="formMessage"></div>
                         <div class="form-group">
-                            <label>缓冲半径（米）</label>
-                            <input type="number" id="bufferRadius" value="200" min="1" step="1">
+                            <label>围栏名称</label>
+                            <input type="text" id="fenceName" placeholder="如：遵义-仁怀段">
                         </div>
-                        <div class="form-group" style="flex:0 0 80px;">
-                            <label>启用</label>
-                            <input type="checkbox" id="isActive" checked style="accent-color:#00d4ff;width:auto;margin-top:6px;">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>缓冲半径（米）</label>
+                                <input type="number" id="bufferRadius" value="200" min="1" step="1">
+                            </div>
+                            <div class="form-group" style="flex:0 0 80px;">
+                                <label>启用</label>
+                                <input type="checkbox" id="isActive" checked style="accent-color:#00d4ff;width:auto;margin-top:6px;">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>折线坐标（JSON，点击地图自动生成）</label>
+                            <textarea id="polylineCoords" placeholder="[[lng,lat],[lng,lat],...]" readonly></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label>添加坐标（经度,纬度，每行一个）</label>
+                            <textarea id="manualCoords" placeholder="106.92,27.73&#10;106.95,27.76" style="min-height:48px;"></textarea>
+                        </div>
+                        <div class="btn-group">
+                            <button class="btn btn-secondary btn-sm" onclick="importCoords()">+ 导入坐标</button>
+                            <button class="btn btn-secondary btn-sm" onclick="deleteLastNode('fence')">↩ 删除最后节点</button>
+                            <button class="btn btn-secondary btn-sm" onclick="clearPoints('fence')">✕ 清空全部</button>
+                        </div>
+                        <div class="coord-display" id="coordCount">节点数: 0</div>
+                        <div class="node-list" id="nodeList"></div>
+                        <div class="btn-group">
+                            <button class="btn btn-primary" onclick="saveFence()">💾 保存围栏</button>
+                            <button class="btn btn-secondary" onclick="resetFenceEditor()">↩ 重置</button>
+                            <button class="btn btn-danger btn-sm" id="fenceDeleteBtn" onclick="deleteFence()" style="display:none">🗑 删除</button>
                         </div>
                     </div>
-                    <div class="form-group">
-                        <label>折线坐标（JSON，点击地图自动生成）</label>
-                        <textarea id="polylineCoords" placeholder="[[lng,lat],[lng,lat],...]" readonly></textarea>
-                    </div>
-                    <div class="form-group">
-                        <label>添加坐标（经度,纬度，每行一个）</label>
-                        <textarea id="manualCoords" placeholder="106.92,27.73&#10;106.95,27.76" style="min-height:48px;"></textarea>
-                    </div>
-                    <div class="btn-group">
-                        <button class="btn btn-secondary btn-sm" onclick="importCoords()">+ 导入坐标</button>
-                        <button class="btn btn-secondary btn-sm" onclick="deleteLastNode()">↩ 删除最后节点</button>
-                        <button class="btn btn-secondary btn-sm" onclick="clearPoints()">✕ 清空全部</button>
-                    </div>
-                    <div class="coord-display" id="coordCount">节点数: 0</div>
-                    <div class="node-list" id="nodeList"></div>
-                    <div class="btn-group">
-                        <button class="btn btn-primary" onclick="saveFence()">💾 保存围栏</button>
-                        <button class="btn btn-secondary" onclick="resetEditor()">↩ 重置</button>
-                        <button class="btn btn-danger btn-sm" id="deleteBtn" onclick="deleteFence()" style="display:none">🗑 删除</button>
+                    <div class="card">
+                        <h3>📋 围栏列表</h3>
+                        <div id="fenceList" class="list-container">
+                            <div style="color:#5a6a7a;font-size:0.9em;">加载中...</div>
+                        </div>
                     </div>
                 </div>
 
-                <div class="card">
-                    <h3>📋 围栏列表</h3>
-                    <div id="fenceList" class="fence-list">
-                        <div style="color:#5a6a7a;font-size:0.9em;">加载中...</div>
+                <!-- ===== 路线 Tab ===== -->
+                <div class="tab-content" id="roadTab">
+                    <div class="card">
+                        <h3>✏️ 编辑路线</h3>
+                        <div id="roadFormMessage"></div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>路线编号 <span style="color:#ff6b6b;">*</span></label>
+                                <input type="text" id="roadCode" placeholder="如：LJ001">
+                            </div>
+                            <div class="form-group">
+                                <label>路线名称 <span style="color:#ff6b6b;">*</span></label>
+                                <input type="text" id="roadName" placeholder="如：龙结路">
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>路线类型</label>
+                                <select id="roadLineType">
+                                    <option value="main">主线 (main)</option>
+                                    <option value="branch">支线 (branch)</option>
+                                    <option value="loop">环线 (loop)</option>
+                                    <option value="connector">连接线 (connector)</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>桩号前缀</label>
+                                <select id="roadPrefix">
+                                    <option value="K">K</option>
+                                    <option value="PK">PK</option>
+                                    <option value="AK">AK</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>桩号偏移 (m)</label>
+                                <input type="number" id="roadStationOffset" value="0" min="0" step="1">
+                            </div>
+                            <div class="form-group">
+                                <label>缓冲区 (m)</label>
+                                <input type="number" id="roadBufferMeters" value="200" min="0" step="10">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>项目 ID</label>
+                            <input type="number" id="roadProjectId" value="" placeholder="可选">
+                        </div>
+                        <div class="form-group">
+                            <label>折线坐标（JSON，点击地图自动生成）</label>
+                            <textarea id="roadPolylineCoords" placeholder="[[lng,lat],[lng,lat],...]" readonly></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label>添加坐标（经度,纬度，每行一个）</label>
+                            <textarea id="roadManualCoords" placeholder="106.92,27.73&#10;106.95,27.76" style="min-height:48px;"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label>GeoJSON 文件导入</label>
+                            <input type="file" id="geojsonFile" accept=".json,.geojson" style="font-size:0.85em;color:#aab;">
+                        </div>
+                        <div class="btn-group">
+                            <button class="btn btn-secondary btn-sm" onclick="importRoadCoords()">+ 导入坐标</button>
+                            <button class="btn btn-secondary btn-sm" onclick="deleteLastNode('road')">↩ 删除最后节点</button>
+                            <button class="btn btn-secondary btn-sm" onclick="clearPoints('road')">✕ 清空全部</button>
+                        </div>
+                        <div class="coord-display" id="roadCoordCount">节点数: 0</div>
+                        <div class="node-list" id="roadNodeList"></div>
+                        <div class="btn-group">
+                            <button class="btn btn-primary" onclick="saveRoad()" id="roadSaveBtn">💾 创建路线</button>
+                            <button class="btn btn-secondary" onclick="resetRoadEditor()">↩ 重置</button>
+                            <button class="btn btn-danger btn-sm" id="roadDeleteBtn" onclick="deleteRoad()" style="display:none">🗑 删除</button>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <h3>📋 路线列表</h3>
+                        <div id="roadList" class="list-container">
+                            <div style="color:#5a6a7a;font-size:0.9em;">加载中...</div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -131,216 +229,325 @@
     </div>
 
     <script>
+    (function(){
         var token = localStorage.getItem("NOCOBASE_TOKEN") || localStorage.getItem("nocobase_token");
         var headers = { 'Content-Type': 'application/json' };
         if (token) headers['Authorization'] = 'Bearer ' + token;
 
         var map = L.map('map').setView([27.7, 106.9], 10);
-        var amap = L.tileLayer('https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}', {
+        L.tileLayer('https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}', {
             subdomains: ['1','2','3','4'], maxZoom: 18,
             attribution: '&copy; 高德地图'
-        });
-        amap.addTo(map);
+        }).addTo(map);
 
-        var currentPoints = [];
-        var markers = [];
-        var polylineLayer = null;
-        var bufferLayer = null;
+        // ---- State ----
+        var currentTab = 'fence';
+        var fencePoints = [];
+        var roadPoints = [];
+        var fenceMarkers = [];
+        var roadMarkers = [];
+        var fencePolyline = null;
+        var fenceBuffer = null;
+        var roadPolyline = null;
+        var roadBuffer = null;
         var selectedFenceId = null;
+        var selectedRoadId = null;
         var allFences = [];
+        var allRoads = [];
+        var allFenceLayers = [];
+        var allRoadLayers = [];
         var currentLocationMarker = null;
 
-        // ---------- 计算 Bbox ----------
+        // ---- Utilities ----
+        function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
         function computeBbox(points) {
             if (!points || points.length === 0) return null;
             var lats = points.map(function(p){ return p[1]; });
             var lngs = points.map(function(p){ return p[0]; });
-            return {
-                min_lat: Math.min.apply(null, lats),
-                max_lat: Math.max.apply(null, lats),
-                min_lng: Math.min.apply(null, lngs),
-                max_lng: Math.max.apply(null, lngs)
-            };
+            return { min_lat: Math.min.apply(null,lats), max_lat: Math.max.apply(null,lats), min_lng: Math.min.apply(null,lngs), max_lng: Math.max.apply(null,lngs) };
+        }
+        function getPoints(tab) { return tab === 'fence' ? fencePoints : roadPoints; }
+        function setPoints(tab, pts) { if(tab==='fence') fencePoints=pts; else roadPoints=pts; }
+
+        function showMessage(msg, type, tab) {
+            var elId = tab === 'road' ? 'roadFormMessage' : 'formMessage';
+            var el = document.getElementById(elId);
+            el.innerHTML = '<div class="status-bar status-' + (type||'info') + '">' + msg + '</div>';
+            setTimeout(function(){ el.innerHTML = ''; }, 3000);
         }
 
-        // ---------- 绘制 ----------
-        function redraw() {
-            if (polylineLayer) map.removeLayer(polylineLayer);
-            if (bufferLayer) map.removeLayer(bufferLayer);
+        // ---- Tab switching ----
+        window.switchTab = function(tab) {
+            currentTab = tab;
+            document.getElementById('tabFence').className = tab==='fence' ? 'tab-btn active' : 'tab-btn';
+            document.getElementById('tabRoad').className = tab==='road' ? 'tab-btn purple-tab active' : 'tab-btn purple-tab';
+            document.getElementById('fenceTab').className = tab==='fence' ? 'tab-content active' : 'tab-content';
+            document.getElementById('roadTab').className = tab==='road' ? 'tab-content active' : 'tab-content';
+            clearEditingMarkers(tab === 'fence' ? 'road' : 'fence');
+            updateMapTip();
+        };
 
+        function updateMapTip() {
+            var tip = document.getElementById('mapTip');
+            tip.textContent = currentTab === 'fence'
+                ? '围栏模式 · 点击添加节点 · 右键删除节点'
+                : '路线模式 · 点击添加节点 · 右键删除节点';
+        }
+
+        function clearEditingMarkers(otherTab) {
+            if (otherTab === 'fence') {
+                fenceMarkers.forEach(function(m){ map.removeLayer(m); });
+                fenceMarkers = [];
+                if (fencePolyline) { map.removeLayer(fencePolyline); fencePolyline = null; }
+                if (fenceBuffer) { map.removeLayer(fenceBuffer); fenceBuffer = null; }
+            } else {
+                roadMarkers.forEach(function(m){ map.removeLayer(m); });
+                roadMarkers = [];
+                if (roadPolyline) { map.removeLayer(roadPolyline); roadPolyline = null; }
+                if (roadBuffer) { map.removeLayer(roadBuffer); roadBuffer = null; }
+            }
+        }
+
+        // ---- Redraw editing markers for a tab ----
+        function redraw(tab) {
+            var pts = getPoints(tab);
+            var markers = tab === 'fence' ? fenceMarkers : roadMarkers;
+            var pl = tab === 'fence' ? fencePolyline : roadPolyline;
+            var buf = tab === 'fence' ? fenceBuffer : roadBuffer;
+            var color = tab === 'fence' ? '#00d4ff' : '#b37feb';
+
+            if (pl) map.removeLayer(pl);
+            if (buf) map.removeLayer(buf);
             markers.forEach(function(m){ map.removeLayer(m); });
+            if(tab==='fence') fenceMarkers = []; else roadMarkers = [];
             markers = [];
 
-            document.getElementById('polylineCoords').value = JSON.stringify(currentPoints);
-            document.getElementById('coordCount').textContent = '节点数: ' + currentPoints.length;
-            renderNodeList();
+            var coordsId = tab === 'fence' ? 'polylineCoords' : 'roadPolylineCoords';
+            var countId = tab === 'fence' ? 'coordCount' : 'roadCoordCount';
+            var nodeId = tab === 'fence' ? 'nodeList' : 'roadNodeList';
+            document.getElementById(coordsId).value = JSON.stringify(pts);
+            document.getElementById(countId).textContent = '节点数: ' + pts.length;
+            renderNodeList(tab);
 
-            if (currentPoints.length === 0) return;
+            if (pts.length === 0) {
+                if(tab==='fence') fenceMarkers = markers;
+                else roadMarkers = markers;
+                return;
+            }
 
-            // 显示标记
-            currentPoints.forEach(function(p, i){
+            pts.forEach(function(p, i){
                 var m = L.circleMarker([p[1], p[0]], {
-                    radius: 5, color: '#00d4ff', fillColor: '#7b2cbf', fillOpacity: 1, weight: 2
+                    radius: 5, color: color, fillColor: '#7b2cbf', fillOpacity: 1, weight: 2
                 }).addTo(map);
-                m.bindTooltip(String(i + 1), { permanent: true, direction: 'top', offset: [0, -8], className: 'marker-tooltip' });
-                m.on('contextmenu', function(){ deleteNode(i); });
+                m.bindTooltip(String(i+1), { permanent: true, direction: 'top', offset: [0,-8], className: 'marker-tooltip' });
+                m.on('contextmenu', function(){ deleteNode(tab, i); });
                 markers.push(m);
             });
 
-            // 节点列表
-            renderNodeList();
+            if(tab==='fence') fenceMarkers = markers; else roadMarkers = markers;
 
-            if (currentPoints.length < 2) return;
+            if (pts.length < 2) return;
 
-            // 折线
-            polylineLayer = L.polyline(currentPoints.map(function(p){ return [p[1], p[0]]; }), {
-                color: '#00d4ff', weight: 3
-            }).addTo(map);
+            var newPl = L.polyline(pts.map(function(p){ return [p[1],p[0]]; }), { color: color, weight: 3 }).addTo(map);
+            if(tab==='fence') fencePolyline = newPl; else roadPolyline = newPl;
 
-            // 缓冲区
             try {
-                var line = turf.lineString(currentPoints);
-                var radius = parseInt(document.getElementById('bufferRadius').value) || 200;
+                var line = turf.lineString(pts);
+                var radiusId = tab === 'fence' ? 'bufferRadius' : 'roadBufferMeters';
+                var radius = parseInt(document.getElementById(radiusId).value) || 200;
                 var buffered = turf.buffer(line, radius, { units: 'meters' });
-                bufferLayer = L.geoJSON(buffered, {
-                    color: '#00d4ff', weight: 1, fillColor: '#00d4ff', fillOpacity: 0.15
-                }).addTo(map);
+                var newBuf = L.geoJSON(buffered, { color: color, weight: 1, fillColor: color, fillOpacity: 0.15 }).addTo(map);
+                if(tab==='fence') fenceBuffer = newBuf; else roadBuffer = newBuf;
             } catch(e) {}
-
-
-            document.getElementById('coordCount').textContent = '节点数: ' + currentPoints.length;
         }
 
-        // ---------- 点击地图添加节点 ----------
+        function renderNodeList(tab) {
+            var pts = getPoints(tab);
+            var containerId = tab === 'fence' ? 'nodeList' : 'roadNodeList';
+            var container = document.getElementById(containerId);
+            if (pts.length === 0) { container.innerHTML = ''; return; }
+            var html = '';
+            pts.forEach(function(p, i) {
+                html += '<div class="node-item"><span><span class="node-idx">#'+(i+1)+'</span>'+p[0].toFixed(4)+', '+p[1].toFixed(4)+'</span><span class="node-del" onclick="window._deleteNode(\''+tab+'\','+i+')" title="删除节点 #'+(i+1)+'">✕</span></div>';
+            });
+            container.innerHTML = html;
+        }
+
+        function deleteNode(tab, idx) {
+            var pts = getPoints(tab);
+            if (idx < 0 || idx >= pts.length) return;
+            pts.splice(idx, 1);
+            redraw(tab);
+        }
+        window._deleteNode = deleteNode;
+
+        window.deleteLastNode = function(tab) {
+            var pts = getPoints(tab);
+            if (pts.length === 0) return;
+            deleteNode(tab, pts.length - 1);
+        };
+
+        window.clearPoints = function(tab) {
+            var pts = getPoints(tab);
+            if (pts.length === 0) return;
+            if (!confirm('清空所有节点？')) return;
+            setPoints(tab, []);
+            if(tab==='fence') { document.getElementById('polylineCoords').value=''; document.getElementById('manualCoords').value=''; }
+            else { document.getElementById('roadPolylineCoords').value=''; document.getElementById('roadManualCoords').value=''; }
+            redraw(tab);
+        };
+
+        // ---- Map click / right-click ----
         map.on('click', function(e) {
-            if (e.originalEvent && e.originalEvent.button === 2) return; // 右键跳过
-            currentPoints.push([parseFloat(e.latlng.lng.toFixed(6)), parseFloat(e.latlng.lat.toFixed(6))]);
-            document.getElementById('polylineCoords').value = JSON.stringify(currentPoints);
-            redraw();
+            if (e.originalEvent && e.originalEvent.button === 2) return;
+            var pt = [parseFloat(e.latlng.lng.toFixed(6)), parseFloat(e.latlng.lat.toFixed(6))];
+            if (currentTab === 'fence') { fencePoints.push(pt); }
+            else { roadPoints.push(pt); }
+            redraw(currentTab);
         });
-        // 右键删除最近节点
+
         map.on('contextmenu', function(e) {
-            if (currentPoints.length === 0) return;
-            // 找最近的节点删除
+            var pts = getPoints(currentTab);
+            if (pts.length === 0) return;
             var minIdx = -1, minDist = Infinity;
-            currentPoints.forEach(function(p, i) {
+            pts.forEach(function(p, i) {
                 var d = map.distance(e.latlng, L.latLng(p[1], p[0]));
                 if (d < minDist) { minDist = d; minIdx = i; }
             });
-            if (minIdx >= 0 && minDist < 50) deleteNode(minIdx);
+            if (minIdx >= 0 && minDist < 50) deleteNode(currentTab, minIdx);
         });
 
-        // ---------- 鼠标移动提示 ----------
         map.on('mousemove', function(e) {
             document.getElementById('mapTip').textContent =
-                '点击添加节点 · 坐标: ' + e.latlng.lat.toFixed(6) + ', ' + e.latlng.lng.toFixed(6);
+                (currentTab==='fence'?'围栏':'路线')+'模式 · 坐标: '+e.latlng.lat.toFixed(6)+', '+e.latlng.lng.toFixed(6);
         });
 
-        // ---------- 保存围栏 ----------
-        async function saveFence() {
-            var name = document.getElementById('fenceName').value.trim();
-            if (!name) { showMessage('请输入围栏名称', 'error'); return; }
-            if (currentPoints.length < 2) { showMessage('至少需要2个点', 'error'); return; }
+        // ---- Import coords ----
+        function importCoordsFromText(textareaId, tab) {
+            var ta = document.getElementById(textareaId);
+            var raw = ta.value.trim();
+            if (!raw) { showMessage('请先在文本框中输入坐标','error',tab); return; }
+            var lines = raw.split('\n');
+            var pts = getPoints(tab);
+            var added = 0;
+            lines.forEach(function(line) {
+                line = line.trim();
+                if (!line) return;
+                var parts = line.split(/[,，\s]+/).filter(Boolean);
+                if (parts.length >= 2) {
+                    var lng = parseFloat(parts[0]), lat = parseFloat(parts[1]);
+                    if (!isNaN(lng) && !isNaN(lat)) { pts.push([lng,lat]); added++; }
+                }
+            });
+            if (added === 0) { showMessage('未解析到有效坐标（格式：经度,纬度，每行一个）','error',tab); return; }
+            setPoints(tab, pts);
+            ta.value = '';
+            redraw(tab);
+            showMessage('已导入 '+added+' 个节点','info',tab);
+        }
 
+        window.importCoords = function() { importCoordsFromText('manualCoords', 'fence'); };
+        window.importRoadCoords = function() { importCoordsFromText('roadManualCoords', 'road'); };
+
+        // ---- GeoJSON import ----
+        document.getElementById('geojsonFile').addEventListener('change', function(e) {
+            var file = e.target.files[0];
+            if (!file) return;
+            var reader = new FileReader();
+            reader.onload = function(ev) {
+                try {
+                    var geo = JSON.parse(ev.target.result);
+                    var coords = null;
+                    if (geo.type === 'Feature' && geo.geometry && geo.geometry.type === 'LineString') {
+                        coords = geo.geometry.coordinates;
+                    } else if (geo.type === 'LineString') {
+                        coords = geo.coordinates;
+                    }
+                    if (!coords || coords.length < 2) { showMessage('GeoJSON 中未找到有效 LineString','error','road'); return; }
+                    roadPoints = coords.map(function(c){ return [c[0], c[1]]; });
+                    redraw('road');
+                    showMessage('从 GeoJSON 导入 '+roadPoints.length+' 个节点','info','road');
+                } catch(err) {
+                    showMessage('GeoJSON 解析失败: '+err.message,'error','road');
+                }
+            };
+            reader.readAsText(file);
+            e.target.value = '';
+        });
+
+        // ============ FENCE CRUD ============
+        window.saveFence = async function() {
+            var name = document.getElementById('fenceName').value.trim();
+            if (!name) { showMessage('请输入围栏名称','error','fence'); return; }
+            if (fencePoints.length < 2) { showMessage('至少需要2个点','error','fence'); return; }
             var radius = parseInt(document.getElementById('bufferRadius').value) || 200;
             var active = document.getElementById('isActive').checked;
-            var bbox = computeBbox(currentPoints);
-
+            var bbox = computeBbox(fencePoints);
             var body = {
                 fence_name: name,
-                polyline_coords: JSON.stringify(currentPoints),
+                polyline_coords: JSON.stringify(fencePoints),
                 buffer_radius: radius,
                 is_active: active,
-                bbox_min_lat: bbox.min_lat,
-                bbox_max_lat: bbox.max_lat,
-                bbox_min_lng: bbox.min_lng,
-                bbox_max_lng: bbox.max_lng
+                bbox_min_lat: bbox.min_lat, bbox_max_lat: bbox.max_lat,
+                bbox_min_lng: bbox.min_lng, bbox_max_lng: bbox.max_lng
             };
-
             try {
-                var url, method;
-                if (selectedFenceId) {
-                    url = '/api/geofences:update?filterByTk=' + selectedFenceId;
-                    method = 'POST';
-                } else {
-                    url = '/api/geofences:create';
-                    method = 'POST';
-                }
-                var r = await fetch(url, { method: method, headers: headers, body: JSON.stringify(body) });
+                var url = selectedFenceId ? '/api/geofences:update?filterByTk='+selectedFenceId : '/api/geofences:create';
+                var r = await fetch(url, { method:'POST', headers:headers, body:JSON.stringify(body) });
                 if (r.ok) {
-                    showMessage(selectedFenceId ? '✅ 更新成功' : '✅ 创建成功', 'info');
-                    resetEditor();
+                    showMessage(selectedFenceId?'✅ 更新成功':'✅ 创建成功','info','fence');
+                    resetFenceEditor();
                     loadFences();
                 } else {
                     var err = await r.text();
-                    showMessage('✗ 失败: ' + err.substring(0, 80), 'error');
+                    showMessage('✗ 失败: '+err.substring(0,80),'error','fence');
                 }
-            } catch(e) {
-                showMessage('✗ 网络错误: ' + e.message, 'error');
-            }
-        }
+            } catch(e) { showMessage('✗ 网络错误: '+e.message,'error','fence'); }
+        };
 
-        // ---------- 删除围栏 ----------
-        async function deleteFence() {
+        window.deleteFence = async function() {
             if (!selectedFenceId) return;
-            if (!confirm('确定删除围栏 "' + document.getElementById('fenceName').value + '" 吗？')) return;
+            if (!confirm('确定删除围栏 "'+document.getElementById('fenceName').value+'" 吗？')) return;
             try {
-                var r = await fetch('/api/geofences:destroy?filterByTk=' + selectedFenceId, {
-                    method: 'POST', headers: headers
-                });
-                if (r.ok) {
-                    showMessage('🗑 已删除', 'info');
-                    resetEditor();
-                    loadFences();
-                } else {
-                    showMessage('✗ 删除失败', 'error');
-                }
-            } catch(e) {
-                showMessage('✗ 网络错误', 'error');
-            }
-        }
+                var r = await fetch('/api/geofences:destroy?filterByTk='+selectedFenceId, { method:'POST', headers:headers });
+                if (r.ok) { showMessage('🗑 已删除','info','fence'); resetFenceEditor(); loadFences(); }
+                else { showMessage('✗ 删除失败','error','fence'); }
+            } catch(e) { showMessage('✗ 网络错误','error','fence'); }
+        };
 
-        // ---------- 加载围栏列表 ----------
         async function loadFences() {
             try {
-                var r = await fetch('/api/geofences:list?sort=sort', { headers: headers });
+                var r = await fetch('/api/geofences:list?sort=sort', { headers:headers });
                 var data = await r.json();
                 allFences = data.data || [];
                 renderFenceList();
-                // 更新地图上已有的围栏显示
                 renderAllFencesOnMap();
             } catch(e) {
                 document.getElementById('fenceList').innerHTML = '<div style="color:#ff6b6b;">加载失败</div>';
             }
         }
 
-        var allFenceLayers = [];
         function renderAllFencesOnMap() {
             allFenceLayers.forEach(function(l){ map.removeLayer(l); });
             allFenceLayers = [];
-
             allFences.forEach(function(fence) {
                 if (!fence.polyline_coords) return;
                 try {
                     var coords = JSON.parse(fence.polyline_coords);
                     if (!Array.isArray(coords) || coords.length < 2) return;
-
-                    var latlngs = coords.map(function(p){ return [p[1], p[0]]; });
-                    var layer = L.polyline(latlngs, {
-                        color: fence.is_active ? '#00d4ff' : '#5a6a7a',
-                        weight: 2, opacity: 0.5
-                    }).addTo(map);
-                    layer.bindTooltip(fence.fence_name + ' (' + (fence.is_active ? '启用' : '禁用') + ')', { sticky: true });
+                    var isRoadDerived = fence.source === 'road';
+                    var latlngs = coords.map(function(p){ return [p[1],p[0]]; });
+                    var color = isRoadDerived ? '#b37feb' : (fence.is_active ? '#00d4ff' : '#5a6a7a');
+                    var layer = L.polyline(latlngs, { color: color, weight: 2, opacity: 0.5 }).addTo(map);
+                    var label = escHtml(fence.fence_name) + ' (' + (fence.is_active?'启用':'禁用') + ')';
+                    if (isRoadDerived) label += ' <span style="color:#b37feb;font-style:italic;">(路线派生)</span>';
+                    layer.bindTooltip(label, { sticky: true });
                     allFenceLayers.push(layer);
-
-                    // 尝试显示缓冲区（使用Turf.js）
                     try {
                         var line = turf.lineString(coords);
-                        var buffered = turf.buffer(line, fence.buffer_radius || 200, { units: 'meters' });
+                        var buffered = turf.buffer(line, fence.buffer_radius||200, { units:'meters' });
                         var bufLayer = L.geoJSON(buffered, {
-                            color: fence.is_active ? '#00d4ff' : '#5a6a7a',
-                            weight: 1, fillColor: fence.is_active ? '#00d4ff' : '#5a6a7a',
-                            fillOpacity: 0.08
+                            color: color, weight: 1, fillColor: color, fillOpacity: 0.08
                         }).addTo(map);
                         allFenceLayers.push(bufLayer);
                     } catch(e) {}
@@ -357,105 +564,311 @@
             var html = '';
             allFences.forEach(function(f){
                 var active = f.is_active ? '<span class="badge badge-on">启用</span>' : '<span class="badge badge-off">禁用</span>';
-                var radiusBadge = '<span class="badge badge-radius">' + (f.buffer_radius || 200) + 'm</span>';
-                var cls = (selectedFenceId === f.id) ? 'fence-item active' : 'fence-item';
-                html += '<div class="' + cls + '" onclick="selectFence(\'' + f.id + '\')">' +
-                    '<div><span class="name">' + escHtml(f.fence_name) + '</span> ' + active + ' ' + radiusBadge + '</div>' +
-                    '<button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();selectFenceForEdit(\'' + f.id + '\')">编辑</button>' +
+                var radiusBadge = '<span class="badge badge-radius">'+(f.buffer_radius||200)+'m</span>';
+                var deriveLabel = f.source === 'road' ? ' <span class="derive-label">(路线派生)</span>' : '';
+                var cls = (selectedFenceId===f.id) ? 'item-card active' : 'item-card';
+                html += '<div class="'+cls+'" onclick="window._selectFence(\''+f.id+'\')">' +
+                    '<div><span class="name">'+escHtml(f.fence_name)+'</span> '+active+' '+radiusBadge+deriveLabel+'</div>' +
+                    '<button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();window._selectFenceForEdit(\''+f.id+'\')">编辑</button>' +
                 '</div>';
             });
             container.innerHTML = html;
         }
 
-        function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-
-        // ---------- 选择围栏（地图定位） ----------
-        function selectFence(id) {
+        window._selectFence = function(id) {
             selectedFenceId = id;
             renderFenceList();
-            var fence = allFences.find(function(f){ return f.id == id; });
+            var fence = allFences.find(function(f){ return f.id==id; });
             if (fence && fence.polyline_coords) {
                 try {
                     var coords = JSON.parse(fence.polyline_coords);
-                    if (coords.length > 0) {
-                        map.setView([coords[0][1], coords[0][0]], 12);
-                    }
+                    if (coords.length > 0) map.setView([coords[0][1], coords[0][0]], 12);
                 } catch(e) {}
             }
-        }
+        };
 
-        // ---------- 选择围栏编辑 ----------
-        function selectFenceForEdit(id) {
-            var fence = allFences.find(function(f){ return f.id == id; });
+        window._selectFenceForEdit = function(id) {
+            var fence = allFences.find(function(f){ return f.id==id; });
             if (!fence) return;
             selectedFenceId = fence.id;
-
-            document.getElementById('fenceName').value = fence.fence_name || '';
-            document.getElementById('bufferRadius').value = fence.buffer_radius || 200;
-            document.getElementById('isActive').checked = fence.is_active !== false;
-
+            document.getElementById('fenceName').value = fence.fence_name||'';
+            document.getElementById('bufferRadius').value = fence.buffer_radius||200;
+            document.getElementById('isActive').checked = fence.is_active!==false;
             try {
-                currentPoints = JSON.parse(fence.polyline_coords);
-                if (!Array.isArray(currentPoints)) currentPoints = [];
-            } catch(e) { currentPoints = []; }
-
-            document.getElementById('polylineCoords').value = JSON.stringify(currentPoints);
-            document.getElementById('deleteBtn').style.display = '';
-            document.getElementById('coordCount').textContent = '节点数: ' + currentPoints.length;
-            redraw();
-            if (currentPoints.length >= 2) {
-                map.fitBounds(polylineLayer.getBounds().pad(0.1));
+                fencePoints = JSON.parse(fence.polyline_coords);
+                if (!Array.isArray(fencePoints)) fencePoints = [];
+            } catch(e) { fencePoints = []; }
+            document.getElementById('polylineCoords').value = JSON.stringify(fencePoints);
+            document.getElementById('fenceDeleteBtn').style.display = '';
+            document.getElementById('coordCount').textContent = '节点数: '+fencePoints.length;
+            redraw('fence');
+            if (fencePolyline && fencePoints.length >= 2) {
+                map.fitBounds(fencePolyline.getBounds().pad(0.1));
             }
             renderFenceList();
+        };
+
+        window.resetFenceEditor = function() {
+            selectedFenceId = null;
+            fencePoints = [];
+            fenceMarkers.forEach(function(m){ map.removeLayer(m); });
+            fenceMarkers = [];
+            if (fencePolyline) map.removeLayer(fencePolyline);
+            if (fenceBuffer) map.removeLayer(fenceBuffer);
+            fencePolyline = fenceBuffer = null;
+            document.getElementById('fenceName').value = '';
+            document.getElementById('bufferRadius').value = '200';
+            document.getElementById('isActive').checked = true;
+            document.getElementById('polylineCoords').value = '';
+            document.getElementById('manualCoords').value = '';
+            document.getElementById('coordCount').textContent = '节点数: 0';
+            document.getElementById('fenceDeleteBtn').style.display = 'none';
+            document.getElementById('nodeList').innerHTML = '';
+            renderFenceList();
+        };
+
+        // ============ ROAD CRUD ============
+        window.saveRoad = async function() {
+            var code = document.getElementById('roadCode').value.trim();
+            var name = document.getElementById('roadName').value.trim();
+            if (!code) { showMessage('请输入路线编号','error','road'); return; }
+            if (!name) { showMessage('请输入路线名称','error','road'); return; }
+            if (roadPoints.length < 2) { showMessage('至少需要2个点','error','road'); return; }
+
+            var line_type = document.getElementById('roadLineType').value;
+            var prefix = document.getElementById('roadPrefix').value;
+            var station_offset_m = parseInt(document.getElementById('roadStationOffset').value) || 0;
+            var buffer_meters = parseInt(document.getElementById('roadBufferMeters').value) || 200;
+            var project_id = document.getElementById('roadProjectId').value ? parseInt(document.getElementById('roadProjectId').value) : null;
+
+            var points = roadPoints.map(function(p, i) {
+                return { lat: p[1], lng: p[0], meters: i * 10 };
+            });
+
+            var body = {
+                code: code,
+                name: name,
+                line_type: line_type,
+                prefix: prefix,
+                station_offset_m: station_offset_m,
+                buffer_meters: buffer_meters,
+                points: points
+            };
+            if (project_id) body.project_id = project_id;
+
+            try {
+                var url = selectedRoadId
+                    ? '/api/__pd__/roads/update'
+                    : '/api/__pd__/roads/import';
+                var r = await fetch(url, { method:'POST', headers:headers, body:JSON.stringify(body) });
+                var resp = await r.json();
+                if (resp.code === 0) {
+                    showMessage(selectedRoadId?'✅ 更新成功':'✅ 创建成功','info','road');
+                    resetRoadEditor();
+                    loadRoads();
+                } else {
+                    showMessage('✗ '+(resp.msg||'操作失败'),'error','road');
+                }
+            } catch(e) { showMessage('✗ 网络错误: '+e.message,'error','road'); }
+        };
+
+        window.deleteRoad = async function() {
+            if (!selectedRoadId) return;
+            if (!confirm('确定删除路线 "'+document.getElementById('roadName').value+'" 吗？\n关联的派生围栏也会被删除。')) return;
+            try {
+                var r = await fetch('/api/__pd__/roads/destroy', {
+                    method:'POST', headers:headers,
+                    body: JSON.stringify({ id: selectedRoadId })
+                });
+                var resp = await r.json();
+                if (resp.code === 0) {
+                    showMessage('🗑 已删除','info','road');
+                    resetRoadEditor();
+                    loadRoads();
+                    loadFences();
+                } else {
+                    showMessage('✗ '+(resp.msg||'删除失败'),'error','road');
+                }
+            } catch(e) { showMessage('✗ 网络错误','error','road'); }
+        };
+
+        async function loadRoads() {
+            try {
+                var r = await fetch('/api/__pd__/roads', { headers:headers });
+                var resp = await r.json();
+                allRoads = (resp.code === 0 && resp.data) ? resp.data : [];
+                renderRoadList();
+                renderAllRoadsOnMap();
+            } catch(e) {
+                document.getElementById('roadList').innerHTML = '<div style="color:#ff6b6b;">加载失败</div>';
+            }
         }
 
-        // ---------- 地名/POI 搜索（高德 InputTips）----------
-        async function searchPlace() {
+        function renderAllRoadsOnMap() {
+            allRoadLayers.forEach(function(l){ map.removeLayer(l); });
+            allRoadLayers = [];
+            allRoads.forEach(function(road) {
+                if (!road.points || road.points.length < 2) return;
+                var latlngs = road.points.map(function(p){ return [p.lat, p.lng]; });
+                var layer = L.polyline(latlngs, { color: '#b37feb', weight: 3, opacity: 0.6 }).addTo(map);
+                layer.bindTooltip(escHtml(road.name)+' ('+escHtml(road.code)+')', { sticky: true });
+                allRoadLayers.push(layer);
+                if (road.buffer_meters && road.buffer_meters > 0) {
+                    try {
+                        var coords = road.points.map(function(p){ return [p.lng, p.lat]; });
+                        var line = turf.lineString(coords);
+                        var buffered = turf.buffer(line, road.buffer_meters, { units:'meters' });
+                        var bufLayer = L.geoJSON(buffered, {
+                            color: '#b37feb', weight: 1, fillColor: '#b37feb', fillOpacity: 0.08
+                        }).addTo(map);
+                        allRoadLayers.push(bufLayer);
+                    } catch(e) {}
+                }
+                // Markers at each point
+                road.points.forEach(function(p, i){
+                    var m = L.circleMarker([p.lat, p.lng], {
+                        radius: 4, color: '#b37feb', fillColor: '#7b2cbf', fillOpacity: 0.8, weight: 1
+                    }).addTo(map);
+                    m.bindTooltip(road.code+' #'+(i+1), { permanent: false });
+                    allRoadLayers.push(m);
+                });
+            });
+        }
+
+        function renderRoadList() {
+            var container = document.getElementById('roadList');
+            if (allRoads.length === 0) {
+                container.innerHTML = '<div style="color:#5a6a7a;font-size:0.9em;">暂无路线</div>';
+                return;
+            }
+            var typeLabels = { main:'主线', branch:'支线', loop:'环线', connector:'连接线' };
+            var html = '';
+            allRoads.forEach(function(r){
+                var typeBadge = '<span class="badge-type">'+(typeLabels[r.line_type]||r.line_type)+'</span>';
+                var ptCount = '<span class="badge badge-purple">'+r.point_count+'点</span>';
+                var cls = (selectedRoadId===r.id) ? 'item-card active' : 'item-card';
+                html += '<div class="'+cls+'" onclick="window._selectRoad(\''+r.id+'\')">' +
+                    '<div><span class="name">'+escHtml(r.name)+'</span> '+typeBadge+' '+ptCount+'</div>' +
+                    '<button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();window._selectRoadForEdit(\''+r.id+'\')">编辑</button>' +
+                '</div>';
+            });
+            container.innerHTML = html;
+        }
+
+        window._selectRoad = function(id) {
+            selectedRoadId = id;
+            renderRoadList();
+            var road = allRoads.find(function(r){ return r.id==id; });
+            if (road && road.points && road.points.length > 0) {
+                map.setView([road.points[0].lat, road.points[0].lng], 12);
+            }
+        };
+
+        window._selectRoadForEdit = async function(id) {
+            try {
+                var r = await fetch('/api/__pd__/roads/'+id, { headers:headers });
+                var resp = await r.json();
+                if (resp.code !== 0 || !resp.data) { showMessage('加载路线详情失败','error','road'); return; }
+                var road = resp.data;
+                selectedRoadId = road.id;
+                document.getElementById('roadCode').value = road.code||'';
+                document.getElementById('roadName').value = road.name||'';
+                document.getElementById('roadLineType').value = road.line_type||'main';
+                document.getElementById('roadPrefix').value = road.prefix||'K';
+                document.getElementById('roadStationOffset').value = road.station_offset_m||0;
+                document.getElementById('roadBufferMeters').value = road.buffer_meters||200;
+                document.getElementById('roadProjectId').value = road.project_id||'';
+                if (road.points && road.points.length > 0) {
+                    roadPoints = road.points.map(function(p){ return [p.lng, p.lat]; });
+                } else {
+                    roadPoints = [];
+                }
+                document.getElementById('roadPolylineCoords').value = JSON.stringify(roadPoints);
+                document.getElementById('roadCoordCount').textContent = '节点数: '+roadPoints.length;
+                document.getElementById('roadDeleteBtn').style.display = '';
+                document.getElementById('roadSaveBtn').textContent = '💾 更新路线';
+                redraw('road');
+                if (roadPolyline && roadPoints.length >= 2) {
+                    map.fitBounds(roadPolyline.getBounds().pad(0.1));
+                }
+                renderRoadList();
+            } catch(e) {
+                showMessage('网络错误: '+e.message,'error','road');
+            }
+        };
+
+        window.resetRoadEditor = function() {
+            selectedRoadId = null;
+            roadPoints = [];
+            roadMarkers.forEach(function(m){ map.removeLayer(m); });
+            roadMarkers = [];
+            if (roadPolyline) map.removeLayer(roadPolyline);
+            if (roadBuffer) map.removeLayer(roadBuffer);
+            roadPolyline = roadBuffer = null;
+            document.getElementById('roadCode').value = '';
+            document.getElementById('roadName').value = '';
+            document.getElementById('roadLineType').value = 'main';
+            document.getElementById('roadPrefix').value = 'K';
+            document.getElementById('roadStationOffset').value = '0';
+            document.getElementById('roadBufferMeters').value = '200';
+            document.getElementById('roadProjectId').value = '';
+            document.getElementById('roadPolylineCoords').value = '';
+            document.getElementById('roadManualCoords').value = '';
+            document.getElementById('roadCoordCount').textContent = '节点数: 0';
+            document.getElementById('roadDeleteBtn').style.display = 'none';
+            document.getElementById('roadSaveBtn').textContent = '💾 创建路线';
+            document.getElementById('roadNodeList').innerHTML = '';
+            renderRoadList();
+        };
+
+        // ============ SEARCH ============
+        window.searchPlace = async function() {
             var q = document.getElementById('searchInput').value.trim();
             if (!q) return;
             var container = document.getElementById('searchResults');
             container.innerHTML = '<div style="color:#5a6a7a;padding:6px 10px">搜索中...</div>';
             container.style.display = 'block';
             try {
-                var url = '/geofence/geocode?q=' + encodeURIComponent(q);
-                var r = await fetch(url, { headers: headers });
-                if (!r.ok) { container.innerHTML = '<div style="color:#ff6b6b;padding:6px 10px">搜索服务不可用 (' + r.status + ')</div>'; return; }
+                var r = await fetch('/geofence/geocode?q='+encodeURIComponent(q), { headers:headers });
+                if (!r.ok) { container.innerHTML = '<div style="color:#ff6b6b;padding:6px 10px">搜索服务不可用 ('+r.status+')</div>'; return; }
                 var data = await r.json();
-                if (data.status !== '1' || !data.tips || data.tips.length === 0) {
+                if (data.status!=='1'||!data.tips||data.tips.length===0) {
                     container.innerHTML = '<div style="color:#5a6a7a;padding:6px 10px">未找到结果</div>';
                     return;
                 }
                 container.innerHTML =
-                    '<div style="color:#5a6a7a;padding:4px 10px;font-size:0.78em;border-bottom:1px solid rgba(255,255,255,0.05)">找到 ' + data.tips.length + ' 个结果</div>' +
-                    data.tips.map(function(t, i) {
+                    '<div style="color:#5a6a7a;padding:4px 10px;font-size:0.78em;border-bottom:1px solid rgba(255,255,255,0.05)">找到 '+data.tips.length+' 个结果</div>' +
+                    data.tips.map(function(t){
                         if (!t.location) return '';
                         var parts = t.location.split(',');
-                        if (parts.length < 2) return '';
+                        if (parts.length<2) return '';
                         var zoom = getZoomForType(t.typecode);
                         var badge = getTypeLabel(t.typecode);
-                        return '<div onclick="flyTo(' + parts[1] + ',' + parts[0] + ',' + zoom + ')">' +
+                        return '<div onclick="window._flyTo('+parts[1]+','+parts[0]+','+zoom+')">' +
                             '<div style="display:flex;justify-content:space-between;align-items:center">' +
-                            '<span><strong>' + escHtml(t.name) + '</strong></span>' +
-                            (badge ? '<span class="type-badge">' + badge + '</span>' : '') +
+                            '<span><strong>'+escHtml(t.name)+'</strong></span>' +
+                            (badge?'<span class="type-badge">'+badge+'</span>':'') +
                             '</div>' +
-                            '<div style="font-size:0.85em;color:#5a6a7a;margin-top:1px">' + escHtml(t.address || t.district || '') + '</div>' +
+                            '<div style="font-size:0.85em;color:#5a6a7a;margin-top:1px">'+escHtml(t.address||t.district||'')+'</div>' +
                             '</div>';
                     }).join('');
             } catch(e) {
-                container.innerHTML = '<div style="color:#ff6b6b;padding:6px 10px">搜索失败: ' + e.message + '</div>';
+                container.innerHTML = '<div style="color:#ff6b6b;padding:6px 10px">搜索失败: '+e.message+'</div>';
             }
-        }
+        };
+
         document.addEventListener('click', function(e) {
             if (!e.target.closest('.search-bar') && !e.target.closest('.search-results'))
                 document.getElementById('searchResults').style.display = 'none';
         });
         document.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape') document.getElementById('searchResults').style.display = 'none';
+            if (e.key==='Escape') document.getElementById('searchResults').style.display = 'none';
         });
-        function flyTo(lat, lng, zoom) {
-            map.setView([lat, lng], zoom || 14);
+
+        window._flyTo = function(lat, lng, zoom) {
+            map.setView([lat,lng], zoom||14);
             document.getElementById('searchResults').style.display = 'none';
-        }
+        };
 
         function getTypeLabel(t) {
             if (!t) return '';
@@ -479,47 +892,46 @@
             return 15;
         }
 
-        // ---------- 定位当前位置（高德 IP 定位）----------
-        async function locateMe() {
+        // ============ LOCATE ============
+        window.locateMe = async function() {
             if (!map) return;
-            showMessage('正在定位...', 'info');
-            function _str(v) { return (typeof v === 'string' && v.length > 0) ? v : null; }
+            showMessage('正在定位...','info','fence');
             function _placeMarker(lat, lng, label) {
                 if (currentLocationMarker) map.removeLayer(currentLocationMarker);
-                currentLocationMarker = L.circleMarker([lat, lng], {
+                currentLocationMarker = L.circleMarker([lat,lng], {
                     radius: 8, color: '#00d4ff', fillColor: '#00d4ff', fillOpacity: 0.25, weight: 2
-                }).addTo(map).bindTooltip(label || '当前位置', { permanent: false });
+                }).addTo(map).bindTooltip(label||'当前位置', { permanent: false });
             }
             try {
-                var r = await fetch('/geofence/locate', { headers: headers });
+                var r = await fetch('/geofence/locate', { headers:headers });
                 if (r.ok) {
                     var data = await r.json();
                     if (data.status === '1') {
-                        var rect = _str(data.rectangle);
-                        var city = _str(data.city);
-                        var prov = _str(data.province);
-                        if (rect && rect.indexOf(';') > 0) {
+                        var rect = data.rectangle;
+                        var city = data.city;
+                        var prov = data.province;
+                        if (rect && rect.indexOf(';')>0) {
                             var parts = rect.split(';');
-                            if (parts.length === 2) {
+                            if (parts.length===2) {
                                 var sw = parts[0].split(','), ne = parts[1].split(',');
-                                if (sw.length === 2 && ne.length === 2) {
-                                    map.fitBounds([[parseFloat(sw[1]), parseFloat(sw[0])], [parseFloat(ne[1]), parseFloat(ne[0])]], { padding: [30, 30] });
+                                if (sw.length===2 && ne.length===2) {
+                                    map.fitBounds([[parseFloat(sw[1]),parseFloat(sw[0])],[parseFloat(ne[1]),parseFloat(ne[0])]], { padding:[30,30] });
                                     var c = map.getCenter();
-                                    _placeMarker(c.lat, c.lng, '当前位置（' + (city || prov || '') + '）');
-                                    showMessage('已定位到 ' + (city || prov || ''), 'info');
+                                    _placeMarker(c.lat, c.lng, '当前位置（'+(city||prov||'')+'）');
+                                    showMessage('已定位到 '+(city||prov||''),'info','fence');
                                     return;
                                 }
                             }
                         }
                         if (city) {
-                            var r2 = await fetch('/geofence/geocode?q=' + encodeURIComponent(city), { headers: headers });
+                            var r2 = await fetch('/geofence/geocode?q='+encodeURIComponent(city), { headers:headers });
                             if (r2.ok) {
                                 var d2 = await r2.json();
-                                if (d2.status === '1' && d2.tips && d2.tips.length > 0 && d2.tips[0].location) {
+                                if (d2.status==='1'&&d2.tips&&d2.tips.length>0&&d2.tips[0].location) {
                                     var pos = d2.tips[0].location.split(',');
-                                    map.setView([parseFloat(pos[1]), parseFloat(pos[0])], 10);
-                                    _placeMarker(parseFloat(pos[1]), parseFloat(pos[0]), '当前位置（' + city + '）');
-                                    showMessage('已定位到 ' + city, 'info');
+                                    map.setView([parseFloat(pos[1]),parseFloat(pos[0])], 10);
+                                    _placeMarker(parseFloat(pos[1]),parseFloat(pos[0]), '当前位置（'+city+'）');
+                                    showMessage('已定位到 '+city,'info','fence');
                                     return;
                                 }
                             }
@@ -527,106 +939,25 @@
                     }
                 }
             } catch(e) {}
-            // 回退：浏览器定位
-            showMessage('正在使用浏览器定位...', 'info');
+            showMessage('正在使用浏览器定位...','info','fence');
             map.locate({ setView: true, maxZoom: 16 });
-        }
+        };
+
         map.on('locationfound', function(e) {
             if (currentLocationMarker) map.removeLayer(currentLocationMarker);
-            currentLocationMarker = L.circleMarker([e.latitude, e.longitude], {
+            currentLocationMarker = L.circleMarker([e.latitude,e.longitude], {
                 radius: 8, color: '#00d4ff', fillColor: '#00d4ff', fillOpacity: 0.25, weight: 2
             }).addTo(map).bindTooltip('当前位置（浏览器定位）', { permanent: false });
-            showMessage('已定位（浏览器）', 'info');
+            showMessage('已定位（浏览器）','info','fence');
         });
         map.on('locationerror', function(e) {
-            showMessage('定位失败: ' + e.message, 'error');
+            showMessage('定位失败: '+e.message,'error','fence');
         });
 
-        // ---------- 导入坐标 / 清空节点 ----------
-        function importCoords() {
-            var ta = document.getElementById('manualCoords');
-            if (!ta) { showMessage('未找到输入框', 'error'); return; }
-            var raw = ta.value.trim();
-            if (!raw) { showMessage('请先在文本框中输入坐标', 'error'); return; }
-            var lines = raw.split('\n');
-            var newPts = [];
-            lines.forEach(function(line) {
-                line = line.trim();
-                if (!line) return;
-                var parts = line.split(/[,，\s]+/).filter(Boolean);
-                if (parts.length >= 2) {
-                    var lng = parseFloat(parts[0]);
-                    var lat = parseFloat(parts[1]);
-                    if (!isNaN(lng) && !isNaN(lat)) newPts.push([lng, lat]);
-                }
-            });
-            if (newPts.length === 0) { showMessage('未解析到有效坐标（格式：经度,纬度，每行一个）', 'error'); return; }
-            currentPoints = currentPoints.concat(newPts);
-            document.getElementById('polylineCoords').value = JSON.stringify(currentPoints);
-            ta.value = '';
-            redraw();
-            showMessage('已导入 ' + newPts.length + ' 个节点', 'info');
-        }
-        function clearPoints() {
-            if (currentPoints.length === 0) return;
-            if (!confirm('清空所有节点？')) return;
-            currentPoints = [];
-            document.getElementById('polylineCoords').value = '';
-            document.getElementById('manualCoords').value = '';
-            redraw();
-        }
-
-        function deleteNode(idx) {
-            if (idx < 0 || idx >= currentPoints.length) return;
-            currentPoints.splice(idx, 1);
-            document.getElementById('polylineCoords').value = JSON.stringify(currentPoints);
-            redraw();
-        }
-        function deleteLastNode() {
-            if (currentPoints.length === 0) return;
-            deleteNode(currentPoints.length - 1);
-        }
-
-        function renderNodeList() {
-            var container = document.getElementById('nodeList');
-            if (currentPoints.length === 0) { container.innerHTML = ''; return; }
-            var html = '';
-            currentPoints.forEach(function(p, i) {
-                html += '<div class="node-item"><span><span class="node-idx">#' + (i+1) + '</span>' + p[0].toFixed(4) + ', ' + p[1].toFixed(4) + '</span><span class="node-del" onclick="deleteNode(' + i + ')" title="删除节点 #' + (i+1) + '">✕</span></div>';
-            });
-            container.innerHTML = html;
-        }
-
-        // ---------- 重置编辑器 ----------
-        function resetEditor() {
-            selectedFenceId = null;
-            currentPoints = [];
-            markers.forEach(function(m){ map.removeLayer(m); });
-            markers = [];
-            if (polylineLayer) map.removeLayer(polylineLayer);
-            if (bufferLayer) map.removeLayer(bufferLayer);
-            if (currentLocationMarker) { map.removeLayer(currentLocationMarker); currentLocationMarker = null; }
-            polylineLayer = bufferLayer = null;
-            document.getElementById('fenceName').value = '';
-            document.getElementById('bufferRadius').value = '200';
-            document.getElementById('isActive').checked = true;
-            document.getElementById('polylineCoords').value = '';
-            document.getElementById('manualCoords').value = '';
-            document.getElementById('coordCount').textContent = '节点数: 0';
-            document.getElementById('deleteBtn').style.display = 'none';
-            document.getElementById('nodeList').innerHTML = '';
-            renderFenceList();
-        }
-
-        // ---------- 提示消息 ----------
-        function showMessage(msg, type) {
-            var el = document.getElementById('formMessage');
-            el.innerHTML = '<div class="status-bar status-' + (type || 'info') + '">' + msg + '</div>';
-            setTimeout(function(){ el.innerHTML = ''; }, 3000);
-        }
-
-        // 初始化加载
+        // ============ INIT ============
         loadFences();
+        loadRoads();
+    })();
     </script>
 </body>
 </html>

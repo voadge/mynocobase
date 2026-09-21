@@ -345,6 +345,91 @@ export function registerStationRoutes(app: any, authMiddleware: any): void {
     }
   }, { tag: 'dashboard-home', before: 'dataSource' });
 
+  // POST /api/__pd__/roads/update - update road line
+  app.use(async (ctx: any, next: () => Promise<void>) => {
+    if (ctx.method !== 'POST' || ctx.state.reqPath !== '/__pd__/roads/update') {
+      return await next();
+    }
+    if (!(await authMiddleware.isAuthenticated(ctx))) { ctx.status = 401; ctx.body = 'Unauthorized'; return; }
+    ctx.withoutDataWrapping = true;
+    ctx.type = 'application/json; charset=utf-8';
+    try {
+      const body = ctx.request.body || {};
+      const { id, code, name, line_type, project_id, points: rawPoints, cs, prefix, buffer_meters, station_offset_m, is_active } = body;
+      if (!id) { ctx.body = { code: -1, msg: '缺少 id' }; return; }
+      const roadRepo = ctx.db.getRepository('road_lines');
+      const existing = await roadRepo.findOne({ filterByTk: id });
+      if (!existing) { ctx.body = { code: -1, msg: '路线不存在' }; return; }
+
+      const updateVals: Record<string, any> = {};
+      if (code !== undefined) updateVals.code = code;
+      if (name !== undefined) updateVals.name = name;
+      if (line_type !== undefined) updateVals.line_type = line_type;
+      if (project_id !== undefined) updateVals.project_id = project_id;
+      if (prefix !== undefined) updateVals.prefix = prefix;
+      if (buffer_meters !== undefined) updateVals.buffer_meters = buffer_meters;
+      if (station_offset_m !== undefined) updateVals.station_offset_m = station_offset_m;
+      if (is_active !== undefined) updateVals.is_active = is_active;
+
+      if (rawPoints && Array.isArray(rawPoints) && rawPoints.length >= 2) {
+        const coordCs = (cs || 'gcj02') as 'gcj02' | 'wgs84';
+        const points: Array<{ lng: number; lat: number }> = [];
+        for (const p of rawPoints) {
+          const rawLng = Array.isArray(p) ? p[0] : p.lng || p.longitude;
+          const rawLat = Array.isArray(p) ? p[1] : p.lat || p.latitude;
+          if (typeof rawLng !== 'number' || typeof rawLat !== 'number') {
+            ctx.body = { code: -1, msg: '坐标格式错误' }; return;
+          }
+          if (rawLng < 73 || rawLng > 135 || rawLat < 3 || rawLat > 54) {
+            ctx.body = { code: -1, msg: `坐标越界: [${rawLng},${rawLat}]` }; return;
+          }
+          const [lat, lng] = convertToGCJ02(rawLat, rawLng, coordCs);
+          points.push({ lng, lat });
+        }
+        updateVals.points = JSON.stringify(recomputeMeters(points));
+      }
+
+      await roadRepo.update({ filterByTk: id, values: updateVals });
+      invalidateRoadCache();
+      ctx.body = { code: 0, msg: '更新成功' };
+    } catch (e: any) {
+      ctx.status = 500;
+      ctx.body = { code: -1, msg: e.message };
+    }
+  }, { tag: 'dashboard-home', before: 'dataSource' });
+
+  // POST /api/__pd__/roads/destroy - delete road line and derived geofence
+  app.use(async (ctx: any, next: () => Promise<void>) => {
+    if (ctx.method !== 'POST' || ctx.state.reqPath !== '/__pd__/roads/destroy') {
+      return await next();
+    }
+    if (!(await authMiddleware.isAuthenticated(ctx))) { ctx.status = 401; ctx.body = 'Unauthorized'; return; }
+    ctx.withoutDataWrapping = true;
+    ctx.type = 'application/json; charset=utf-8';
+    try {
+      const body = ctx.request.body || {};
+      const { id } = body;
+      if (!id) { ctx.body = { code: -1, msg: '缺少 id' }; return; }
+      const roadRepo = ctx.db.getRepository('road_lines');
+      const existing = await roadRepo.findOne({ filterByTk: id });
+      if (!existing) { ctx.body = { code: -1, msg: '路线不存在' }; return; }
+
+      // Delete derived geofence first
+      try {
+        const fenceRepo = ctx.db.getRepository('geofences');
+        const fence = await fenceRepo.findOne({ filter: { road_id: id } });
+        if (fence) await fenceRepo.destroy({ filterByTk: fence.id });
+      } catch (e) { /* ignore */ }
+
+      await roadRepo.destroy({ filterByTk: id });
+      invalidateRoadCache();
+      ctx.body = { code: 0, msg: '删除成功' };
+    } catch (e: any) {
+      ctx.status = 500;
+      ctx.body = { code: -1, msg: e.message };
+    }
+  }, { tag: 'dashboard-home', before: 'dataSource' });
+
   // POST /api/__pd__/station/convert-batch - batch convert multiple points
   app.use(async (ctx: any, next: () => Promise<void>) => {
     if (ctx.method !== 'POST' || ctx.state.reqPath !== '/__pd__/station/convert-batch') {
