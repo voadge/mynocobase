@@ -14,7 +14,9 @@ import { registerDashboardRoutes } from './middleware/dashboard';
 import { registerWeatherRoutes } from './middleware/weather';
 import { registerPeopleDynamicRoutes } from './middleware/people-dynamic';
 import { registerMpLoginRoutes } from './middleware/mp-login';
+import { registerStationRoutes } from './middleware/station';
 import { qwFetch, QW_WEATHER_HOST } from './utils/qw-jwt';
+import { recomputeMeters } from './utils/geo';
 
 
 module.exports = class DashboardHomePlugin extends Plugin {
@@ -35,6 +37,30 @@ module.exports = class DashboardHomePlugin extends Plugin {
       if (!arCol.hasField('anomaly_reason')) arCol.addField('anomaly_reason', { type: 'text', nullable: true });
       if (!arCol.hasField('workflow_status')) arCol.addField('workflow_status', { type: 'string', nullable: true, defaultValue: 'normal' });
       arCol.sync({ alter: true });
+    }
+
+    // Phase 2: Add station/road fields to geofences, attendance_records, location_history
+    const gfCol = db.getCollection('geofences');
+    if (gfCol) {
+      if (!gfCol.hasField('source')) gfCol.addField('source', { type: 'string', defaultValue: 'manual' });
+      if (!gfCol.hasField('road_id')) gfCol.addField('road_id', { type: 'bigInt', nullable: true });
+      gfCol.sync({ alter: true });
+    }
+    const arStationCol = db.getCollection('attendance_records');
+    if (arStationCol) {
+      if (!arStationCol.hasField('station')) arStationCol.addField('station', { type: 'string', nullable: true });
+      if (!arStationCol.hasField('station_m')) arStationCol.addField('station_m', { type: 'double', nullable: true });
+      if (!arStationCol.hasField('road_id')) arStationCol.addField('road_id', { type: 'bigInt', nullable: true });
+      if (!arStationCol.hasField('structure_name')) arStationCol.addField('structure_name', { type: 'string', nullable: true });
+      arStationCol.sync({ alter: true });
+    }
+    const lhCol = db.getCollection('location_history');
+    if (lhCol) {
+      if (!lhCol.hasField('station')) lhCol.addField('station', { type: 'string', nullable: true });
+      if (!lhCol.hasField('station_m')) lhCol.addField('station_m', { type: 'double', nullable: true });
+      if (!lhCol.hasField('road_id')) lhCol.addField('road_id', { type: 'bigInt', nullable: true });
+      if (!lhCol.hasField('cs')) lhCol.addField('cs', { type: 'string', nullable: true, defaultValue: 'gcj02' });
+      lhCol.sync({ alter: true });
     }
 
     await db.sync();
@@ -152,6 +178,7 @@ module.exports = class DashboardHomePlugin extends Plugin {
     registerWeatherRoutes(app);
     registerPeopleDynamicRoutes(app);
     registerMpLoginRoutes(app);
+    registerStationRoutes(app, { isAuthenticated: isAuthenticated.bind(this) });
 
     // Middleware: auto-fill weather for construction_daily_log create/trigger
     app.resourceManager.use(async (ctx: any, next: () => Promise<void>) => {
@@ -471,6 +498,52 @@ b.addEventListener('click',async function(){var code=c.value.trim(),dt=d.value;i
 })();
 </script></body></html>`;
     }, { tag: 'dashboard-home', before: 'dataSource' });
+
+    // Phase 6: Road lines hooks - recompute meters + auto-upsert geofences
+    const roadCol = db.getCollection('road_lines');
+    if (roadCol) {
+      const recomputeAndUpsert = async (record: any) => {
+        try {
+          const rawPoints = record.get('points');
+          if (!rawPoints) return;
+          const points = typeof rawPoints === 'string' ? JSON.parse(rawPoints) : rawPoints;
+          if (!Array.isArray(points) || points.length < 2) return;
+          const recomputed = recomputeMeters(points);
+          record.set('points', JSON.stringify(recomputed));
+          // Auto-upsert geofence
+          if (record.get('is_fence_active')) {
+            const totalM = recomputed[recomputed.length - 1].meters;
+            const lngs = recomputed.map((p: any) => p.lng);
+            const lats = recomputed.map((p: any) => p.lat);
+            const fenceRepo = db.getRepository('geofences');
+            const fenceName = `${record.get('name')} (路线派生)`;
+            const existing = await fenceRepo.findOne({ filter: { road_id: record.get('id') } });
+            const fenceVals: Record<string, any> = {
+              fence_name: fenceName,
+              fence_no: `ROAD-${record.get('code')}`,
+              polyline_coords: JSON.stringify(recomputed.map((p: any) => [p.lng, p.lat])),
+              buffer_radius: record.get('buffer_meters') || 50,
+              is_active: true,
+              source: 'road',
+              road_id: record.get('id'),
+              bbox_min_lng: Math.min(...lngs),
+              bbox_max_lng: Math.max(...lngs),
+              bbox_min_lat: Math.min(...lats),
+              bbox_max_lat: Math.max(...lats),
+            };
+            if (existing) {
+              await fenceRepo.update({ filterByTk: existing.id, values: fenceVals });
+            } else {
+              await fenceRepo.create({ values: fenceVals });
+            }
+          }
+        } catch (e) {
+          console.log('[road-hook] error:', (e as any).message);
+        }
+      };
+      roadCol.model.addHook('beforeCreate', recomputeAndUpsert);
+      roadCol.model.addHook('beforeUpdate', recomputeAndUpsert);
+    }
 
     // Register page serving routes (must be last)
     registerPageRoutes(app);

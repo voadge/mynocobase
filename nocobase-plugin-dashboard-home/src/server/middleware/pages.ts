@@ -23,8 +23,6 @@ export function registerPageRoutes(app: any): void {
     if (ctx.method !== 'GET' || !PAGE_MAP[ctx.state.reqPath]) {
       return await next();
     }
-      return await next();
-    }
 
     const isPublic = ['/__tb__', '/__fp__', '/__tp__'].indexOf(ctx.state.reqPath) >= 0;
 
